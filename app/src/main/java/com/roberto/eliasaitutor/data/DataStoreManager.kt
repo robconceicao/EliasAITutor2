@@ -19,6 +19,7 @@ class DataStoreManager(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     companion object {
+        val KEY_USER_ID         = stringPreferencesKey("user_id")
         val KEY_XP              = intPreferencesKey("xp")
         val KEY_COINS           = intPreferencesKey("coins")
         val KEY_LEVEL           = intPreferencesKey("level")
@@ -42,6 +43,7 @@ class DataStoreManager(private val context: Context) {
     val profileFlow: Flow<UserProfile> = context.dataStore.data
         .catch { emit(emptyPreferences()) }
         .map { prefs ->
+            val userId = prefs[KEY_USER_ID] ?: ""
             val errorLog = prefs[KEY_ERROR_LOG]?.let {
                 runCatching { json.decodeFromString<List<ErrorEntry>>(it) }.getOrDefault(emptyList())
             } ?: emptyList()
@@ -56,6 +58,7 @@ class DataStoreManager(private val context: Context) {
             } ?: emptyList()
 
             UserProfile(
+                userId           = userId,
                 xp               = prefs[KEY_XP]           ?: 0,
                 coins            = prefs[KEY_COINS]         ?: 0,
                 level            = prefs[KEY_LEVEL]         ?: 1,
@@ -77,6 +80,7 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun save(profile: UserProfile) {
         context.dataStore.edit { prefs ->
+            prefs[KEY_USER_ID]      = profile.userId
             prefs[KEY_XP]           = profile.xp
             prefs[KEY_COINS]        = profile.coins
             prefs[KEY_LEVEL]        = profile.level

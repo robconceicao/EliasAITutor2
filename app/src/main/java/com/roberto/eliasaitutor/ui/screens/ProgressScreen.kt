@@ -189,6 +189,75 @@ fun ProgressScreen(vm: EliasViewModel) {
                 }
             }
         }
+        
+        Spacer(Modifier.height(16.dp))
+        Divider(color = Border)
+        Spacer(Modifier.height(16.dp))
+
+        // ── PDF Report ─────────────────────────────────────────────────────
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("📄 Download Soft Skills Report", color = Color(0xFFe8eaf0), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.width(6.dp))
+            Badge(containerColor = Purple.copy(alpha = 0.25f)) {
+                Text("DeepSeek AI", color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Personalized PDF with progress stats, soft skills radar, DeepSeek coaching narrative, and grammar mistake log.", 
+            color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+        Spacer(Modifier.height(8.dp))
+        
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var isGeneratingPdf by remember { mutableStateOf(false) }
+        
+        Button(
+            onClick = {
+                isGeneratingPdf = true
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val narrative = vm.generatePdfNarrative(profile)
+                        val pdfBytes = com.roberto.eliasaitutor.ui.components.PdfGenerator.generatePdfReport(context, profile, narrative)
+                        
+                        // Save to cache dir and share
+                        val file = java.io.File(context.cacheDir, "elias_report_${System.currentTimeMillis()}.pdf")
+                        file.writeBytes(pdfBytes)
+                        
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.provider",
+                            file
+                        )
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            isGeneratingPdf = false
+                            context.startActivity(android.content.Intent.createChooser(intent, "Share Report"))
+                        }
+                    } catch (e: Exception) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            isGeneratingPdf = false
+                            android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }, 
+            enabled = !isGeneratingPdf,
+            colors = ButtonDefaults.buttonColors(containerColor = Accent),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (isGeneratingPdf) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("DeepSeek is writing narrative...")
+            } else {
+                Text("📥 Generate PDF Report")
+            }
+        }
+
         Spacer(Modifier.height(80.dp))
     }
 }

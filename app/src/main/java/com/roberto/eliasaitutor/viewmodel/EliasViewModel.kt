@@ -60,8 +60,59 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Streak ─────────────────────────────────────────────────────────────────
     init {
-        viewModelScope.launch { checkAndUpdateStreak() }
+        viewModelScope.launch { 
+            val initial = profile.first()
+            if (initial.userId.isEmpty()) {
+                ds.save(initial.copy(userId = java.util.UUID.randomUUID().toString()))
+                profile.first { it.userId.isNotEmpty() }
+            }
+            syncProfileFromSupabase()
+            checkAndUpdateStreak() 
+        }
         viewModelScope.launch { loadFlashOffer() }
+        
+        // Listen to profile changes and sync to Supabase
+        viewModelScope.launch {
+            profile.drop(1).collect { p ->
+                syncProfileToSupabase(p)
+            }
+        }
+    }
+
+    private suspend fun syncProfileFromSupabase() {
+        val current = profile.first()
+        val sp = SupabaseManager.loadProfile(current.userId) ?: return
+        ds.save(current.copy(
+            userId = sp.userId,
+            xp = sp.xp,
+            coins = sp.coins,
+            level = sp.level,
+            britishUnlocked = sp.britishUnlocked,
+            messagesCount = sp.messagesSent,
+            errorLog = sp.errorLog,
+            confidence = sp.softSkills.confidence,
+            clarity = sp.softSkills.clarity,
+            posture = sp.softSkills.posture,
+            softSkillsSummary = sp.softSkills.summary,
+            sentimentHistory = sp.sentimentHistory,
+            xpHistory = sp.xpHistory
+        ))
+    }
+
+    private suspend fun syncProfileToSupabase(p: UserProfile) {
+        val sp = SupabaseProfile(
+            userId = p.userId,
+            xp = p.xp,
+            coins = p.coins,
+            level = p.level,
+            britishUnlocked = p.britishUnlocked,
+            messagesSent = p.messagesCount,
+            errorLog = p.errorLog,
+            softSkills = SoftSkills(p.confidence, p.clarity, p.posture, p.softSkillsSummary),
+            sentimentHistory = p.sentimentHistory,
+            xpHistory = p.xpHistory
+        )
+        SupabaseManager.upsertProfile(sp)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -309,6 +360,29 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     // ─────────────────────────────────────────────────────────────────────────
     private suspend fun loadFlashOffer() {
         val today = LocalDate.now().toString()
+        val supabaseOffer = SupabaseManager.loadFlashOffer(today)
+        if (supabaseOffer != null) {
+            val offer = FlashOffer(
+                title = supabaseOffer.title,
+                description = supabaseOffer.description,
+                discountPct = supabaseOffer.discountPct,
+                target = supabaseOffer.target,
+                priceOriginal = supabaseOffer.priceOriginal,
+                priceFinal = supabaseOffer.priceFinal,
+                offerDate = supabaseOffer.offerDate
+            )
+            _flashOffer.value = offer
+            ds.saveFlashOffer(JSONObject(mapOf(
+                "title" to offer.title,
+                "description" to offer.description,
+                "discount_pct" to offer.discountPct,
+                "target" to offer.target,
+                "price_original" to offer.priceOriginal,
+                "price_final" to offer.priceFinal
+            )).toString(), today)
+            return
+        }
+
         val flashData = ds.loadFlashOffer()
         val cached = flashData.first
         val cachedDate = flashData.second
@@ -331,11 +405,15 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val resp = DeepSeekClient.api.chat(
                 DSRequest(temperature = 0.9, messages = listOf(DSMessage("user",
-                    "Generate ONE creative flash offer for Elias English tutoring app. Today: $today\n" +
-                    "Target: British Accent, Level 5 Access, Level 10 Access, or XP Booster.\n" +
-                    "Discount: 20-70%. Feel urgent. Friendly tone for English learners.\n" +
-                    "Respond ONLY with valid JSON (no backticks):\n" +
-                    "{\"title\":\"\",\"description\":\"\",\"discount_pct\":<int>," +
+                    "You are a growth hacker for Elias, a gamified English tutoring app.\n" +
+                    "Today: $today\n\n" +
+                    "Generate ONE creative flash offer for today. Requirements:\n" +
+                    "- Real discount between 20%-70%\n" +
+                    "- Target: British Accent, Level 5 Early Access, Level 10 Early Access, or XP Booster Pack\n" +
+                    "- Feel urgent and time-limited; use an emoji in the title\n" +
+                    "- Friendly tone for English language learners\n\n" +
+                    "Respond ONLY with valid JSON (no markdown backticks, no preamble):\n" +
+                    "{\"title\":\"<str>\",\"description\":\"<str>\",\"discount_pct\":<int>," +
                     "\"target\":\"british_accent|level5_access|level10_access|xp_booster\"," +
                     "\"price_original\":<int>,\"price_final\":<int>,\"offer_date\":\"$today\"}"
                 )))
@@ -354,10 +432,19 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             )
             _flashOffer.value = offer
             ds.saveFlashOffer(raw, today)
+            SupabaseManager.saveFlashOffer(SupabaseFlashOffer(
+                offerDate = today,
+                title = offer.title,
+                description = offer.description,
+                discountPct = offer.discountPct,
+                target = offer.target,
+                priceOriginal = offer.priceOriginal,
+                priceFinal = offer.priceFinal
+            ))
         } catch (e: Exception) {
             _flashOffer.value = FlashOffer(
                 title = "⚡ 50% OFF British Accent — Today Only!",
-                description = "Sound like a proper Brit at half price.",
+                description = "Sound like a proper Brit. Unlock the British RP accent at half price.",
                 discountPct = 50, target = "british_accent",
                 priceOriginal = GameConstants.BRITISH_COST,
                 priceFinal    = GameConstants.BRITISH_COST / 2,
@@ -419,12 +506,15 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                 val resp = DeepSeekClient.api.chat(DSRequest(
                     temperature = 0.3,
                     messages = listOf(DSMessage("user",
-                        "Score these 3 soft skills 0-100 based on student messages.\n" +
-                        "1. CONFIDENCE: assertive language, complete sentences.\n" +
-                        "2. CLARITY: clear structure, easy to understand.\n" +
-                        "3. POSTURE: positive attitude, resilience, engagement.\n" +
-                        "Messages:\n$userMsgs\n\nTotal mistakes: ${cur.errorLog.size}\n" +
-                        "Respond ONLY with JSON: {\"confidence\":<int>,\"clarity\":<int>,\"posture\":<int>,\"summary\":\"<2 sentences>\"}"
+                        "You are an expert communication coach analyzing an English learner.\n\n" +
+                        "Recent student messages:\n$userMsgs\n\n" +
+                        "Total grammar mistakes logged: ${cur.errorLog.size}\n\n" +
+                        "Score these 3 soft skills 0-100 based ONLY on the messages:\n" +
+                        "1. CONFIDENCE: assertive language, complete sentences, taking initiative\n" +
+                        "2. CLARITY: clear structure, easy to understand, logical flow\n" +
+                        "3. POSTURE: positive attitude, resilience, engagement level\n\n" +
+                        "Respond ONLY with valid JSON:\n" +
+                        "{\"confidence\":<int>,\"clarity\":<int>,\"posture\":<int>,\"summary\":\"<2 sentences>\"}"
                     ))
                 ))
                 val raw = resp.choices.firstOrNull()?.message?.content
@@ -441,6 +531,31 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             } finally { _isLoading.value = false }
         }
     }
+
+    suspend fun generatePdfNarrative(p: UserProfile): String {
+        return try {
+            val prompt = "Write a personalized 3-paragraph coaching narrative for an English student report.\n" +
+                "Stats: Level=${p.level}, XP=${p.xp}, Messages=${p.messagesCount}, Mistakes=${p.errorLog.size}\n" +
+                "Soft Skills: Confidence=${p.confidence}, Clarity=${p.clarity}, Posture=${p.posture}\n\n" +
+                "Paragraph 1: Genuine overall progress praise.\n" +
+                "Paragraph 2: Specific strengths from the soft skill scores.\n" +
+                "Paragraph 3: 2-3 concrete, actionable next steps.\n" +
+                "Return only the three paragraphs, no headers, no bullet points."
+            
+            val resp = DeepSeekClient.api.chat(DSRequest(
+                temperature = 0.7,
+                messages = listOf(DSMessage("user", prompt))
+            ))
+            resp.choices.firstOrNull()?.message?.content?.trim() ?: fallbackNarrative()
+        } catch (e: Exception) {
+            fallbackNarrative()
+        }
+    }
+
+    private fun fallbackNarrative() = 
+        "You're making excellent progress on your English journey! Every message you send is building your fluency and confidence.\n\n" +
+        "Your consistency is your biggest strength. Keep engaging with Elias daily to see rapid improvement.\n\n" +
+        "Next steps: Try the Job Interview scenario, practice shadowing daily, and aim to use each new vocabulary word 3 times this week."
 
     fun clearToast() { _toastMessage.value = null }
 

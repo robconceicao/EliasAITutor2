@@ -1,0 +1,1 @@
+Sempre ler e seguir o arquivo AGENTS.md antes de modificar qualquer parte do projeto.
