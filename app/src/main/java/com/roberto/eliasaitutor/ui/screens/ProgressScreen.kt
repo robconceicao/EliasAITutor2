@@ -15,6 +15,9 @@ import com.roberto.eliasaitutor.data.GameConstants
 import com.roberto.eliasaitutor.model.SentimentEntry
 import com.roberto.eliasaitutor.ui.components.RadarChart
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Bg      = Color(0xFF0d0f14)
 private val Surface = Color(0xFF161922)
@@ -208,12 +211,13 @@ fun ProgressScreen(vm: EliasViewModel) {
         Spacer(Modifier.height(8.dp))
         
         val context = androidx.compose.ui.platform.LocalContext.current
+        val coroutineScope = rememberCoroutineScope()
         var isGeneratingPdf by remember { mutableStateOf(false) }
         
         Button(
             onClick = {
                 isGeneratingPdf = true
-                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                coroutineScope.launch(Dispatchers.IO) {
                     try {
                         val narrative = vm.generatePdfNarrative(profile)
                         val pdfBytes = com.roberto.eliasaitutor.ui.components.PdfGenerator.generatePdfReport(context, profile, narrative)
@@ -233,12 +237,12 @@ fun ProgressScreen(vm: EliasViewModel) {
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        withContext(Dispatchers.Main) {
                             isGeneratingPdf = false
                             context.startActivity(android.content.Intent.createChooser(intent, "Share Report"))
                         }
                     } catch (e: Exception) {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        withContext(Dispatchers.Main) {
                             isGeneratingPdf = false
                             android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                         }
@@ -264,13 +268,14 @@ fun ProgressScreen(vm: EliasViewModel) {
 
 @Composable
 private fun MetricCard(label: String, value: String, emoji: String, modifier: Modifier = Modifier) {
-    Card(colors = CardDefaults.cardColors(containerColor = Surface),
-        border = BorderStroke(1.dp, Border), shape = RoundedCornerShape(12.dp),
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1e29)),
+        border = BorderStroke(1.dp, Color(0xFF2d4070)), shape = RoundedCornerShape(16.dp),
         modifier = modifier) {
-        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(emoji, fontSize = 18.sp)
-            Text(value, color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(label, color = Muted, fontSize = 10.sp)
+        Column(Modifier.padding(14.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(emoji, fontSize = 22.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(value, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }

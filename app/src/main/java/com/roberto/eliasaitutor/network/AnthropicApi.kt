@@ -14,9 +14,10 @@ data class ClaudeContent(val text: String)
 data class ClaudeResponse(val content: List<ClaudeContent>)
 
 data class ClaudeRequest(
-    val model: String = "claude-3-5-sonnet-latest", // Puxa sempre a versão mais nova e ativa!
+    val model: String = "claude-3-5-sonnet-20241022",
     val max_tokens: Int = 1024,
-    val system: String = "Act as an English teacher. Say a very short, one-sentence motivational quote in English.",
+    val system: String = "Act as an English teacher.",
+    val stream: Boolean = false,
     val messages: List<ClaudeMessage>
 )
 
@@ -24,6 +25,10 @@ data class ClaudeRequest(
 interface AnthropicApi {
     @POST("v1/messages")
     suspend fun generateMessage(@Body request: ClaudeRequest): ClaudeResponse
+    
+    @retrofit2.http.Streaming
+    @POST("v1/messages")
+    suspend fun generateMessageStream(@Body request: ClaudeRequest): okhttp3.ResponseBody
 }
 
 // 3. O Cliente Seguro
@@ -39,6 +44,9 @@ object AnthropicClient {
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
     val api: AnthropicApi by lazy {

@@ -11,6 +11,9 @@ import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
 
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+
 // 1. Modelos de Dados
 data class GroqMessage(val role: String, val content: String)
 
@@ -33,7 +36,11 @@ interface GroqApi {
     @POST("v1/audio/transcriptions")
     suspend fun transcribeAudio(
         @Part file: MultipartBody.Part,
-        @Part model: MultipartBody.Part
+        @Part model: MultipartBody.Part,
+        @Part prompt: MultipartBody.Part? = null,
+        @Part responseFormat: MultipartBody.Part? = null,
+        @Part temperature: MultipartBody.Part? = null,
+        @Part language: MultipartBody.Part? = null
     ): GroqTranscriptionResponse
 }
 
@@ -48,6 +55,9 @@ object GroqClient {
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
     val api: GroqApi by lazy {
@@ -57,5 +67,25 @@ object GroqClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(GroqApi::class.java)
+    }
+
+    suspend fun transcribe(file: java.io.File, promptText: String? = null): String {
+        val requestFile = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
+        val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
+        val model = MultipartBody.Part.createFormData("model", "whisper-large-v3")
+        
+        val finalPrompt = promptText ?: "Transcreva o português corretamente (ex: 'Não entendi'). Se o usuário falar inglês, mantenha os erros fonéticos exatamente como ouvidos (ex: 'pom' em vez de 'from'). DO NOT AUTO-CORRECT."
+        val promptPart = MultipartBody.Part.createFormData("prompt", finalPrompt)
+        val formatPart = MultipartBody.Part.createFormData("response_format", "json")
+        val tempPart   = MultipartBody.Part.createFormData("temperature", "0.2")
+        
+        return try {
+            val response = api.transcribeAudio(body, model, promptPart, formatPart, tempPart)
+            response.text
+        } catch (e: retrofit2.HttpException) {
+            "Error: HTTP ${e.code()} - ${e.response()?.errorBody()?.string()}"
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
     }
 }

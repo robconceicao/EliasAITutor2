@@ -7,19 +7,34 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 import com.roberto.eliasaitutor.data.GameConstants
 import com.roberto.eliasaitutor.model.*
+import com.roberto.eliasaitutor.ui.OndasSonorasAgente
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import kotlinx.coroutines.launch
 
@@ -31,6 +46,7 @@ private val Gold    = Color(0xFFf7c94f)
 private val Green   = Color(0xFF3ecf8e)
 private val Red     = Color(0xFFf76f6f)
 private val Muted   = Color(0xFF7a8099)
+private val Purple  = Color(0xFFa855f7)
 
 @Composable
 fun ChatScreen(vm: EliasViewModel) {
@@ -45,9 +61,17 @@ fun ChatScreen(vm: EliasViewModel) {
     var showQuiz      by remember { mutableStateOf(false) }
     var quizChosen    by remember { mutableStateOf(-1) }
     var quizResult    by remember { mutableStateOf<Boolean?>(null) }
+    val isRecording   by vm.isRecording.collectAsState()
 
     val listState     = rememberLazyListState()
     val scope         = rememberCoroutineScope()
+    val context       = androidx.compose.ui.platform.LocalContext.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) vm.startRecording(context)
+    }
 
     // Auto-scroll to bottom
     LaunchedEffect(bubbles.size) {
@@ -91,16 +115,24 @@ fun ChatScreen(vm: EliasViewModel) {
 
             if (bubbles.isEmpty()) {
                 item {
-                    EliasWelcomeBubble()
+                    LevelSelectionBox { level ->
+                        vm.sendMessage(level)
+                    }
                 }
             }
             items(bubbles) { bubble ->
                 if (bubble.isUser) UserBubble(bubble.message)
-                else EliasBubble(bubble)
+                else EliasBubble(bubble, vm)
             }
-            if (isLoading) {
-                item { TypingIndicator() }
+
+            if (isLoading || isRecording) {
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        OndasSonorasAgente(isRecording = isRecording, isLoading = isLoading)
+                    }
+                }
             }
+
         }
 
         Spacer(Modifier.height(8.dp))
@@ -125,18 +157,40 @@ fun ChatScreen(vm: EliasViewModel) {
         }
 
         // ── Input row ──────────────────────────────────────────────────────
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextField(
                 value = inputText, onValueChange = { inputText = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Type in English...", color = Muted) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Border, focusedBorderColor = Accent,
-                    unfocusedContainerColor = Surface, focusedContainerColor = Surface,
+                placeholder = { Text("Type in English...", color = Muted, fontSize = 14.sp) },
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = Color(0xFF1E2638), focusedContainerColor = Color(0xFF1E2638),
+                    unfocusedIndicatorColor = Color.Transparent, focusedIndicatorColor = Color.Transparent,
                     unfocusedTextColor = Color(0xFFe8eaf0), focusedTextColor = Color(0xFFe8eaf0),
                 ),
-                shape = RoundedCornerShape(12.dp), maxLines = 3,
+                shape = RoundedCornerShape(24.dp), maxLines = 3,
             )
+            IconButton(onClick = {
+                val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+                if (hasPermission) {
+                    if (isRecording) {
+                        vm.stopRecording(context)
+                    } else {
+                        vm.startRecording(context)
+                    }
+                } else {
+
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }, enabled = !isLoading,
+               modifier = Modifier.background(if (isRecording) Red.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+            ) {
+                Icon(
+                    if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                    contentDescription = "Mic",
+                    tint = if (isRecording) Red else Accent
+                )
+            }
             IconButton(onClick = {
                 if (inputText.isNotBlank() && !isLoading) {
                     vm.sendMessage(inputText.trim())
@@ -158,14 +212,32 @@ fun ChatScreen(vm: EliasViewModel) {
 // ── Sub-composables ────────────────────────────────────────────────────────────
 
 @Composable
-private fun EliasWelcomeBubble() {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp))
-        .background(Surface).border(1.dp, Border, RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp))
-        .padding(12.dp)) {
-        Text("👋 Hey! I'm Elias — your American English tutor from San Diego. " +
-            "Jump right in and I'll correct mistakes and teach vocabulary as we go. " +
-            "This is a totally safe space! 😊",
-            color = Color(0xFFe8eaf0), fontSize = 14.sp, lineHeight = 20.sp)
+private fun LevelSelectionBox(onLevelSelected: (String) -> Unit) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+        .background(Surface).border(1.dp, Border, RoundedCornerShape(16.dp))
+        .padding(16.dp)) {
+        Column {
+            Text("👋 Hey! I'm Elias — your American English tutor.",
+                color = Color(0xFFe8eaf0), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("To get started, tell me your current English level:",
+                color = Muted, fontSize = 14.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("💡 Tip: Elias speaks 100% English. If you don't understand something, press the Mic and say: 'Elias, não entendi, traduz pra mim?'",
+                color = Gold, fontSize = 12.sp, lineHeight = 16.sp)
+            Spacer(Modifier.height(12.dp))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onLevelSelected("Beginner") }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2d4070)),
+                    shape = RoundedCornerShape(12.dp)) { Text("Beginner", fontSize = 14.sp) }
+                Button(onClick = { onLevelSelected("Intermediate") }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    shape = RoundedCornerShape(12.dp)) { Text("Intermediate", fontSize = 14.sp) }
+                Button(onClick = { onLevelSelected("Advanced") }, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Purple),
+                    shape = RoundedCornerShape(12.dp)) { Text("Advanced", fontSize = 14.sp) }
+            }
+        }
     }
 }
 
@@ -173,16 +245,16 @@ private fun EliasWelcomeBubble() {
 private fun UserBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Box(Modifier.widthIn(max = 280.dp)
-            .clip(RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp))
-            .background(Color(0xFF1e2a45)).border(1.dp, Color(0xFF2d4070), RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp))
-            .padding(10.dp, 8.dp)) {
-            Text("👤 $text", color = Color(0xFFe8eaf0), fontSize = 14.sp)
+            .clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
+            .background(Accent)
+            .padding(14.dp, 12.dp)) {
+            Text(text, color = Color.White, fontSize = 15.sp, lineHeight = 22.sp)
         }
     }
 }
 
 @Composable
-private fun EliasBubble(bubble: UiChatBubble) {
+private fun EliasBubble(bubble: UiChatBubble, vm: EliasViewModel) {
     val sentimentColor = when (bubble.sentiment) {
         "frustrated"   -> Red
         "enthusiastic" -> Green
@@ -190,31 +262,60 @@ private fun EliasBubble(bubble: UiChatBubble) {
         else           -> Border
     }
     Column(Modifier.fillMaxWidth().widthIn(max = 320.dp)) {
-        Box(Modifier.clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp))
-            .background(Surface).border(1.dp, sentimentColor, RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp))
-            .padding(10.dp, 8.dp)) {
-            Text("🎓 ${bubble.message}", color = Color(0xFFe8eaf0), fontSize = 14.sp, lineHeight = 20.sp)
+        Box(Modifier.clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
+            .background(Color(0xFF1E2638))
+            .border(1.dp, sentimentColor.copy(alpha = 0.5f), RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
+            .padding(16.dp, 14.dp)) {
+            val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
+            Text(parsedMessage, color = Color(0xFFe8eaf0), fontSize = 15.sp, lineHeight = 22.sp)
         }
         if (bubble.vocabulary.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text("📚 VOCABULARY", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            bubble.vocabulary.forEach { v ->
-                Text("• $v", color = Accent, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF161922)).padding(12.dp).fillMaxWidth()) {
+                Column {
+                    Text("📚 VOCABULARY", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    bubble.vocabulary.forEach { v ->
+                        Text("• $v", color = Accent, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp))
+                    }
+                }
             }
         }
-        if (bubble.mistakes.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text("⚠ CORRECTIONS", color = Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            bubble.mistakes.forEach { m ->
-                if (m.raw.isNotEmpty()) {
-                    Text("• ${m.raw}", color = Red, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
-                } else {
-                    Row {
-                        Text("✗ ${m.wrong}", color = Red, fontSize = 12.sp)
-                        Text(" → ", color = Muted, fontSize = 12.sp)
-                        Text("✓ ${m.right}", color = Green, fontSize = 12.sp)
+    }
+}
+
+fun parseMarkdownToAnnotatedString(text: String): AnnotatedString {
+    return buildAnnotatedString {
+        var i = 0
+        while (i < text.length) {
+            when {
+                text.startsWith("**", i) -> {
+                    val end = text.indexOf("**", i + 2)
+                    if (end != -1) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append(text.substring(i + 2, end))
+                        }
+                        i = end + 2
+                    } else {
+                        append(text[i])
+                        i++
                     }
-                    if (m.rule.isNotEmpty()) Text("  Rule: ${m.rule}", color = Muted, fontSize = 11.sp)
+                }
+                text.startsWith("*", i) -> {
+                    val end = text.indexOf("*", i + 1)
+                    if (end != -1 && end > i + 1) {
+                        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                            append(text.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else {
+                        append(text[i])
+                        i++
+                    }
+                }
+                else -> {
+                    append(text[i])
+                    i++
                 }
             }
         }

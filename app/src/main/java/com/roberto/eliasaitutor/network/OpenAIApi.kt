@@ -44,15 +44,17 @@ object OpenAIClient {
     }
 
     suspend fun transcribe(file: File): String {
-        val requestFile = file.asRequestBody("audio/3gp".toMediaTypeOrNull())
+        val requestFile = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
         val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
         val model = "whisper-1".toRequestBody("text/plain".toMediaTypeOrNull())
         
         return try {
             val response = api.transcribeAudio(body, model)
             response.text
+        } catch (e: retrofit2.HttpException) {
+            "Error: HTTP ${e.code()} - ${e.response()?.errorBody()?.string()}"
         } catch (e: Exception) {
-            "Error transcribing: ${e.message}"
+            "Error: ${e.message}"
         }
     }
 }

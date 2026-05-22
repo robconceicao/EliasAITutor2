@@ -36,6 +36,65 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
 
+    private val audioEngine = com.roberto.eliasaitutor.audio.AudioEngine(app)
+    private var claudeJob: kotlinx.coroutines.Job? = null
+    private var isInterrupted = false
+    private var currentAiText = ""
+    private val _isRecording = MutableStateFlow(false)
+    val isRecording: StateFlow<Boolean> = _isRecording
+
+
+    fun startListening() {
+        audioEngine.startListening()
+        _isRecording.value = true
+    }
+
+    fun stopListening() {
+        audioEngine.stopListening()
+        _isRecording.value = false
+    }
+
+    fun startRecording(context: android.content.Context) {
+        startListening()
+    }
+
+    fun stopRecording(context: android.content.Context) {
+        stopListening()
+    }
+
+    private fun interruptAi() {
+        if (!isInterrupted) {
+            isInterrupted = true
+            claudeJob?.cancel()
+            audioEngine.flushAudio()
+            if (currentAiText.isNotEmpty()) {
+                claudeHistory.add(ClaudeMessage("assistant", currentAiText.trim()))
+                val parsed = parseClaudeResponse(currentAiText)
+                _chatBubbles.value = _chatBubbles.value + UiChatBubble(
+                    message = parsed.response,
+                    isUser = false
+                )
+                currentAiText = ""
+            }
+            _isLoading.value = false
+        }
+    }
+
+
+    fun speakText(text: String, onCompletion: () -> Unit = {}) {
+        // Fallback for immersion / shadowing
+        com.roberto.eliasaitutor.network.CartesiaClient.sendChunk(text, true, java.util.UUID.randomUUID().toString())
+        onCompletion()
+    }
+
+    fun submitShadowingAudio(audioFile: java.io.File, phrase: String = "") {
+        // Dummy implementation
+    }
+
+    fun playLocalFile(file: java.io.File, onCompletion: () -> Unit = {}) {
+        // Dummy implementation
+    }
+
     // ── Scenario ───────────────────────────────────────────────────────────────
     private val _selectedScenario = MutableStateFlow("☕ Coffee Shop")
     val selectedScenario: StateFlow<String> = _selectedScenario
@@ -60,6 +119,22 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Streak ─────────────────────────────────────────────────────────────────
     init {
+        CartesiaClient.connect()
+        viewModelScope.launch {
+            CartesiaClient.audioFlow.collect { pcmData ->
+                audioEngine.playPcmData(pcmData)
+            }
+        }
+        viewModelScope.launch {
+            audioEngine.userSpeechStarted.collect {
+                interruptAi()
+            }
+        }
+        viewModelScope.launch {
+            audioEngine.userSpeechResult.collect { text ->
+                sendMessage(text)
+            }
+        }
         viewModelScope.launch { 
             val initial = profile.first()
             if (initial.userId.isEmpty()) {

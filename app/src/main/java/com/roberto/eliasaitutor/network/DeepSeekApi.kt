@@ -35,7 +35,12 @@ object DeepSeekClient {
     val api: DeepSeekApi by lazy {
         Retrofit.Builder()
             .baseUrl("https://api.deepseek.com/")
-            .client(OkHttpClient.Builder().addInterceptor(authInterceptor).build())
+            .client(OkHttpClient.Builder()
+                .addInterceptor(authInterceptor)
+                .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                .build())
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(DeepSeekApi::class.java)

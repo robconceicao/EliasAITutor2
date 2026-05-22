@@ -185,8 +185,8 @@ private fun StoreCard(
     buyLabel: String = "Buy",
     onBuy: () -> Unit,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = Surface),
-        border = BorderStroke(1.dp, Border), shape = RoundedCornerShape(12.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1e29)),
+        border = BorderStroke(1.dp, Color(0xFF2d4070)), shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(emoji, fontSize = 28.sp)
             Spacer(Modifier.width(12.dp))
@@ -218,8 +218,8 @@ private fun StoreCard(
 
 @Composable
 private fun ScenarioCard(name: String, minLevel: Int, xpBonus: Int, coins: Int, onUnlock: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Surface),
-        border = BorderStroke(1.dp, Border), shape = RoundedCornerShape(12.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1e29)),
+        border = BorderStroke(1.dp, Color(0xFF2d4070)), shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(name, color = Color(0xFFe8eaf0), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
