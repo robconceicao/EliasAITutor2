@@ -37,12 +37,14 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     val toastMessage: StateFlow<String?> = _toastMessage
 
     private val audioEngine = com.roberto.eliasaitutor.audio.AudioEngine(app)
-    private var claudeJob: kotlinx.coroutines.Job? = null
     private var isInterrupted = false
-    private var currentAiText = ""
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
+    private val _isIaSpeaking = MutableStateFlow(false)
+    val isIaSpeaking: StateFlow<Boolean> = _isIaSpeaking
+
+    private var streamingBubbleIndex = -1
 
     fun startListening() {
         audioEngine.startListening()
@@ -65,17 +67,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private fun interruptAi() {
         if (!isInterrupted) {
             isInterrupted = true
-            claudeJob?.cancel()
+            SocketClient.usuarioInterrompeu()
             audioEngine.flushAudio()
-            if (currentAiText.isNotEmpty()) {
-                claudeHistory.add(ClaudeMessage("assistant", currentAiText.trim()))
-                val parsed = parseClaudeResponse(currentAiText)
-                _chatBubbles.value = _chatBubbles.value + UiChatBubble(
-                    message = parsed.response,
-                    isUser = false
-                )
-                currentAiText = ""
-            }
             _isLoading.value = false
         }
     }
@@ -120,11 +113,123 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     // ── Streak ─────────────────────────────────────────────────────────────────
     init {
         CartesiaClient.connect()
+        SocketClient.connect()
+
+        viewModelScope.launch {
+            profile.collect { p ->
+                if (p.userId.isNotEmpty() && SocketClient.connectionStatus.value) {
+                    SocketClient.iniciarSessao(p.userId)
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.connectionStatus.collect { connected ->
+                if (connected) {
+                    val p = profile.value
+                    if (p.userId.isNotEmpty()) {
+                        SocketClient.iniciarSessao(p.userId)
+                    }
+                }
+            }
+        }
+
         viewModelScope.launch {
             CartesiaClient.audioFlow.collect { pcmData ->
                 audioEngine.playPcmData(pcmData)
             }
         }
+
+        viewModelScope.launch {
+            SocketClient.audioFlow.collect { pcmData ->
+                audioEngine.playPcmData(pcmData)
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.iaStateFlow.collect { state ->
+                _isIaSpeaking.value = (state == "falando")
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.erroFlow.collect { errorMsg ->
+                _toastMessage.value = "Erro no servidor: $errorMsg"
+                _isLoading.value = false
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.textoChunkFlow.collect { chunk ->
+                _isLoading.value = false
+                val bubbles = _chatBubbles.value.toMutableList()
+                if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
+                    val prev = bubbles[streamingBubbleIndex]
+                    bubbles[streamingBubbleIndex] = prev.copy(message = prev.message + chunk)
+                } else {
+                    val newBubble = UiChatBubble(message = chunk, isUser = false)
+                    bubbles.add(newBubble)
+                    streamingBubbleIndex = bubbles.size - 1
+                }
+                _chatBubbles.value = bubbles
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.mensagemIaFlow.collect { finalBubble ->
+                _isLoading.value = false
+                val bubbles = _chatBubbles.value.toMutableList()
+                if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
+                    bubbles[streamingBubbleIndex] = finalBubble
+                } else {
+                    bubbles.add(finalBubble)
+                }
+                _chatBubbles.value = bubbles
+                streamingBubbleIndex = -1 // Reset for next response
+
+                // Rewards and gamification updates
+                val cur = profile.value
+                val scenario = _selectedScenario.value
+                val scenarioData = GameConstants.SCENARIOS[scenario]
+                val xpBonus = scenarioData?.second ?: 0
+                val newXp    = cur.xp    + GameConstants.XP_PER_MESSAGE + xpBonus
+                val newCoins = cur.coins + GameConstants.COINS_PER_MESSAGE
+                val newLevel = computeLevel(newXp)
+                var levelCoinsBonus = 0
+                if (newLevel > cur.level) {
+                    levelCoinsBonus = if (newLevel == 5) 500 else if (newLevel == 10) 1500 else 0
+                    if (levelCoinsBonus > 0) _toastMessage.value = "🎉 Level $newLevel! +${levelCoinsBonus} bonus coins!"
+                }
+                val newErrors = if (finalBubble.mistakes.isNotEmpty()) {
+                    val flat = finalBubble.mistakes.joinToString(" | ") {
+                        if (it.raw.isNotEmpty()) it.raw else "${it.wrong} → ${it.right}"
+                    }
+                    (cur.errorLog + ErrorEntry(java.time.Instant.now().toString(), flat)).takeLast(100)
+                } else cur.errorLog
+                val newXpHist = (cur.xpHistory + XpEntry(java.time.Instant.now().toString(), newXp)).takeLast(200)
+                val newSentHist = if (finalBubble.sentiment != "neutral" || finalBubble.sentimentConfidence >= 60) {
+                    (cur.sentimentHistory + SentimentEntry(
+                        java.time.Instant.now().toString(),
+                        finalBubble.sentiment,
+                        finalBubble.sentimentConfidence,
+                        finalBubble.sentimentCue
+                    )).takeLast(50)
+                } else cur.sentimentHistory
+
+                var conf = cur.confidence; var post = cur.posture
+                when (finalBubble.sentiment) {
+                    "enthusiastic" -> { conf = (conf + 2).coerceAtMost(100); post = (post + 2).coerceAtMost(100) }
+                    "frustrated"   -> { post = (post - 1).coerceAtLeast(0) }
+                }
+                ds.save(cur.copy(
+                    xp = newXp, coins = newCoins + levelCoinsBonus, level = newLevel,
+                    messagesCount = cur.messagesCount + 1,
+                    errorLog = newErrors, xpHistory = newXpHist, sentimentHistory = newSentHist,
+                    confidence = conf, posture = post,
+                ))
+            }
+        }
+
         viewModelScope.launch {
             audioEngine.userSpeechStarted.collect {
                 interruptAi()
@@ -241,81 +346,24 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        val xpBonus = scenarioData?.second ?: 0
-        val enriched = if (scenario.isNotEmpty()) "[Scenario: $scenario]\n$userText" else userText
-
-        _chatBubbles.value = _chatBubbles.value + UiChatBubble(userText, isUser = true)
-        claudeHistory.add(ClaudeMessage("user", enriched))
-        _isLoading.value = true
-
-        viewModelScope.launch {
-            try {
-                val resp = AnthropicClient.api.generateMessage(
-                    ClaudeRequest(
-                        system   = GameConstants.SYSTEM_PROMPT,
-                        messages = claudeHistory,
-                    )
-                )
-                val raw = resp.content.firstOrNull()?.text ?: ""
-                claudeHistory.add(ClaudeMessage("assistant", raw))
-
-                val parsed = parseClaudeResponse(raw)
-                _chatBubbles.value = _chatBubbles.value + UiChatBubble(
-                    message  = parsed.response,
-                    isUser   = false,
-                    vocabulary = parsed.vocabulary,
-                    mistakes   = parsed.mistakes,
-                    sentiment  = parsed.sentimentDetected,
-                    sentimentCue = parsed.sentimentCue,
-                    sentimentConfidence = parsed.sentimentConfidence,
-                )
-
-                // Persist rewards + updates
-                val cur = profile.first()
-                val newXp    = cur.xp    + GameConstants.XP_PER_MESSAGE + xpBonus
-                val newCoins = cur.coins + GameConstants.COINS_PER_MESSAGE
-                val newLevel = computeLevel(newXp)
-                var levelCoinsBonus = 0
-                if (newLevel > cur.level) {
-                    levelCoinsBonus = if (newLevel == 5) 500 else if (newLevel == 10) 1500 else 0
-                    if (levelCoinsBonus > 0) _toastMessage.value = "🎉 Level $newLevel! +${levelCoinsBonus} bonus coins!"
-                }
-                val newErrors = if (parsed.mistakes.isNotEmpty()) {
-                    val flat = parsed.mistakes.joinToString(" | ") {
-                        if (it.raw.isNotEmpty()) it.raw else "${it.wrong} → ${it.right}"
-                    }
-                    (cur.errorLog + ErrorEntry(java.time.Instant.now().toString(), flat)).takeLast(100)
-                } else cur.errorLog
-                val newXpHist = (cur.xpHistory + XpEntry(java.time.Instant.now().toString(), newXp)).takeLast(200)
-                val newSentHist = if (parsed.sentimentDetected != "neutral" || parsed.sentimentConfidence >= 60) {
-                    (cur.sentimentHistory + SentimentEntry(
-                        java.time.Instant.now().toString(),
-                        parsed.sentimentDetected,
-                        parsed.sentimentConfidence,
-                        parsed.sentimentCue
-                    )).takeLast(50)
-                } else cur.sentimentHistory
-
-                // Soft skill nudge
-                var conf = cur.confidence; var post = cur.posture
-                when (parsed.sentimentDetected) {
-                    "enthusiastic" -> { conf = (conf + 2).coerceAtMost(100); post = (post + 2).coerceAtMost(100) }
-                    "frustrated"   -> { post = (post - 1).coerceAtLeast(0) }
-                }
-                ds.save(cur.copy(
-                    xp = newXp, coins = newCoins + levelCoinsBonus, level = newLevel,
-                    messagesCount = cur.messagesCount + 1,
-                    errorLog = newErrors, xpHistory = newXpHist, sentimentHistory = newSentHist,
-                    confidence = conf, posture = post,
-                ))
-            } catch (e: Exception) {
-                _chatBubbles.value = _chatBubbles.value + UiChatBubble(
-                    "⚠️ Error: ${e.localizedMessage}", isUser = false
-                )
-            } finally {
-                _isLoading.value = false
-            }
+        val isFirstMessage = _chatBubbles.value.isEmpty()
+        val enriched = if (isFirstMessage) {
+            "Student English Level Profile: $userText\nPlease introduce yourself as Elias and start the conversation immediately matching this level."
+        } else if (scenario.isNotEmpty()) {
+            "[Scenario: $scenario]\n$userText"
+        } else {
+            userText
         }
+
+        if (!isFirstMessage) {
+            _chatBubbles.value = _chatBubbles.value + UiChatBubble(userText, isUser = true)
+        }
+        
+        SocketClient.enviarMensagem(enriched)
+        
+        _isLoading.value = true
+        isInterrupted = false
+        streamingBubbleIndex = -1
     }
 
     // ─────────────────────────────────────────────────────────────────────────

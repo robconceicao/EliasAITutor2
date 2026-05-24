@@ -36,6 +36,7 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\"")
         buildConfigField("String", "GROQ_API_KEY", "\"${localProperties.getProperty("GROQ_API_KEY", "")}\"")
         buildConfigField("String", "CARTESIA_API_KEY", "\"${localProperties.getProperty("CARTESIA_API_KEY", "")}\"")
+        buildConfigField("String", "BACKEND_URL", "\"${localProperties.getProperty("BACKEND_URL", "http://10.0.2.2:3000")}\"")
     }
 
     buildTypes {
@@ -88,6 +89,7 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("io.socket:socket.io-client:2.1.1")
 
     // Supabase e Ktor (Necessários para persistência de dados)
     implementation("io.github.jan-tennert.supabase:supabase-kt:2.5.0")

@@ -62,6 +62,7 @@ fun ChatScreen(vm: EliasViewModel) {
     var quizChosen    by remember { mutableStateOf(-1) }
     var quizResult    by remember { mutableStateOf<Boolean?>(null) }
     val isRecording   by vm.isRecording.collectAsState()
+    val isIaSpeaking  by vm.isIaSpeaking.collectAsState()
 
     val listState     = rememberLazyListState()
     val scope         = rememberCoroutineScope()
@@ -125,10 +126,10 @@ fun ChatScreen(vm: EliasViewModel) {
                 else EliasBubble(bubble, vm)
             }
 
-            if (isLoading || isRecording) {
+            if (isLoading || isRecording || isIaSpeaking) {
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        OndasSonorasAgente(isRecording = isRecording, isLoading = isLoading)
+                        OndasSonorasAgente(isRecording = isRecording, isLoading = isLoading, isIaSpeaking = isIaSpeaking)
                     }
                 }
             }
