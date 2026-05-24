@@ -144,6 +144,8 @@ io.on('connection', (socket) => {
       });
 
       let respostaCompletaIA = "";
+      let sentLength = 0;
+
       for await (const event of stream) {
         if (!estadoGeracao.ativo) break; // Abort if interrupted
 
@@ -152,7 +154,13 @@ io.on('connection', (socket) => {
           respostaCompletaIA += chunkText;
           estadoGeracao.textoParcialIA += chunkText;
           
-          context.push(chunkText);
+          // Stream only the text inside <RESPONSE> tags to Cartesia and user app
+          const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
+          if (newResponseText.length > 0) {
+            context.push(newResponseText);
+            socket.emit("texto_chunk", newResponseText);
+            sentLength = newLength;
+          }
         }
       }
       context.no_more_inputs();
@@ -166,6 +174,10 @@ io.on('connection', (socket) => {
             { $push: { mensagens: { role: 'assistant', content: respostaCompletaIA } } }
           );
         }
+
+        // Send final parsed message object (UiChatBubble structure) to Android
+        const parsed = parseClaudeResponse(respostaCompletaIA);
+        socket.emit("mensagem_ia", parsed);
       }
 
     } catch (error) {
@@ -195,6 +207,89 @@ async function escutarRetornoCartesia(context, socket, estadoGeracao) {
     console.error("Erro no retorno da Cartesia:", e);
   }
   socket.emit("estado_ia", "ociosa");
+}
+
+// Helper to extract the content inside <RESPONSE> tags as it streams
+function getNewResponseText(accumulated, sentLength) {
+  const openTag = "<RESPONSE>";
+  const closeTag = "</RESPONSE>";
+  
+  const openIdx = accumulated.toUpperCase().indexOf(openTag);
+  if (openIdx === -1) {
+    return { text: "", newLength: 0 };
+  }
+  
+  const startIdx = openIdx + openTag.length;
+  const closeIdx = accumulated.toUpperCase().indexOf(closeTag, startIdx);
+  
+  let content = "";
+  if (closeIdx === -1) {
+    content = accumulated.substring(startIdx);
+  } else {
+    content = accumulated.substring(startIdx, closeIdx);
+  }
+  
+  if (content.length > sentLength) {
+    const newText = content.substring(sentLength);
+    return { text: newText, newLength: content.length };
+  }
+  
+  return { text: "", newLength: sentLength };
+}
+
+// Helper to parse the full XML response from Claude at the end
+function parseClaudeResponse(raw) {
+  const getTag = (name) => {
+    const regex = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'i');
+    const match = raw.match(regex);
+    return match ? match[1].trim() : "";
+  };
+
+  const response = getTag("RESPONSE") || raw;
+  const vocabRaw = getTag("VOCABULARY");
+  const vocabulary = vocabRaw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  const mistakeRaw = getTag("MISTAKE_LOG");
+  const mistakes = mistakeRaw.split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0 && l.toLowerCase() !== "none")
+    .map(line => {
+      const body = line.replace(/^Mistake\s*\d+:\s*/i, "");
+      if (body.includes("→")) {
+        const parts = body.split("→");
+        const left = parts[0].trim();
+        const rightPart = parts[1] || "";
+        let right = rightPart;
+        let rule = "";
+        if (rightPart.includes("| Rule:")) {
+          const ruleParts = rightPart.split("| Rule:");
+          right = ruleParts[0].trim();
+          rule = ruleParts[1].trim();
+        }
+        return { wrong: left, right: right, rule: rule, raw: line };
+      }
+      return { wrong: "", right: "", rule: "", raw: line };
+    });
+
+  const sentBlock = getTag("SENTIMENT");
+  const detectedMatch = sentBlock.match(/detected:\s*(\w+)/i);
+  const detected = detectedMatch ? detectedMatch[1].toLowerCase() : "neutral";
+
+  const confidenceMatch = sentBlock.match(/confidence:\s*(\d+)/i);
+  const confidence = confidenceMatch ? parseInt(confidenceMatch[1], 10) : 50;
+
+  const cueMatch = sentBlock.match(/cue:\s*([\s\S]+)/i);
+  const cue = cueMatch ? cueMatch[1].trim() : "";
+
+  return {
+    message: response,
+    isUser: false,
+    vocabulary,
+    mistakes,
+    sentiment: detected,
+    sentimentCue: cue,
+    sentimentConfidence: confidence
+  };
 }
 
 app.get('/', (req, res) => {
