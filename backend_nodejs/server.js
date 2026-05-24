@@ -3,6 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
 import Cartesia from '@cartesia/cartesia-js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -20,8 +21,9 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 // Initialize APIs
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const cartesia = new Cartesia({ apiKey: process.env.CARTESIA_API_KEY });
+const googleAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
 // MongoDB Connection (Optional - Graceful fallback to memory if not configured)
 let useMongo = false;
@@ -102,8 +104,8 @@ io.on('connection', (socket) => {
   });
 
   // 3. User Message Received
-  socket.on('mensagem_usuario', async (textoUsuario) => {
-    console.log(`💬 Usuário disse: ${textoUsuario}`);
+  socket.on('mensagem_usuario', async (textoUsuario, modelOverride) => {
+    console.log(`💬 Usuário disse: ${textoUsuario} | Modelo sugerido: ${modelOverride || 'nenhum'}`);
     estadoGeracao.ativo = true;
     estadoGeracao.textoParcialIA = "";
 
@@ -129,40 +131,127 @@ io.on('connection', (socket) => {
       
       escutarRetornoCartesia(context, socket, estadoGeracao);
 
-      // Map history to Anthropic format
-      const mensagensParaClaude = historicoMemoria.map(m => ({ 
-        role: m.role === 'system' ? 'user' : m.role, 
-        content: m.content 
-      }));
+      let modelToUse = modelOverride || process.env.DEFAULT_LLM || 'claude';
+      
+      // Fallback logic if API keys are missing
+      if (modelToUse === 'claude' && (!process.env.ANTHROPIC_API_KEY || !anthropic)) {
+        modelToUse = process.env.GEMINI_API_KEY ? 'gemini' : (process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'claude');
+      } else if (modelToUse === 'gemini' && (!process.env.GEMINI_API_KEY || !googleAI)) {
+        modelToUse = process.env.ANTHROPIC_API_KEY ? 'claude' : (process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'gemini');
+      } else if (modelToUse === 'deepseek' && !process.env.DEEPSEEK_API_KEY) {
+        modelToUse = process.env.ANTHROPIC_API_KEY ? 'claude' : (process.env.GEMINI_API_KEY ? 'gemini' : 'deepseek');
+      }
 
-      // Call Anthropic in Streaming Mode
-      const stream = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20240620',
-        max_tokens: 250,
-        messages: mensagensParaClaude,
-        stream: true,
-      });
+      console.log(`🤖 Usando inteligência: ${modelToUse.toUpperCase()}`);
 
       let respostaCompletaIA = "";
       let sentLength = 0;
 
-      for await (const event of stream) {
-        if (!estadoGeracao.ativo) break; // Abort if interrupted
+      const handleChunk = (chunkText) => {
+        if (!estadoGeracao.ativo) return;
+        respostaCompletaIA += chunkText;
+        estadoGeracao.textoParcialIA += chunkText;
+        
+        // Stream only the text inside <RESPONSE> tags to Cartesia and user app
+        const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
+        if (newResponseText.length > 0) {
+          context.push(newResponseText);
+          socket.emit("texto_chunk", newResponseText);
+          sentLength = newLength;
+        }
+      };
 
-        if (event.type === 'content_block_delta' && event.delta.text) {
-          const chunkText = event.delta.text;
-          respostaCompletaIA += chunkText;
-          estadoGeracao.textoParcialIA += chunkText;
-          
-          // Stream only the text inside <RESPONSE> tags to Cartesia and user app
-          const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
-          if (newResponseText.length > 0) {
-            context.push(newResponseText);
-            socket.emit("texto_chunk", newResponseText);
-            sentLength = newLength;
+      if (modelToUse === 'claude') {
+        const mensagensParaClaude = historicoMemoria.map(m => ({ 
+          role: m.role === 'system' ? 'user' : m.role, 
+          content: m.content 
+        }));
+
+        const stream = await anthropic.messages.create({
+          model: 'claude-3-5-sonnet-20240620',
+          max_tokens: 250,
+          messages: mensagensParaClaude,
+          stream: true,
+        });
+
+        for await (const event of stream) {
+          if (!estadoGeracao.ativo) break;
+          if (event.type === 'content_block_delta' && event.delta.text) {
+            handleChunk(event.delta.text);
+          }
+        }
+      } else if (modelToUse === 'gemini') {
+        const geminiHistory = historicoMemoria
+          .filter(m => m.role !== 'system')
+          .map(m => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }]
+          }));
+
+        const model = googleAI.getGenerativeModel({ 
+          model: "gemini-1.5-flash",
+          systemInstruction: SYSTEM_PROMPT.content
+        });
+
+        const result = await model.generateContentStream({
+          contents: geminiHistory
+        });
+
+        for await (const chunk of result.stream) {
+          if (!estadoGeracao.ativo) break;
+          const chunkText = chunk.text();
+          if (chunkText) {
+            handleChunk(chunkText);
+          }
+        }
+      } else if (modelToUse === 'deepseek') {
+        const formattedMessages = [
+          { role: 'system', content: SYSTEM_PROMPT.content },
+          ...historicoMemoria.filter(m => m.role !== 'system').map(m => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.content
+          }))
+        ];
+
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: formattedMessages,
+            stream: true
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`DeepSeek API error: ${response.status} - ${errText}`);
+        }
+
+        const reader = response.body;
+        for await (const chunk of reader) {
+          if (!estadoGeracao.ativo) break;
+          const text = chunk.toString();
+          const lines = text.split('\n');
+          for (const line of lines) {
+            if (line.trim().startsWith('data: ')) {
+              const jsonStr = line.trim().substring(6);
+              if (jsonStr === '[DONE]') break;
+              try {
+                const data = JSON.parse(jsonStr);
+                const delta = data.choices?.[0]?.delta?.content || "";
+                if (delta) {
+                  handleChunk(delta);
+                }
+              } catch (e) {}
+            }
           }
         }
       }
+
       context.no_more_inputs();
 
       // Save complete response if not interrupted
