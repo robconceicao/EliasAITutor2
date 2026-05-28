@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
 import Cartesia from '@cartesia/cartesia-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { encodePCMToOpus } from './audioEncoder.js';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -80,6 +81,29 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 1.1 Restore session after reconnect
+  socket.on('restore_session', (payload) => {
+    console.log(`🔄 Tentativa de restaurar sessão: ${payload.sessionId}`);
+    if (payload.isRestore && payload.historySnapshot) {
+      try {
+        const snapshot = JSON.parse(payload.historySnapshot);
+        if (Array.isArray(snapshot)) {
+          historicoMemoria = snapshot.map(m => ({
+            role: m.isUser ? 'user' : 'assistant',
+            content: m.message
+          }));
+          if (historicoMemoria.length === 0 || historicoMemoria[0].role !== 'system') {
+            historicoMemoria.unshift(SYSTEM_PROMPT);
+          }
+          console.log(`✅ Sessão restaurada com ${historicoMemoria.length} mensagens.`);
+          socket.emit('session_restored', payload.sessionId);
+        }
+      } catch (e) {
+        console.error("Erro ao restaurar sessão:", e);
+      }
+    }
+  });
+
   // 2. User Barge-in (Interruption)
   socket.on('usuario_interrompeu', async () => {
     if (!estadoGeracao.ativo) return;
@@ -108,6 +132,7 @@ io.on('connection', (socket) => {
     console.log(`💬 Usuário disse: ${textoUsuario} | Modelo sugerido: ${modelOverride || 'nenhum'}`);
     estadoGeracao.ativo = true;
     estadoGeracao.textoParcialIA = "";
+    const seqTracker = { val: 0 };
 
     historicoMemoria.push({ role: 'user', content: textoUsuario });
     if (useMongo) {
@@ -125,11 +150,11 @@ io.on('connection', (socket) => {
       const context = cartesiaSocket.context({
         model_id: "sonic-english",
         voice: { mode: "id", id: "a0e99841-438c-4a64-b679-ae501e7d6091" }, // Default English Voice
-        output_format: { container: "raw", encoding: "pcm_f32le", sample_rate: 44100 },
+        output_format: { container: "raw", encoding: "pcm_f32le", sample_rate: 48000 },
       });
       estadoGeracao.cartesiaContext = context;
       
-      escutarRetornoCartesia(context, socket, estadoGeracao);
+      escutarRetornoCartesia(context, socket, estadoGeracao, seqTracker);
 
       let modelToUse = modelOverride || process.env.DEFAULT_LLM || 'claude';
       
@@ -280,16 +305,23 @@ io.on('connection', (socket) => {
   });
 });
 
-// Function to stream audio chunks directly to Android
-async function escutarRetornoCartesia(context, socket, estadoGeracao) {
+// Function to stream audio chunks directly to Android (encodes PCM to Opus frames)
+async function escutarRetornoCartesia(context, socket, estadoGeracao, seqTracker) {
   socket.emit("estado_ia", "falando");
   try {
     for await (const response of context.receive()) {
       if (!estadoGeracao.ativo) break;
       
       if (response.type === "chunk" && response.audio) {
-        // Send base64 audio directly to Android (Base64 is safer for Socket.io than raw buffers across platforms)
-        socket.emit("audio_chunk", response.audio);
+        const pcmBuffer = Buffer.from(response.audio, 'base64');
+        const opusFrames = encodePCMToOpus(pcmBuffer);
+        opusFrames.forEach((frame) => {
+          socket.emit("audio_opus_frame", {
+            frame: frame.toString("base64"),
+            seq: seqTracker.val++,
+            ts: Date.now()
+          });
+        });
       }
     }
   } catch (e) {

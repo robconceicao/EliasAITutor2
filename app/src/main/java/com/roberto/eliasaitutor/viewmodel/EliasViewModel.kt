@@ -36,7 +36,35 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
 
-    private val audioEngine = com.roberto.eliasaitutor.audio.AudioEngine(app)
+    private val localVad = com.roberto.eliasaitutor.audio.LocalVAD().apply {
+        setListener(object : com.roberto.eliasaitutor.audio.LocalVAD.VADListener {
+            override fun onSpeechDetected() {
+                viewModelScope.launch {
+                    interruptAi()
+                    startListening()
+                }
+            }
+
+            override fun onSilenceDetected() {
+                // Handled natively by SpeechRecognizer
+            }
+
+            override fun onRmsChanged(rms: Float) {
+                _userVoiceRms.value = rms
+            }
+        })
+    }
+    private val opusAudioPlayer = com.roberto.eliasaitutor.audio.OpusAudioPlayer()
+    private val audioCaptureManager = com.roberto.eliasaitutor.audio.AudioCaptureManager(app, localVad)
+    private val fallbackPcmPlayer = PcmFloatPlayer()
+    private var speechRecognizer: android.speech.SpeechRecognizer? = null
+
+    private val _userVoiceRms = MutableStateFlow(0f)
+    val userVoiceRms: StateFlow<Float> = _userVoiceRms
+
+    private val _jitterStats = MutableStateFlow<com.roberto.eliasaitutor.audio.JitterStats?>(null)
+    val jitterStats: StateFlow<com.roberto.eliasaitutor.audio.JitterStats?> = _jitterStats
+
     private var isInterrupted = false
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
@@ -46,14 +74,72 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
     private var streamingBubbleIndex = -1
 
+    private fun initSpeechRecognizer() {
+        speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getApplication())
+        speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: android.os.Bundle?) {}
+            override fun onRmsChanged(rmsdB: Float) {
+                val mappedRms = (rmsdB + 2f).coerceAtLeast(0f) * 200f
+                _userVoiceRms.value = mappedRms
+            }
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            
+            override fun onBeginningOfSpeech() {
+                interruptAi()
+            }
+
+            override fun onEndOfSpeech() {}
+
+            override fun onError(error: Int) {
+                android.util.Log.e("EliasViewModel", "STT Error: $error")
+                _isRecording.value = false
+                audioCaptureManager.startCapture()
+            }
+
+            override fun onResults(results: android.os.Bundle?) {
+                val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    sendMessage(matches[0])
+                }
+                _isRecording.value = false
+                audioCaptureManager.startCapture()
+            }
+
+            override fun onPartialResults(partialResults: android.os.Bundle?) {}
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+        })
+    }
+
     fun startListening() {
-        audioEngine.startListening()
-        _isRecording.value = true
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            audioCaptureManager.stopCapture()
+            if (speechRecognizer == null) {
+                initSpeechRecognizer()
+            }
+            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.US.toString())
+                putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            }
+            try {
+                speechRecognizer?.startListening(intent)
+                _isRecording.value = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     fun stopListening() {
-        audioEngine.stopListening()
-        _isRecording.value = false
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            try {
+                speechRecognizer?.stopListening()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            _isRecording.value = false
+            audioCaptureManager.startCapture()
+        }
     }
 
     fun startRecording(context: android.content.Context) {
@@ -68,7 +154,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         if (!isInterrupted) {
             isInterrupted = true
             SocketClient.usuarioInterrompeu()
-            audioEngine.flushAudio()
+            opusAudioPlayer.stopPlayout()
+            fallbackPcmPlayer.flush()
             _isLoading.value = false
         }
     }
@@ -112,6 +199,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── Streak ─────────────────────────────────────────────────────────────────
     init {
+        SocketClient.init(app)
         CartesiaClient.connect()
         SocketClient.connect()
 
@@ -136,19 +224,26 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             CartesiaClient.audioFlow.collect { pcmData ->
-                audioEngine.playPcmData(pcmData)
+                fallbackPcmPlayer.playPcmData(pcmData)
             }
         }
 
         viewModelScope.launch {
-            SocketClient.audioFlow.collect { pcmData ->
-                audioEngine.playPcmData(pcmData)
+            SocketClient.opusFrameFlow.collect { frame ->
+                opusAudioPlayer.startPlayout()
+                opusAudioPlayer.handleIncomingOpusFrame(frame.data, frame.seq, frame.ts)
+                _jitterStats.value = opusAudioPlayer.getJitterStats()
             }
         }
 
         viewModelScope.launch {
             SocketClient.iaStateFlow.collect { state ->
-                _isIaSpeaking.value = (state == "falando")
+                val speaking = (state == "falando")
+                _isIaSpeaking.value = speaking
+                if (!speaking) {
+                    opusAudioPlayer.stopPlayout()
+                    _jitterStats.value = null
+                }
             }
         }
 
@@ -230,16 +325,11 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        viewModelScope.launch {
-            audioEngine.userSpeechStarted.collect {
-                interruptAi()
-            }
+        // Initialized SpeechRecognizer on main thread in init
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            initSpeechRecognizer()
         }
-        viewModelScope.launch {
-            audioEngine.userSpeechResult.collect { text ->
-                sendMessage(text)
-            }
-        }
+        audioCaptureManager.startCapture()
         viewModelScope.launch { 
             val initial = profile.first()
             if (initial.userId.isEmpty()) {
@@ -729,7 +819,22 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         super.onCleared()
         try {
-            audioEngine.release()
+            opusAudioPlayer.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            fallbackPcmPlayer.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            audioCaptureManager.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            speechRecognizer?.destroy()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -749,5 +854,63 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         @Suppress("UNCHECKED_CAST")
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
             EliasViewModel(app) as T
+    }
+}
+
+class PcmFloatPlayer {
+    private var audioTrack: android.media.AudioTrack? = null
+    
+    init {
+        try {
+            val sampleRate = 44100
+            val channelConfig = android.media.AudioFormat.CHANNEL_OUT_MONO
+            val audioFormat = android.media.AudioFormat.ENCODING_PCM_FLOAT
+            val bufferSize = android.media.AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+            audioTrack = android.media.AudioTrack(
+                android.media.AudioManager.STREAM_MUSIC,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                bufferSize,
+                android.media.AudioTrack.MODE_STREAM
+            )
+            audioTrack?.play()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    fun playPcmData(data: ByteArray) {
+        val track = audioTrack ?: return
+        try {
+            val floatArray = java.nio.ByteBuffer.wrap(data)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                .asFloatBuffer()
+            val floats = FloatArray(floatArray.remaining())
+            floatArray.get(floats)
+            track.write(floats, 0, floats.size, android.media.AudioTrack.WRITE_NON_BLOCKING)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    fun flush() {
+        try {
+            audioTrack?.pause()
+            audioTrack?.flush()
+            audioTrack?.play()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    fun release() {
+        try {
+            audioTrack?.stop()
+            audioTrack?.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        audioTrack = null
     }
 }

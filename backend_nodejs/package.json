@@ -14,6 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
     "@cartesia/cartesia-js": "^1.1.2",
+    "@discordjs/opus": "^0.10.0",
     "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

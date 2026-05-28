@@ -34,7 +34,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.withStyle
 import com.roberto.eliasaitutor.data.GameConstants
 import com.roberto.eliasaitutor.model.*
-import com.roberto.eliasaitutor.ui.OndasSonorasAgente
+import com.roberto.eliasaitutor.ui.components.VoiceWaveformVisualizer
+import com.roberto.eliasaitutor.network.ConnectionState
+import com.roberto.eliasaitutor.network.SocketClient
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import kotlinx.coroutines.launch
 
@@ -63,7 +65,11 @@ fun ChatScreen(vm: EliasViewModel) {
     var quizResult    by remember { mutableStateOf<Boolean?>(null) }
     val isRecording   by vm.isRecording.collectAsState()
     val isIaSpeaking  by vm.isIaSpeaking.collectAsState()
-
+    
+    val rms           by vm.userVoiceRms.collectAsState()
+    val connectionState by SocketClient.connectionState.collectAsState()
+    val jitterStats   by vm.jitterStats.collectAsState()
+ 
     val listState     = rememberLazyListState()
     val scope         = rememberCoroutineScope()
     val context       = androidx.compose.ui.platform.LocalContext.current
@@ -105,7 +111,42 @@ fun ChatScreen(vm: EliasViewModel) {
             }
             Spacer(Modifier.weight(1f))
             val bonus = GameConstants.SCENARIOS[scenario]?.second ?: 0
-            if (bonus > 0) Text("+$bonus XP", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            if (bonus > 0) {
+                Text("+$bonus XP", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(12.dp))
+            }
+            
+            // Connection Status Badge
+            val statusColor = when (connectionState) {
+                ConnectionState.CONNECTED -> Green
+                ConnectionState.CONNECTING -> Gold
+                ConnectionState.RECONNECTING -> Color(0xFFff9800)
+                ConnectionState.DISCONNECTED -> Red
+            }
+            val statusText = when (connectionState) {
+                ConnectionState.CONNECTED -> "Online"
+                ConnectionState.CONNECTING -> "Connecting..."
+                ConnectionState.RECONNECTING -> "Reconnecting..."
+                ConnectionState.DISCONNECTED -> "Offline"
+            }
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(statusColor.copy(alpha = 0.15f))
+                    .border(1.dp, statusColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(statusColor)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -128,8 +169,25 @@ fun ChatScreen(vm: EliasViewModel) {
 
             if (isLoading || isRecording || isIaSpeaking) {
                 item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        OndasSonorasAgente(isRecording = isRecording, isLoading = isLoading, isIaSpeaking = isIaSpeaking)
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        VoiceWaveformVisualizer(
+                            rms = rms,
+                            isRecording = isRecording,
+                            isIaSpeaking = isIaSpeaking,
+                            isLoading = isLoading
+                        )
+                        if (isIaSpeaking && jitterStats != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Jitter: ${jitterStats!!.jitterMs}ms | Target Delay: ${jitterStats!!.targetDelayMs}ms | Loss: ${jitterStats!!.packetLoss}",
+                                color = Muted,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
