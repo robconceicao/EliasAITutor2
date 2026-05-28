@@ -726,6 +726,25 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         return ParsedResponse(response, vocab, mistakes, detected, confidence.coerceIn(0,100), cue)
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            audioEngine.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            SocketClient.disconnect()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            CartesiaClient.disconnect()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     class Factory(private val app: Application) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =

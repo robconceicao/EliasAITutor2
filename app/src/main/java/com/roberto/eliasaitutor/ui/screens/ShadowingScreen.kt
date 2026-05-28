@@ -53,6 +53,19 @@ fun ShadowingScreen(vm: EliasViewModel) {
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var lastAudioFile by remember { mutableStateOf<File?>(null) }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder?.let {
+                try {
+                    it.stop()
+                } catch (e: Exception) {}
+                try {
+                    it.release()
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -155,7 +168,13 @@ fun ShadowingScreen(vm: EliasViewModel) {
                                 if (!isRecording) {
                                     val file = File(context.cacheDir, "echo_${System.currentTimeMillis()}.m4a")
                                     lastAudioFile = file
-                                    recorder = MediaRecorder().apply {
+                                    val rec = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                        MediaRecorder(context)
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        MediaRecorder()
+                                    }
+                                    recorder = rec.apply {
                                         setAudioSource(MediaRecorder.AudioSource.MIC)
                                         setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                         setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
