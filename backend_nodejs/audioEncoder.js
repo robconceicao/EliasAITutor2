@@ -1,4 +1,5 @@
-import { OpusEncoder } from '@discordjs/opus';
+import pkg from '@discordjs/opus';
+const { OpusEncoder } = pkg;
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 1;

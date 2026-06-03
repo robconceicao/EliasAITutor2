@@ -5,8 +5,18 @@
     <!-- Permissão para acessar a internet (chamadas de API) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Permissão para monitorar o estado da rede (evita SecurityException no SocketClient) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Permissão para gravar áudio (funcionalidade Shadowing) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Visibilidade para o SpeechRecognizer no Android 11+ (API 30+) -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"

@@ -340,6 +340,26 @@ object SocketClient {
         }
     }
 
+    fun sendBargeIn() {
+        if (_connectionState.value == ConnectionState.CONNECTED) {
+            socket?.emit("barge_in", JSONObject().apply {
+                put("sessionId", currentSession?.sessionId ?: "")
+                put("timestamp", System.currentTimeMillis())
+                put("reason", "user_speech_detected")
+            })
+        }
+    }
+
+    fun sendSpeechEnd(transcript: String, durationMs: Long, vadConfidence: Float) {
+        if (_connectionState.value == ConnectionState.CONNECTED) {
+            socket?.emit("speech_end", JSONObject().apply {
+                put("transcript", transcript)
+                put("durationMs", durationMs)
+                put("vadConfidence", vadConfidence)
+            })
+        }
+    }
+
     fun usuarioInterrompeu() {
         socket?.emit("usuario_interrompeu")
     }
@@ -351,7 +371,9 @@ object SocketClient {
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         runCatching { cm.unregisterNetworkCallback(networkCallback) }
-        cm.registerNetworkCallback(request, networkCallback)
+        runCatching { cm.registerNetworkCallback(request, networkCallback) }.onFailure { e ->
+            Log.e(TAG, "Erro ao registrar callback de rede: ${e.message}", e)
+        }
     }
 
     private fun generateSessionId() = "session_${System.currentTimeMillis()}_${(1000..9999).random()}"

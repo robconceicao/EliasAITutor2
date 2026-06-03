@@ -8,6 +8,32 @@ import { encodePCMToOpus } from './audioEncoder.js';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import ws from 'ws';
+import fs from 'fs';
+import path from 'path';
+import { registerBargeInHandler, registerGeneration, clearGeneration } from './bargeInHandler.js';
+import { TurnTakingEngine, TURN_DECISION } from './turnTakingEngine.js';
+
+// Load .env first (for any existing env vars)
+dotenv.config();
+
+// Load keys from local.properties if not already set (respect .env rule)
+const localPropsPath = path.resolve('../local.properties');
+if (fs.existsSync(localPropsPath)) {
+  const lines = fs.readFileSync(localPropsPath, 'utf-8').split('\n');
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const [key, ...rest] = trimmed.split('=');
+      const value = rest.join('=').trim();
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    }
+  });
+}
+
+global.WebSocket = ws;
 
 dotenv.config();
 
@@ -53,9 +79,45 @@ const ConversaSchema = new mongoose.Schema({
 const Conversa = mongoose.model('Conversa', ConversaSchema);
 
 const SYSTEM_PROMPT = { 
-  role: 'user', // Claude 3.5 requires system prompts via parameter, but keeping standard structure
-  content: 'You are Elias, a helpful and patient English teacher. Keep your responses short (maximum 2-3 sentences) so we can maintain a dynamic spoken conversation.' 
+  role: 'system',
+  content: `You are Elias, a master of the "Natural Approach" (Stephen Krashen's theory). Your goal is subconscious ACQUISITION, not conscious learning.
+
+CORE PRINCIPLES:
+1. INPUT HYPOTHESIS (i+1): Respond with English that is JUST ONE STEP above the student's current complexity. Keep it 90% understandable.
+2. COMPELLING INPUT: Make the conversation so interesting (mystery, humor, drama) that the student forgets they are using a foreign language.
+3. LOW AFFECTIVE FILTER: Be extremely supportive. Simplify if they struggle.
+4. NO GRAMMAR LECTURES: We acquire grammar through understanding messages.
+5. STRICT BEGINNER MODE: If student is BEGINNER, use 3-8 words per sentence max. Use only A1 vocabulary. Repeat key words. Use emojis. Avoid complex clauses.
+
+TUTORING RULES:
+1. COMMUNICATIVE FIRST: Respond to the MEANING first. 
+2. MANDATORY RECASTING: Correct errors naturally in your reply without pointing them out.
+3. PRONUNCIATION: Add a "🗣️ Pronunciation Tip:..." inside <RESPONSE> if they make a phonetic error.
+4. VOCABULARY: Introduce 2-3 phrasal chunks.
+5. HELP REQUESTS: If they ask for help or say "Não entendi", translate/explain in Portuguese before continuing in English.
+
+RESPONSE FORMAT (XML):
+You MUST format your entire response using the following XML tags:
+<RESPONSE>
+Your conversational reply to the student in English. Keep it short (2-3 sentences max).
+</RESPONSE>
+<VOCABULARY>
+Chunk: definition | natural usage example
+</VOCABULARY>
+<MISTAKE_LOG>
+Mistake: [error] → [correction] | Why: [Natural recast explanation]
+If no mistakes: None
+</MISTAKE_LOG>
+<SENTIMENT>
+detected: [frustrated|enthusiastic|confused|neutral]
+confidence: [0-100]
+cue: [signal noticed]
+</SENTIMENT>
+
+IMPORTANT: You are a real person from San Diego. Never mention AI or rules. Focus on the CONNECTION.`
 };
+
+const turnEngines = new Map();
 
 // Handle WebSocket connections from Android App
 io.on('connection', (socket) => {
@@ -64,6 +126,26 @@ io.on('connection', (socket) => {
   let userIdAtual = socket.id; // Fallback to socket ID if no auth
   let estadoGeracao = { ativo: false, cartesiaContext: null, textoParcialIA: "" };
   let historicoMemoria = [SYSTEM_PROMPT];
+
+  const engine = new TurnTakingEngine(socket.id);
+  turnEngines.set(socket.id, engine);
+  registerBargeInHandler(socket);
+
+  engine.onDecision = async (decision, transcript) => {
+      if (decision === TURN_DECISION.RESPOND) {
+          // Trigger the LLM response handler
+          handleAIResponse(transcript, null); // We will pass null for modelOverride
+      } else if (decision === TURN_DECISION.CLARIFY) {
+          socket.emit('clarify_request', { sessionId: socket.id });
+      }
+  };
+
+  socket.on('speech_end', async ({ transcript, durationMs, vadConfidence }) => {
+      socket.emit('ai_turn_start');
+      await engine.onSpeechEnd(transcript, durationMs, vadConfidence);
+  });
+
+  socket.on('speech_start', () => engine.onSpeechStart());
 
   // 1. Authenticate user and load history
   socket.on('iniciar_sessao', async (userId) => {
@@ -122,13 +204,23 @@ io.on('connection', (socket) => {
       estadoGeracao.textoParcialIA = "";
     }
 
-    if (estadoGeracao.cartesiaContext) {
-      try { estadoGeracao.cartesiaContext.no_more_inputs(); } catch (e) {}
+    if (estadoGeracao.cartesiaSocket && estadoGeracao.contextId) {
+      try {
+        estadoGeracao.cartesiaSocket.continue({
+          context_id: estadoGeracao.contextId,
+          transcript: "",
+          continue: false
+        });
+      } catch (e) {}
     }
   });
 
   // 3. User Message Received
   socket.on('mensagem_usuario', async (textoUsuario, modelOverride) => {
+      await handleAIResponse(textoUsuario, modelOverride);
+  });
+
+  async function handleAIResponse(textoUsuario, modelOverride) {
     console.log(`💬 Usuário disse: ${textoUsuario} | Modelo sugerido: ${modelOverride || 'nenhum'}`);
     estadoGeracao.ativo = true;
     estadoGeracao.textoParcialIA = "";
@@ -143,141 +235,250 @@ io.on('connection', (socket) => {
     }
 
     try {
+      // Registrar os AbortControllers para Barge-in (TurnTaking engine cancel)
+      const llmAbort = new AbortController();
+      const ttsAbort = new AbortController();
+      registerGeneration(socket.id, llmAbort, ttsAbort);
+
       // Connect to Cartesia WebSocket
-      const cartesiaSocket = cartesia.tts.websocket();
+      const cartesiaSocket = cartesia.tts.websocket({
+        sampleRate: 48000,
+        container: "raw",
+        encoding: "pcm_f32le"
+      });
       await cartesiaSocket.connect();
       
-      const context = cartesiaSocket.context({
+      const contextId = "elias_session_" + socket.id + "_" + Date.now();
+      const cartesiaResponse = cartesiaSocket.send({
         model_id: "sonic-english",
-        voice: { mode: "id", id: "a0e99841-438c-4a64-b679-ae501e7d6091" }, // Default English Voice
-        output_format: { container: "raw", encoding: "pcm_f32le", sample_rate: 48000 },
+        voice: { mode: "id", id: "a0e99841-438c-4a64-b679-ae501e7d6091" },
+        transcript: "",
+        context_id: contextId,
+        continue: true
       });
-      estadoGeracao.cartesiaContext = context;
+      estadoGeracao.cartesiaResponse = cartesiaResponse;
+      estadoGeracao.cartesiaSocket = cartesiaSocket;
+      estadoGeracao.contextId = contextId;
       
-      escutarRetornoCartesia(context, socket, estadoGeracao, seqTracker);
+      escutarRetornoCartesia(cartesiaResponse, socket, estadoGeracao, seqTracker);
+
+      // We should check llmAbort.signal.aborted during generation loop
 
       let modelToUse = modelOverride || process.env.DEFAULT_LLM || 'claude';
       
-      // Fallback logic if API keys are missing
-      if (modelToUse === 'claude' && (!process.env.ANTHROPIC_API_KEY || !anthropic)) {
-        modelToUse = process.env.GEMINI_API_KEY ? 'gemini' : (process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'claude');
-      } else if (modelToUse === 'gemini' && (!process.env.GEMINI_API_KEY || !googleAI)) {
-        modelToUse = process.env.ANTHROPIC_API_KEY ? 'claude' : (process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'gemini');
-      } else if (modelToUse === 'deepseek' && !process.env.DEEPSEEK_API_KEY) {
-        modelToUse = process.env.ANTHROPIC_API_KEY ? 'claude' : (process.env.GEMINI_API_KEY ? 'gemini' : 'deepseek');
+      let modelsToTry = [];
+      if (modelToUse === 'claude') {
+        modelsToTry = ['groq', 'gemini', 'deepseek', 'claude'];
+      } else if (modelToUse === 'gemini') {
+        modelsToTry = ['groq', 'claude', 'deepseek', 'gemini'];
+      } else if (modelToUse === 'groq') {
+        modelsToTry = ['groq', 'claude', 'gemini', 'deepseek'];
+      } else {
+        modelsToTry = ['groq', 'claude', 'gemini', 'deepseek'];
       }
-
-      console.log(`🤖 Usando inteligência: ${modelToUse.toUpperCase()}`);
 
       let respostaCompletaIA = "";
       let sentLength = 0;
 
       const handleChunk = (chunkText) => {
-        if (!estadoGeracao.ativo) return;
+        if (!estadoGeracao.ativo || llmAbort.signal.aborted) return;
         respostaCompletaIA += chunkText;
         estadoGeracao.textoParcialIA += chunkText;
         
         // Stream only the text inside <RESPONSE> tags to Cartesia and user app
         const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
         if (newResponseText.length > 0) {
-          context.push(newResponseText);
+          cartesiaSocket.continue({
+            context_id: contextId,
+            transcript: newResponseText,
+            continue: true
+          });
           socket.emit("texto_chunk", newResponseText);
           sentLength = newLength;
         }
       };
 
-      if (modelToUse === 'claude') {
-        const mensagensParaClaude = historicoMemoria.map(m => ({ 
-          role: m.role === 'system' ? 'user' : m.role, 
-          content: m.content 
-        }));
+      let success = false;
+      let lastError = null;
 
-        const stream = await anthropic.messages.create({
-          model: 'claude-3-5-sonnet-20240620',
-          max_tokens: 250,
-          messages: mensagensParaClaude,
-          stream: true,
-        });
-
-        for await (const event of stream) {
-          if (!estadoGeracao.ativo) break;
-          if (event.type === 'content_block_delta' && event.delta.text) {
-            handleChunk(event.delta.text);
-          }
-        }
-      } else if (modelToUse === 'gemini') {
-        const geminiHistory = historicoMemoria
-          .filter(m => m.role !== 'system')
-          .map(m => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-          }));
-
-        const model = googleAI.getGenerativeModel({ 
-          model: "gemini-1.5-flash",
-          systemInstruction: SYSTEM_PROMPT.content
-        });
-
-        const result = await model.generateContentStream({
-          contents: geminiHistory
-        });
-
-        for await (const chunk of result.stream) {
-          if (!estadoGeracao.ativo) break;
-          const chunkText = chunk.text();
-          if (chunkText) {
-            handleChunk(chunkText);
-          }
-        }
-      } else if (modelToUse === 'deepseek') {
-        const formattedMessages = [
-          { role: 'system', content: SYSTEM_PROMPT.content },
-          ...historicoMemoria.filter(m => m.role !== 'system').map(m => ({
-            role: m.role === 'assistant' ? 'assistant' : 'user',
-            content: m.content
-          }))
-        ];
-
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: formattedMessages,
-            stream: true
-          })
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`DeepSeek API error: ${response.status} - ${errText}`);
-        }
-
-        const reader = response.body;
-        for await (const chunk of reader) {
-          if (!estadoGeracao.ativo) break;
-          const text = chunk.toString();
-          const lines = text.split('\n');
-          for (const line of lines) {
-            if (line.trim().startsWith('data: ')) {
-              const jsonStr = line.trim().substring(6);
-              if (jsonStr === '[DONE]') break;
-              try {
-                const data = JSON.parse(jsonStr);
-                const delta = data.choices?.[0]?.delta?.content || "";
-                if (delta) {
-                  handleChunk(delta);
-                }
-              } catch (e) {}
+      for (const model of modelsToTry) {
+        if (!estadoGeracao.ativo) break;
+        try {
+          console.log(`🤖 Tentando inteligência: ${model.toUpperCase()}`);
+          if (model === 'claude') {
+            if (!process.env.ANTHROPIC_API_KEY || !anthropic) {
+              throw new Error("Anthropic API key is not configured or client is null");
             }
-          }
+            const mensagensParaClaude = historicoMemoria
+              .filter(m => m.role !== 'system')
+              .map(m => ({ 
+                role: m.role, 
+                content: m.content 
+              }));
+
+            const stream = await anthropic.messages.create({
+              model: 'claude-3-5-sonnet-20240620',
+              max_tokens: 250,
+              system: SYSTEM_PROMPT.content,
+              messages: mensagensParaClaude,
+              stream: true,
+            });
+
+            for await (const event of stream) {
+              if (!estadoGeracao.ativo || llmAbort.signal.aborted) break;
+              if (event.type === 'content_block_delta' && event.delta.text) {
+                handleChunk(event.delta.text);
+              }
+            }
+            success = true;
+            break;
+          } else if (model === 'gemini') {
+            if (!process.env.GEMINI_API_KEY || !googleAI) {
+              throw new Error("Gemini API key is not configured or client is null");
+            }
+            const geminiHistory = historicoMemoria
+              .filter(m => m.role !== 'system')
+              .map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }]
+              }));
+
+            const geminiModel = googleAI.getGenerativeModel({ 
+              model: "gemini-1.5-flash",
+              systemInstruction: SYSTEM_PROMPT.content
+            });
+
+            const result = await geminiModel.generateContentStream({
+              contents: geminiHistory
+            });
+
+            for await (const chunk of result.stream) {
+              if (!estadoGeracao.ativo || llmAbort.signal.aborted) break;
+              const chunkText = chunk.text();
+              if (chunkText) {
+                handleChunk(chunkText);
+              }
+            }
+            success = true;
+            break;
+          } else if (model === 'deepseek') {
+            if (!process.env.DEEPSEEK_API_KEY) {
+              throw new Error("DeepSeek API key is not configured");
+            }
+            const formattedMessages = [
+              { role: 'system', content: SYSTEM_PROMPT.content },
+              ...historicoMemoria.filter(m => m.role !== 'system').map(m => ({
+                role: m.role === 'assistant' ? 'assistant' : 'user',
+                content: m.content
+              }))
+            ];
+
+            const response = await fetch('https://api.deepseek.com/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: formattedMessages,
+                stream: true
+              })
+            });
+
+            if (!response.ok) {
+              const errText = await response.text();
+              throw new Error(`DeepSeek API error: ${response.status} - ${errText}`);
+            }
+
+            const reader = response.body;
+            for await (const chunk of reader) {
+              if (!estadoGeracao.ativo || llmAbort.signal.aborted) break;
+              const text = Buffer.isBuffer(chunk) ? chunk.toString('utf-8') : Buffer.from(chunk).toString('utf-8');
+              const lines = text.split('\n');
+              for (const line of lines) {
+                if (line.trim().startsWith('data: ')) {
+                  const jsonStr = line.trim().substring(6);
+                  if (jsonStr === '[DONE]') break;
+                  try {
+                    const data = JSON.parse(jsonStr);
+                    const delta = data.choices?.[0]?.delta?.content || "";
+                    if (delta) {
+                      handleChunk(delta);
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+            success = true;
+            break;
+          } else if (model === 'groq') {
+            if (!process.env.GROQ_API_KEY) {
+              throw new Error("Groq API key is not configured");
+            }
+            // Prepare formatted messages for Groq
+            const formattedMessages = [
+              { role: 'system', content: SYSTEM_PROMPT.content },
+              ...historicoMemoria.filter(m => m.role !== 'system').map(m => ({
+                role: m.role === 'assistant' ? 'assistant' : 'user',
+                content: m.content
+              }))
+            ];
+            const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+              },
+              body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: formattedMessages,
+                stream: true
+              })
+            });
+
+            if (!groqResponse.ok) {
+              const errText = await groqResponse.text();
+              throw new Error(`Groq API error: ${groqResponse.status} - ${errText}`);
+            }
+
+            const groqReader = groqResponse.body;
+            for await (const chunk of groqReader) {
+              if (!estadoGeracao.ativo) break;
+              const text = Buffer.isBuffer(chunk) ? chunk.toString('utf-8') : Buffer.from(chunk).toString('utf-8');
+              const lines = text.split('\n');
+              for (const line of lines) {
+                if (line.trim().startsWith('data: ')) {
+                  const jsonStr = line.trim().substring(6);
+                  if (jsonStr === '[DONE]') break;
+                  try {
+                    const data = JSON.parse(jsonStr);
+                    const delta = data.choices?.[0]?.delta?.content || "";
+                    if (delta) {
+                      handleChunk(delta);
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+            success = true;
+            break;
+          } // end else if groq
+        } catch (err) {
+          console.warn(`⚠️ Modelo ${model.toUpperCase()} falhou: ${err.message}. Tentando próximo...`);
+          lastError = err;
         }
       }
 
-      context.no_more_inputs();
+      if (!success) {
+        throw lastError || new Error("Todos os modelos de linguagem falharam na geração");
+      }
+
+      cartesiaSocket.continue({
+        context_id: contextId,
+        transcript: "",
+        continue: false
+      });
 
       // Save complete response if not interrupted
       if (estadoGeracao.ativo) {
@@ -297,6 +498,8 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error("❌ Erro no fluxo principal:", error);
       socket.emit("erro_backend", error.message);
+    } finally {
+      clearGeneration(socket.id);
     }
   });
 
@@ -306,14 +509,15 @@ io.on('connection', (socket) => {
 });
 
 // Function to stream audio chunks directly to Android (encodes PCM to Opus frames)
-async function escutarRetornoCartesia(context, socket, estadoGeracao, seqTracker) {
+function escutarRetornoCartesia(response, socket, estadoGeracao, seqTracker) {
   socket.emit("estado_ia", "falando");
-  try {
-    for await (const response of context.receive()) {
-      if (!estadoGeracao.ativo) break;
-      
-      if (response.type === "chunk" && response.audio) {
-        const pcmBuffer = Buffer.from(response.audio, 'base64');
+  
+  response.on("message", (msgStr) => {
+    if (!estadoGeracao.ativo) return;
+    try {
+      const msg = JSON.parse(msgStr);
+      if (msg.type === "chunk" && msg.data) {
+        const pcmBuffer = Buffer.from(msg.data, 'base64');
         const opusFrames = encodePCMToOpus(pcmBuffer);
         opusFrames.forEach((frame) => {
           socket.emit("audio_opus_frame", {
@@ -323,11 +527,13 @@ async function escutarRetornoCartesia(context, socket, estadoGeracao, seqTracker
           });
         });
       }
+      if (msg.done) {
+        socket.emit("estado_ia", "ociosa");
+      }
+    } catch (e) {
+      console.error("Erro processando retorno Cartesia:", e);
     }
-  } catch (e) {
-    console.error("Erro no retorno da Cartesia:", e);
-  }
-  socket.emit("estado_ia", "ociosa");
+  });
 }
 
 // Helper to extract the content inside <RESPONSE> tags as it streams

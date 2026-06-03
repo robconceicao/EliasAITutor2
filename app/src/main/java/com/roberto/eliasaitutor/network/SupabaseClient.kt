@@ -44,11 +44,13 @@ data class SupabaseFlashOffer(
 )
 
 object SupabaseManager {
-    val client = createSupabaseClient(
-        supabaseUrl = BuildConfig.SUPABASE_URL,
-        supabaseKey = BuildConfig.SUPABASE_KEY
-    ) {
-        install(Postgrest)
+    val client by lazy {
+        createSupabaseClient(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            supabaseKey = BuildConfig.SUPABASE_KEY
+        ) {
+            install(Postgrest)
+        }
     }
 
     suspend fun loadProfile(userId: String): SupabaseProfile? {

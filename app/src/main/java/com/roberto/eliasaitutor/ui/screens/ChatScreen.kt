@@ -40,15 +40,15 @@ import com.roberto.eliasaitutor.network.SocketClient
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import kotlinx.coroutines.launch
 
-private val Bg      = Color(0xFF0d0f14)
-private val Surface = Color(0xFF161922)
-private val Border  = Color(0xFF252a35)
-private val Accent  = Color(0xFF4f8ef7)
-private val Gold    = Color(0xFFf7c94f)
-private val Green   = Color(0xFF3ecf8e)
-private val Red     = Color(0xFFf76f6f)
-private val Muted   = Color(0xFF7a8099)
-private val Purple  = Color(0xFFa855f7)
+private val Bg      = Color(0xFF0F172A) // Slate 900
+private val Surface = Color(0xFF1E293B) // Slate 800
+private val Border  = Color(0xFF334155) // Slate 700
+private val Accent  = Color(0xFF3B82F6) // Blue 500
+private val Gold    = Color(0xFFF59E0B) // Amber 500
+private val Green   = Color(0xFF10B981) // Emerald 500
+private val Red     = Color(0xFFEF4444) // Red 500
+private val Muted   = Color(0xFF94A3B8) // Slate 400
+private val Purple  = Color(0xFF8B5CF6) // Violet 500
 
 @Composable
 fun ChatScreen(vm: EliasViewModel) {
@@ -304,10 +304,10 @@ private fun LevelSelectionBox(onLevelSelected: (String) -> Unit) {
 private fun UserBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Box(Modifier.widthIn(max = 280.dp)
-            .clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
+            .clip(RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp))
             .background(Accent)
-            .padding(14.dp, 12.dp)) {
-            Text(text, color = Color.White, fontSize = 15.sp, lineHeight = 22.sp)
+            .padding(16.dp, 12.dp)) {
+            Text(text, color = Color.White, fontSize = 16.sp, lineHeight = 24.sp)
         }
     }
 }
@@ -320,22 +320,40 @@ private fun EliasBubble(bubble: UiChatBubble, vm: EliasViewModel) {
         "confused"     -> Gold
         else           -> Border
     }
-    Column(Modifier.fillMaxWidth().widthIn(max = 320.dp)) {
-        Box(Modifier.clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
-            .background(Color(0xFF1E2638))
-            .border(1.dp, sentimentColor.copy(alpha = 0.5f), RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
-            .padding(16.dp, 14.dp)) {
-            val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
-            Text(parsedMessage, color = Color(0xFFe8eaf0), fontSize = 15.sp, lineHeight = 22.sp)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.Bottom) {
+        // Elias Avatar
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(Surface)
+                .border(2.dp, sentimentColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🤖", fontSize = 20.sp)
         }
-        if (bubble.vocabulary.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF161922)).padding(12.dp).fillMaxWidth()) {
-                Column {
-                    Text("📚 VOCABULARY", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    bubble.vocabulary.forEach { v ->
-                        Text("• $v", color = Accent, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp))
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f).widthIn(max = 300.dp)) {
+            Box(Modifier.clip(RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
+                .background(Surface)
+                .border(1.dp, sentimentColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
+                .padding(16.dp, 14.dp)) {
+                val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
+                Text(parsedMessage, color = Color(0xFFF1F5F9), fontSize = 16.sp, lineHeight = 24.sp)
+            }
+            if (bubble.vocabulary.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xFF0F172A).copy(alpha=0.5f)).border(1.dp, Border, RoundedCornerShape(16.dp)).padding(12.dp).fillMaxWidth()) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("💡", fontSize = 12.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Vocabulary Highlight", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        bubble.vocabulary.forEach { v ->
+                            Text("• $v", color = Accent, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 4.dp))
+                        }
                     }
                 }
             }

@@ -36,26 +36,38 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
 
-    private val localVad = com.roberto.eliasaitutor.audio.LocalVAD().apply {
-        setListener(object : com.roberto.eliasaitutor.audio.LocalVAD.VADListener {
-            override fun onSpeechDetected() {
-                viewModelScope.launch {
-                    interruptAi()
-                    startListening()
-                }
+    private val bargeInController by lazy {
+        com.roberto.eliasaitutor.audio.BargeInController(
+            audioPlayer = opusAudioPlayer,
+            onStateChange = { state ->
+                // Can update UI state if needed based on BargeInController state
             }
-
-            override fun onSilenceDetected() {
-                // Handled natively by SpeechRecognizer
-            }
-
-            override fun onRmsChanged(rms: Float) {
-                _userVoiceRms.value = rms
-            }
-        })
+        )
     }
+
+    private val localVad = com.roberto.eliasaitutor.audio.LocalVAD(
+        onSpeechStart = {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                bargeInController.onUserBeginsSpeech()
+            }
+        },
+        onSpeechEnd = { finalAudio ->
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                bargeInController.onUserEndsSpeech()
+            }
+        }
+    )
     private val opusAudioPlayer = com.roberto.eliasaitutor.audio.OpusAudioPlayer()
-    private val audioCaptureManager = com.roberto.eliasaitutor.audio.AudioCaptureManager(app, localVad)
+    private val audioCaptureManager = com.roberto.eliasaitutor.audio.AudioCaptureManager(
+        context = app, 
+        vad = localVad, 
+        onAudioReady = {}, 
+        enableNoiseSuppression = true
+    ).apply {
+        onFusedVADUpdate = { rms ->
+            _userVoiceRms.value = rms
+        }
+    }
     private val fallbackPcmPlayer = PcmFloatPlayer()
     private var speechRecognizer: android.speech.SpeechRecognizer? = null
 
@@ -75,39 +87,58 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private var streamingBubbleIndex = -1
 
     private fun initSpeechRecognizer() {
-        speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(getApplication())
-        speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
-            override fun onReadyForSpeech(params: android.os.Bundle?) {}
-            override fun onRmsChanged(rmsdB: Float) {
-                val mappedRms = (rmsdB + 2f).coerceAtLeast(0f) * 200f
-                _userVoiceRms.value = mappedRms
+        try {
+            val context = getApplication<Application>()
+            if (!android.speech.SpeechRecognizer.isRecognitionAvailable(context)) {
+                android.util.Log.e("EliasViewModel", "Reconhecimento de voz não disponível neste dispositivo.")
+                return
             }
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            
-            override fun onBeginningOfSpeech() {
-                interruptAi()
-            }
-
-            override fun onEndOfSpeech() {}
-
-            override fun onError(error: Int) {
-                android.util.Log.e("EliasViewModel", "STT Error: $error")
-                _isRecording.value = false
-                audioCaptureManager.startCapture()
-            }
-
-            override fun onResults(results: android.os.Bundle?) {
-                val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
-                if (!matches.isNullOrEmpty()) {
-                    sendMessage(matches[0])
+            speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+            speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {}
+                override fun onRmsChanged(rmsdB: Float) {
+                    // Ignoramos RMS do SpeechRecognizer, usamos do RNNoise+LocalVAD
                 }
-                _isRecording.value = false
-                audioCaptureManager.startCapture()
-            }
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                
+                override fun onBeginningOfSpeech() {
+                    bargeInController.onUserBeginsSpeech()
+                }
 
-            override fun onPartialResults(partialResults: android.os.Bundle?) {}
-            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-        })
+                override fun onEndOfSpeech() {}
+
+                override fun onError(error: Int) {
+                    android.util.Log.e("EliasViewModel", "STT Error: $error")
+                    _isRecording.value = false
+                    audioCaptureManager.startCapture()
+                }
+
+                override fun onResults(results: android.os.Bundle?) {
+                    val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        val transcript = matches[0]
+                        if (_chatBubbles.value.isEmpty()) {
+                            // If first message, send normally to initialize profile
+                            sendMessage(transcript)
+                        } else {
+                            // Append bubble locally
+                            _chatBubbles.value = _chatBubbles.value + UiChatBubble(transcript, isUser = true)
+                            // Send to TurnTaking engine
+                            SocketClient.sendSpeechEnd(transcript, 1000L, 1.0f)
+                            _isLoading.value = true
+                        }
+                    }
+                    _isRecording.value = false
+                    audioCaptureManager.startCapture()
+                }
+
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+        } catch (e: Exception) {
+            android.util.Log.e("EliasViewModel", "Falha ao inicializar SpeechRecognizer: ${e.message}")
+            speechRecognizer = null
+        }
     }
 
     fun startListening() {
