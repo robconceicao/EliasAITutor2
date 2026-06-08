@@ -311,7 +311,7 @@ io.on('connection', (socket) => {
               }));
 
             const stream = await anthropic.messages.create({
-              model: 'claude-3-5-sonnet-20240620',
+              model: 'claude-sonnet-4-6',
               max_tokens: 250,
               system: SYSTEM_PROMPT.content,
               messages: mensagensParaClaude,
