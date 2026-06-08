@@ -2,7 +2,6 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
-import Cartesia from '@cartesia/cartesia-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { encodePCMToOpus } from './audioEncoder.js';
 import mongoose from 'mongoose';
@@ -49,7 +48,6 @@ const PORT = process.env.PORT || 3000;
 
 // Initialize APIs
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
-const cartesia = new Cartesia({ apiKey: process.env.CARTESIA_API_KEY });
 const googleAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
 // MongoDB Connection (Optional - Graceful fallback to memory if not configured)
@@ -124,7 +122,7 @@ io.on('connection', (socket) => {
   console.log('📱 Dispositivo conectado:', socket.id);
 
   let userIdAtual = socket.id; // Fallback to socket ID if no auth
-  let estadoGeracao = { ativo: false, cartesiaContext: null, textoParcialIA: "" };
+  let estadoGeracao = { ativo: false, elevenSocket: null, textoParcialIA: "" };
   let historicoMemoria = [SYSTEM_PROMPT];
 
   const engine = new TurnTakingEngine(socket.id);
@@ -204,13 +202,9 @@ io.on('connection', (socket) => {
       estadoGeracao.textoParcialIA = "";
     }
 
-    if (estadoGeracao.cartesiaSocket && estadoGeracao.contextId) {
+    if (estadoGeracao.elevenSocket && estadoGeracao.elevenSocket.readyState === WebSocket.OPEN) {
       try {
-        estadoGeracao.cartesiaSocket.continue({
-          context_id: estadoGeracao.contextId,
-          transcript: "",
-          continue: false
-        });
+        estadoGeracao.elevenSocket.close();
       } catch (e) {}
     }
   });
@@ -240,27 +234,29 @@ io.on('connection', (socket) => {
       const ttsAbort = new AbortController();
       registerGeneration(socket.id, llmAbort, ttsAbort);
 
-      // Connect to Cartesia WebSocket
-      const cartesiaSocket = cartesia.tts.websocket({
-        sampleRate: 48000,
-        container: "raw",
-        encoding: "pcm_f32le"
-      });
-      await cartesiaSocket.connect();
+      // Connect to ElevenLabs WebSocket
+      const voiceId = "pNInz6obpgDQGcFmaJcg"; // Adam
+      const elevenUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_flash_v2_5`;
       
-      const contextId = "elias_session_" + socket.id + "_" + Date.now();
-      const cartesiaResponse = cartesiaSocket.send({
-        model_id: "sonic-english",
-        voice: { mode: "id", id: "a0e99841-438c-4a64-b679-ae501e7d6091" },
-        transcript: "",
-        context_id: contextId,
-        continue: true
-      });
-      estadoGeracao.cartesiaResponse = cartesiaResponse;
-      estadoGeracao.cartesiaSocket = cartesiaSocket;
-      estadoGeracao.contextId = contextId;
+      const elevenSocket = new WebSocket(elevenUrl);
       
-      escutarRetornoCartesia(cartesiaResponse, socket, estadoGeracao, seqTracker);
+      // Wait for socket to open
+      await new Promise((resolve, reject) => {
+          elevenSocket.on('open', resolve);
+          elevenSocket.on('error', reject);
+      });
+
+      // Send initial configuration
+      const initMessage = {
+          "text": " ",
+          "voice_settings": { "stability": 0.5, "similarity_boost": 0.8 },
+          "xi_api_key": process.env.ELEVENLABS_API_KEY || ""
+      };
+      elevenSocket.send(JSON.stringify(initMessage));
+
+      estadoGeracao.elevenSocket = elevenSocket;
+      
+      escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker);
 
       // We should check llmAbort.signal.aborted during generation loop
 
@@ -285,14 +281,12 @@ io.on('connection', (socket) => {
         respostaCompletaIA += chunkText;
         estadoGeracao.textoParcialIA += chunkText;
         
-        // Stream only the text inside <RESPONSE> tags to Cartesia and user app
+        // Stream only the text inside <RESPONSE> tags to ElevenLabs and user app
         const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
         if (newResponseText.length > 0) {
-          cartesiaSocket.continue({
-            context_id: contextId,
-            transcript: newResponseText,
-            continue: true
-          });
+          if (elevenSocket.readyState === WebSocket.OPEN) {
+            elevenSocket.send(JSON.stringify({ "text": newResponseText, "try_trigger_generation": true }));
+          }
           socket.emit("texto_chunk", newResponseText);
           sentLength = newLength;
         }
@@ -474,11 +468,9 @@ io.on('connection', (socket) => {
         throw lastError || new Error("Todos os modelos de linguagem falharam na geração");
       }
 
-      cartesiaSocket.continue({
-        context_id: contextId,
-        transcript: "",
-        continue: false
-      });
+      if (elevenSocket.readyState === WebSocket.OPEN) {
+        elevenSocket.send(JSON.stringify({ "text": "" })); // send empty string to close generation
+      }
 
       // Save complete response if not interrupted
       if (estadoGeracao.ativo) {
@@ -501,7 +493,7 @@ io.on('connection', (socket) => {
     } finally {
       clearGeneration(socket.id);
     }
-  });
+  }
 
   socket.on('disconnect', () => {
     console.log('❌ Dispositivo desconectado:', socket.id);
@@ -509,15 +501,15 @@ io.on('connection', (socket) => {
 });
 
 // Function to stream audio chunks directly to Android (encodes PCM to Opus frames)
-function escutarRetornoCartesia(response, socket, estadoGeracao, seqTracker) {
+function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker) {
   socket.emit("estado_ia", "falando");
   
-  response.on("message", (msgStr) => {
+  elevenSocket.on("message", (msgStr) => {
     if (!estadoGeracao.ativo) return;
     try {
       const msg = JSON.parse(msgStr);
-      if (msg.type === "chunk" && msg.data) {
-        const pcmBuffer = Buffer.from(msg.data, 'base64');
+      if (msg.audio) {
+        const pcmBuffer = Buffer.from(msg.audio, 'base64');
         const opusFrames = encodePCMToOpus(pcmBuffer);
         opusFrames.forEach((frame) => {
           socket.emit("audio_opus_frame", {
@@ -527,11 +519,11 @@ function escutarRetornoCartesia(response, socket, estadoGeracao, seqTracker) {
           });
         });
       }
-      if (msg.done) {
+      if (msg.isFinal) {
         socket.emit("estado_ia", "ociosa");
       }
     } catch (e) {
-      console.error("Erro processando retorno Cartesia:", e);
+      console.error("Erro processando retorno ElevenLabs:", e);
     }
   });
 }
