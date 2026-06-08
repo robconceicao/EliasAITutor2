@@ -9,6 +9,14 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 class OpusAudioPlayer {
     companion object {
@@ -25,8 +33,9 @@ class OpusAudioPlayer {
     private val jitterBuffer = JitterBuffer()
     private val plcGenerator = PLCGenerator()
     
-    private var isPlaying = false
-    private var playThread: Thread? = null
+    private val playerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var playJob: Job? = null
+    @Volatile private var isPlaying = false
     
     var audioSessionId: Int = 0
         private set
@@ -107,15 +116,15 @@ class OpusAudioPlayer {
         isPlaying = true
         jitterBuffer.clear()
         plcGenerator.clear()
-        
-        playThread = Thread({ playoutLoop() }, "OpusPlayerThread").apply { start() }
-        Log.d(TAG, "Playout thread iniciada")
+
+        playJob = playerScope.launch { playoutLoop() }
+        Log.d(TAG, "Playout coroutine iniciada")
     }
 
     fun stopPlayout() {
         isPlaying = false
-        playThread?.interrupt()
-        playThread = null
+        playJob?.cancel()
+        playJob = null
         jitterBuffer.clear()
         plcGenerator.clear()
         try {
@@ -131,11 +140,11 @@ class OpusAudioPlayer {
         jitterBuffer.addPacket(data, seq, timestampMs)
     }
 
-    private fun playoutLoop() {
+    private suspend fun playoutLoop() {
         val info = MediaCodec.BufferInfo()
         val tempShortArray = ShortArray(FRAME_SIZE)
-        
-        while (isPlaying) {
+
+        while (isActive && isPlaying) {
             val startTime = System.currentTimeMillis()
             
             // 1. Get next packet from JitterBuffer
@@ -205,11 +214,7 @@ class OpusAudioPlayer {
             val elapsed = System.currentTimeMillis() - startTime
             val sleepTime = 20L - elapsed
             if (sleepTime > 0) {
-                try {
-                    Thread.sleep(sleepTime)
-                } catch (e: InterruptedException) {
-                    break
-                }
+                delay(sleepTime) // coroutine delay: suspensível, não bloqueia thread, sem drift
             }
         }
     }
@@ -236,6 +241,7 @@ class OpusAudioPlayer {
 
     fun release() {
         stopPlayout()
+        playerScope.cancel() // cancela todas as coroutines pendentes
         try {
             decoder?.stop()
             decoder?.release()
