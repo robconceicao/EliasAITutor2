@@ -14,7 +14,7 @@ data class ClaudeContent(val text: String)
 data class ClaudeResponse(val content: List<ClaudeContent>)
 
 data class ClaudeRequest(
-    val model: String = "claude-3-5-sonnet-20240620",
+    val model: String = "claude-sonnet-4-6",
     val max_tokens: Int = 1024,
     val system: String = "Act as an English teacher.",
     val stream: Boolean = false,
