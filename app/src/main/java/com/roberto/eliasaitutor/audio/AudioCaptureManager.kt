@@ -27,13 +27,20 @@ class AudioCaptureManager(
 
     @SuppressLint("MissingPermission")
     fun startCapture() {
-        if (enableNoiseSuppression) rnnoise.initialize()
+        // AudioRecord deve ser criado ANTES de initialize() para que
+        // o audioSessionId real esteja disponível para o NoiseSuppressor.
         audioRecord = AudioRecord(
             MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             sampleRate, AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT, bufferSize
         )
         audioRecord?.startRecording()
+
+        if (enableNoiseSuppression) {
+            val sessionId = audioRecord?.audioSessionId ?: 0
+            rnnoise.initialize(sessionId)
+        }
+
         captureJob = CoroutineScope(Dispatchers.IO).launch {
             val buffer = ShortArray(frameSize)
             while (isActive) {
