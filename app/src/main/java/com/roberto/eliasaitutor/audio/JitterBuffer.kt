@@ -151,6 +151,12 @@ class JitterBuffer {
         targetDelayMs = 60
         playoutStarted = false
         nextExpectedSeq = -1
+        playoutStartSystemTime = 0   // fix: evita cálculo errado de expectedPlayoutTime após barge-in
+        playoutStartPacketSeq = -1   // fix: evita herdar seq de sessão de áudio anterior
+        packetLossCount = 0          // fix: zera estatísticas da sessão anterior
+        latePacketsCount = 0
+        receivedPacketsCount = 0
+        bufferUnderflowCount = 0
     }
 
     fun getJitterMs(): Long = jitter.toLong()
