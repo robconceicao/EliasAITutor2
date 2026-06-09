@@ -2,7 +2,7 @@ name: Build Release APK
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, master, develop, 'claude/**' ]
   workflow_dispatch:
 
 jobs:
