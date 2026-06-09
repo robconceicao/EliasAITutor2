@@ -101,6 +101,4 @@ dependencies {
     // Serialização Kotlin (Para converter as conversas em JSON)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
-    // RNNoise (Noise Suppression)
-    implementation("com.github.wiryls:rnnoise-android:1.0.1")
 }
