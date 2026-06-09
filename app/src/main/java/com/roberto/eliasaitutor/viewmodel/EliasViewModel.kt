@@ -201,7 +201,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             CartesiaClient.connect() // reconnect in background for next call
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    val voiceId = "21m00Tcm4TlvDq8ikWAM" // Rachel
+                    val voiceId = "TxGEqnHWrfWFTfGW9XjX" // Josh (male)
                     val response = ElevenLabsClient.api.textToSpeech(voiceId, TTSRequest(text))
                     val audioBytes = response.bytes()
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
