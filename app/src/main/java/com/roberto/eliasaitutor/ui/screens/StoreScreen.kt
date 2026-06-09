@@ -60,7 +60,7 @@ fun StoreScreen(vm: EliasViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── British Accent ─────────────────────────────────────────────────
@@ -77,7 +77,7 @@ fun StoreScreen(vm: EliasViewModel) {
         )
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── Streak Freeze ──────────────────────────────────────────────────
@@ -95,7 +95,7 @@ fun StoreScreen(vm: EliasViewModel) {
         )
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── Locked Scenarios ───────────────────────────────────────────────
@@ -116,7 +116,7 @@ fun StoreScreen(vm: EliasViewModel) {
                     })
                 Spacer(Modifier.height(8.dp))
             }
-            Divider(color = Border)
+            HorizontalDivider(color = Border)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -136,7 +136,7 @@ fun StoreScreen(vm: EliasViewModel) {
                 Text(action, color = Color(0xFFe8eaf0), fontSize = 13.sp)
                 Text(reward, color = Green, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
-            Divider(color = Border)
+            HorizontalDivider(color = Border)
         }
     }
 }

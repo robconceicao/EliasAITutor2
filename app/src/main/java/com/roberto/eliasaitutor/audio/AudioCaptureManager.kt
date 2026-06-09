@@ -29,16 +29,30 @@ class AudioCaptureManager(
     fun startCapture() {
         // AudioRecord deve ser criado ANTES de initialize() para que
         // o audioSessionId real esteja disponível para o NoiseSuppressor.
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            sampleRate, AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT, bufferSize
-        )
-        audioRecord?.startRecording()
+        try {
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                sampleRate, AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT, bufferSize
+            )
+            
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                audioRecord?.release()
+                audioRecord = null
+                return
+            }
+            
+            audioRecord?.startRecording()
 
-        if (enableNoiseSuppression) {
-            val sessionId = audioRecord?.audioSessionId ?: 0
-            rnnoise.initialize(sessionId)
+            if (enableNoiseSuppression) {
+                val sessionId = audioRecord?.audioSessionId ?: 0
+                rnnoise.initialize(sessionId)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            audioRecord?.release()
+            audioRecord = null
+            return
         }
 
         captureJob = CoroutineScope(Dispatchers.IO).launch {

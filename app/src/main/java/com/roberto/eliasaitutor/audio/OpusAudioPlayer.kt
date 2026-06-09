@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -144,7 +145,7 @@ class OpusAudioPlayer {
         val info = MediaCodec.BufferInfo()
         val tempShortArray = ShortArray(FRAME_SIZE)
 
-        while (isActive && isPlaying) {
+        while (currentCoroutineContext().isActive && isPlaying) {
             val startTime = System.currentTimeMillis()
             
             // 1. Get next packet from JitterBuffer

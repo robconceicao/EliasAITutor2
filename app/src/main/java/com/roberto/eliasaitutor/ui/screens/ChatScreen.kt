@@ -40,15 +40,17 @@ import com.roberto.eliasaitutor.network.SocketClient
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import kotlinx.coroutines.launch
 
-private val Bg      = Color(0xFF0F172A) // Slate 900
-private val Surface = Color(0xFF1E293B) // Slate 800
-private val Border  = Color(0xFF334155) // Slate 700
-private val Accent  = Color(0xFF3B82F6) // Blue 500
-private val Gold    = Color(0xFFF59E0B) // Amber 500
-private val Green   = Color(0xFF10B981) // Emerald 500
-private val Red     = Color(0xFFEF4444) // Red 500
-private val Muted   = Color(0xFF94A3B8) // Slate 400
-private val Purple  = Color(0xFF8B5CF6) // Violet 500
+private val Bg      = Color(0xFFF8FAFC) // Very light blue/gray background
+private val Surface = Color(0xFFFFFFFF) // White cards
+private val Border  = Color(0xFFE2E8F0) // Soft gray borders
+private val Accent  = Color(0xFF3B82F6) // Bright Blue for user/actions
+private val Gold    = Color(0xFFFBBF24) // Warm Amber for gamification/coins
+private val Green   = Color(0xFF10B981) // Emerald for correct/positive
+private val Red     = Color(0xFFEF4444) // Soft Red for errors/frustration
+private val Muted   = Color(0xFF64748B) // Slate 500 for secondary text
+private val Purple  = Color(0xFF8B5CF6) // Violet
+private val TextMain= Color(0xFF1E293B) // Dark text for light theme
+
 
 @Composable
 fun ChatScreen(vm: EliasViewModel) {
@@ -103,7 +105,7 @@ fun ChatScreen(vm: EliasViewModel) {
                     GameConstants.SCENARIOS.forEach { (name, data) ->
                         val locked = profile.level < data.first && name !in profile.unlockedScenarios
                         DropdownMenuItem(
-                            text = { Text("$name ${if (locked) "🔒" else ""}", color = if (locked) Muted else MaterialTheme.colorScheme.onSurface) },
+                            text = { Text("$name ${if (locked) "🔒" else ""}", color = if (locked) Muted else TextMain) },
                             onClick = { vm.selectScenario(name); scenarioExpanded = false },
                         )
                     }
@@ -222,9 +224,9 @@ fun ChatScreen(vm: EliasViewModel) {
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Type in English...", color = Muted, fontSize = 14.sp) },
                 colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = Color(0xFF1E2638), focusedContainerColor = Color(0xFF1E2638),
+                    unfocusedContainerColor = Surface, focusedContainerColor = Surface,
                     unfocusedIndicatorColor = Color.Transparent, focusedIndicatorColor = Color.Transparent,
-                    unfocusedTextColor = Color(0xFFe8eaf0), focusedTextColor = Color(0xFFe8eaf0),
+                    unfocusedTextColor = TextMain, focusedTextColor = TextMain,
                 ),
                 shape = RoundedCornerShape(24.dp), maxLines = 3,
             )
@@ -255,7 +257,8 @@ fun ChatScreen(vm: EliasViewModel) {
                     vm.sendMessage(inputText.trim())
                     inputText = ""
                 }
-            }, enabled = !isLoading) {
+            }, enabled = !isLoading,
+                modifier = Modifier.background(Surface, CircleShape)) {
                 Icon(Icons.Default.Send, contentDescription = "Send", tint = Accent)
             }
         }
@@ -277,7 +280,7 @@ private fun LevelSelectionBox(onLevelSelected: (String) -> Unit) {
         .padding(16.dp)) {
         Column {
             Text("👋 Hey! I'm Elias — your American English tutor.",
-                color = Color(0xFFe8eaf0), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                color = TextMain, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Text("To get started, tell me your current English level:",
                 color = Muted, fontSize = 14.sp)
@@ -324,31 +327,36 @@ private fun EliasBubble(bubble: UiChatBubble, vm: EliasViewModel) {
         // Elias Avatar
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(40.dp)
                 .clip(CircleShape)
                 .background(Surface)
                 .border(2.dp, sentimentColor, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text("🤖", fontSize = 20.sp)
+            Image(
+                painter = androidx.compose.ui.res.painterResource(id = com.roberto.eliasaitutor.R.drawable.avatar_elias),
+                contentDescription = "Elias Avatar",
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f).widthIn(max = 300.dp)) {
             Box(Modifier.clip(RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
                 .background(Surface)
-                .border(1.dp, sentimentColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
+                .border(1.dp, Border, RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
                 .padding(16.dp, 14.dp)) {
                 val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
-                Text(parsedMessage, color = Color(0xFFF1F5F9), fontSize = 16.sp, lineHeight = 24.sp)
+                Text(parsedMessage, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
             }
             if (bubble.vocabulary.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
-                Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xFF0F172A).copy(alpha=0.5f)).border(1.dp, Border, RoundedCornerShape(16.dp)).padding(12.dp).fillMaxWidth()) {
+                Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Accent.copy(alpha=0.05f)).border(1.dp, Accent.copy(alpha=0.2f), RoundedCornerShape(16.dp)).padding(12.dp).fillMaxWidth()) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("💡", fontSize = 12.sp)
                             Spacer(Modifier.width(4.dp))
-                            Text("Vocabulary Highlight", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Vocabulary Highlight", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(6.dp))
                         bubble.vocabulary.forEach { v ->
@@ -426,7 +434,7 @@ private fun QuizPanel(
                     Text("Generate Quiz Question →", color = Accent)
                 }
             } else {
-                Text(quiz.question, color = Color(0xFFe8eaf0), fontSize = 14.sp,
+                Text(quiz.question, color = TextMain, fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 6.dp))
                 val letters = listOf("A", "B", "C", "D")
                 quiz.options.forEachIndexed { i, opt ->
@@ -443,7 +451,7 @@ private fun QuizPanel(
                         verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = chosen == i, onClick = { if (!answered) onChoose(i) },
                             enabled = !answered, colors = RadioButtonDefaults.colors(selectedColor = Accent))
-                        Text("${letters[i]}. $opt", color = Color(0xFFe8eaf0), fontSize = 13.sp)
+                        Text("${letters[i]}. $opt", color = TextMain, fontSize = 13.sp)
                     }
                 }
                 if (!answered) {

@@ -1,0 +1,17 @@
+{
+  "ignore": {
+    "customPatterns": [
+      "jdk17/**",
+      "venv/**",
+      "node_modules/**",
+      ".git/**",
+      "android/.gradle/**",
+      "build/**",
+      "dist/**",
+      "public/**",
+      "docs/**",
+      "*.lock",
+      "*.xml"
+    ]
+  }
+}

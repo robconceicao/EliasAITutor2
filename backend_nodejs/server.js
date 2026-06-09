@@ -214,6 +214,39 @@ io.on('connection', (socket) => {
       await handleAIResponse(textoUsuario, modelOverride);
   });
 
+  // 4. Shadowing / Fallback TTS via ElevenLabs
+  socket.on('shadow_speak', async (texto) => {
+    try {
+      console.log(`🎙️ Shadow speak requisitado: ${texto}`);
+      const voiceId = "pNInz6obpgDQGcFmaJcg"; // Adam
+      const elevenUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_flash_v2_5`;
+      const elevenSocket = new WebSocket(elevenUrl);
+      
+      await new Promise((resolve, reject) => {
+          elevenSocket.on('open', resolve);
+          elevenSocket.on('error', reject);
+      });
+
+      const initMessage = {
+          "text": " ",
+          "voice_settings": { "stability": 0.5, "similarity_boost": 0.8 },
+          "xi_api_key": process.env.ELEVENLABS_API_KEY || ""
+      };
+      elevenSocket.send(JSON.stringify(initMessage));
+
+      const pseudoEstado = { ativo: true };
+      const seqTracker = { val: 0 };
+      escutarRetornoElevenLabs(elevenSocket, socket, pseudoEstado, seqTracker);
+
+      if (elevenSocket.readyState === WebSocket.OPEN) {
+        elevenSocket.send(JSON.stringify({ "text": texto, "try_trigger_generation": true }));
+        elevenSocket.send(JSON.stringify({ "text": "" }));
+      }
+    } catch (e) {
+      console.error("Erro no shadow_speak:", e);
+    }
+  });
+
   async function handleAIResponse(textoUsuario, modelOverride) {
     console.log(`💬 Usuário disse: ${textoUsuario} | Modelo sugerido: ${modelOverride || 'nenhum'}`);
     estadoGeracao.ativo = true;

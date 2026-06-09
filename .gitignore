@@ -29,4 +29,5 @@ app/build/
 google-services.json
 jks/
 *.keystore
+*.jks
 !debug.keystore

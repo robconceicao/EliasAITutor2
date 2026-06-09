@@ -72,7 +72,7 @@ fun ProgressScreen(vm: EliasViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── XP progress bar toward next level ─────────────────────────────
@@ -95,7 +95,7 @@ fun ProgressScreen(vm: EliasViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── Soft Skills Radar ──────────────────────────────────────────────
@@ -131,7 +131,7 @@ fun ProgressScreen(vm: EliasViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── Sentiment History ──────────────────────────────────────────────
@@ -147,7 +147,7 @@ fun ProgressScreen(vm: EliasViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── Level Roadmap ──────────────────────────────────────────────────
@@ -172,7 +172,7 @@ fun ProgressScreen(vm: EliasViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── Grammar Mistake Log ────────────────────────────────────────────
@@ -194,7 +194,7 @@ fun ProgressScreen(vm: EliasViewModel) {
         }
         
         Spacer(Modifier.height(16.dp))
-        Divider(color = Border)
+        HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
         // ── PDF Report ─────────────────────────────────────────────────────

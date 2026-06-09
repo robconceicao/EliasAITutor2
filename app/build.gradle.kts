@@ -15,6 +15,15 @@ if (localPropertiesFile.exists()) {
 }
 
 android {
+    signingConfigs {
+        create("release") {
+            val keystoreFile = rootProject.file(localProperties.getProperty("KEYSTORE_FILE", "elias-release-key.jks"))
+            storeFile = keystoreFile
+            storePassword = localProperties.getProperty("KEYSTORE_PASSWORD", "")
+            keyAlias = localProperties.getProperty("KEY_ALIAS", "elias-key")
+            keyPassword = localProperties.getProperty("KEY_PASSWORD", "")
+        }
+    }
     namespace = "com.roberto.eliasaitutor"
     compileSdk = 35
 
@@ -42,7 +51,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -53,8 +62,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
     buildFeatures {
         compose = true
@@ -102,5 +111,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // RNNoise (Noise Suppression)
-    implementation("com.github.wiryls:rnnoise-android:1.0.1")
+//    implementation("com.github.wiryls:rnnoise-android:1.0.1")
 }

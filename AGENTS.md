@@ -1,10 +1,9 @@
 # Projeto: Elias AI Tutor
 
 ## Stack
-- Frontend: Flutter
-- Backend: FastAPI Python
-- PostgreSQL
-- Docker
+- Frontend: Android Nativo (Kotlin & Jetpack Compose)
+- Backend: Node.js (Express & Socket.io)
+- PostgreSQL (via Supabase)
 
 ---
 
@@ -22,25 +21,22 @@ Aplicativo tutor inteligente com IA focado em:
 ## Regras obrigatórias
 
 - Nunca alterar arquivos .env
-- Nunca fazer deploy automaticamente
+- Nunca fazer deploy automaticamente (exceto via commit aprovado no Github)
 - Nunca remover arquivos sem confirmação
 - Sempre explicar alterações importantes
 - Sempre revisar imports
 - Sempre criar código modular
 - Sempre priorizar legibilidade
 - Sempre validar erros
-- Sempre manter compatibilidade Flutter
-- Nunca quebrar rotas existentes
+- Nunca quebrar rotas e eventos de socket existentes
 
 ---
 
 ## Estrutura do Projeto
 
-- /frontend = Flutter App
-- /backend = APIs FastAPI
-- /tests = testes automatizados
-- /services = lógica de negócio
-- /routers = endpoints FastAPI
+- /app = Frontend Android App
+- /backend_nodejs = Servidor Node.js
+- /build = artefatos de compilação
 
 ---
 

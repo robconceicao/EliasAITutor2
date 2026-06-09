@@ -340,6 +340,12 @@ object SocketClient {
         }
     }
 
+    fun sendShadowSpeak(texto: String) {
+        if (_connectionState.value == ConnectionState.CONNECTED) {
+            socket?.emit("shadow_speak", texto)
+        }
+    }
+
     fun sendBargeIn() {
         if (_connectionState.value == ConnectionState.CONNECTED) {
             socket?.emit("barge_in", JSONObject().apply {

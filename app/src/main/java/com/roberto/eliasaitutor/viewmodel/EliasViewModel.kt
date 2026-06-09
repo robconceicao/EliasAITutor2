@@ -193,8 +193,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
 
     fun speakText(text: String, onCompletion: () -> Unit = {}) {
-        // Fallback for immersion / shadowing
-        com.roberto.eliasaitutor.network.CartesiaClient.sendChunk(text, true, java.util.UUID.randomUUID().toString())
+        // Fallback for immersion / shadowing now uses backend ElevenLabs unification
+        com.roberto.eliasaitutor.network.SocketClient.sendShadowSpeak(text)
         onCompletion()
     }
 
@@ -229,9 +229,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     val flashOffer: StateFlow<FlashOffer?> = _flashOffer
 
     // ── Streak ─────────────────────────────────────────────────────────────────
-    init {
         SocketClient.init(app)
-        CartesiaClient.connect()
         SocketClient.connect()
 
         viewModelScope.launch {
@@ -250,12 +248,6 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                         SocketClient.iniciarSessao(p.userId)
                     }
                 }
-            }
-        }
-
-        viewModelScope.launch {
-            CartesiaClient.audioFlow.collect { pcmData ->
-                fallbackPcmPlayer.playPcmData(pcmData)
             }
         }
 
@@ -871,11 +863,6 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
         try {
             SocketClient.disconnect()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        try {
-            CartesiaClient.disconnect()
         } catch (e: Exception) {
             e.printStackTrace()
         }
