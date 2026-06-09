@@ -193,8 +193,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
 
     fun speakText(text: String, onCompletion: () -> Unit = {}) {
-        // Fallback for immersion / shadowing
-        com.roberto.eliasaitutor.network.CartesiaClient.sendChunk(text, true, java.util.UUID.randomUUID().toString())
+        if (!CartesiaClient.isConnected) CartesiaClient.connect()
+        CartesiaClient.sendChunk(text, true, java.util.UUID.randomUUID().toString())
         onCompletion()
     }
 
@@ -476,15 +476,28 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             userText
         }
 
+        if (SocketClient.connectionState.value != ConnectionState.CONNECTED) {
+            _toastMessage.value = "⚠️ Connecting to server… try again in a moment."
+            return
+        }
+
         if (!isFirstMessage) {
             _chatBubbles.value = _chatBubbles.value + UiChatBubble(userText, isUser = true)
         }
-        
+
         SocketClient.enviarMensagem(enriched)
-        
         _isLoading.value = true
         isInterrupted = false
         streamingBubbleIndex = -1
+
+        // Safety timeout — resets loading if the server never responds
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(30_000)
+            if (_isLoading.value) {
+                _isLoading.value = false
+                _toastMessage.value = "⚠️ Server timeout. Please try again."
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
