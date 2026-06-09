@@ -69,6 +69,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     private val fallbackPcmPlayer = PcmFloatPlayer()
+    private val audioHelper = com.roberto.eliasaitutor.audio.AudioHelper(app)
     private var speechRecognizer: android.speech.SpeechRecognizer? = null
 
     private val _userVoiceRms = MutableStateFlow(0f)
@@ -193,9 +194,27 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
 
     fun speakText(text: String, onCompletion: () -> Unit = {}) {
-        if (!CartesiaClient.isConnected) CartesiaClient.connect()
-        CartesiaClient.sendChunk(text, true, java.util.UUID.randomUUID().toString())
-        onCompletion()
+        if (CartesiaClient.isConnected) {
+            CartesiaClient.sendChunk(text, true, java.util.UUID.randomUUID().toString())
+            onCompletion()
+        } else {
+            CartesiaClient.connect() // reconnect in background for next call
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val voiceId = "21m00Tcm4TlvDq8ikWAM" // Rachel
+                    val response = ElevenLabsClient.api.textToSpeech(voiceId, TTSRequest(text))
+                    val audioBytes = response.bytes()
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        audioHelper.playAudio(audioBytes, onCompletion)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onCompletion()
+                    }
+                }
+            }
+        }
     }
 
     fun submitShadowingAudio(audioFile: java.io.File, phrase: String = "") {
@@ -869,6 +888,11 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
         try {
             fallbackPcmPlayer.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            audioHelper.stopPlaying()
         } catch (e: Exception) {
             e.printStackTrace()
         }
