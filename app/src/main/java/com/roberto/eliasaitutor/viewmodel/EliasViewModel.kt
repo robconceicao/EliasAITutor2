@@ -229,6 +229,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     val flashOffer: StateFlow<FlashOffer?> = _flashOffer
 
     // ── Streak ─────────────────────────────────────────────────────────────────
+    init {
         SocketClient.init(app)
         SocketClient.connect()
 

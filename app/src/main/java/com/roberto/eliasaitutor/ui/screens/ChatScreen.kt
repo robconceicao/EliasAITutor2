@@ -1,6 +1,7 @@
 package com.roberto.eliasaitutor.ui.screens
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,7 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +54,7 @@ private val Purple  = Color(0xFF8B5CF6) // Violet
 private val TextMain= Color(0xFF1E293B) // Dark text for light theme
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(vm: EliasViewModel) {
     val profile       by vm.profile.collectAsState()
@@ -75,6 +78,7 @@ fun ChatScreen(vm: EliasViewModel) {
     val listState     = rememberLazyListState()
     val scope         = rememberCoroutineScope()
     val context       = androidx.compose.ui.platform.LocalContext.current
+    val sheetState    = rememberModalBottomSheetState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -198,26 +202,42 @@ fun ChatScreen(vm: EliasViewModel) {
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Quiz panel ─────────────────────────────────────────────────────
+        // ── Modal Bottom Sheet for Quiz ────────────────────────────────────
         if (showQuiz) {
-            QuizPanel(
-                quiz         = quiz,
-                answered     = quizAnswered,
-                chosen       = quizChosen,
-                result       = quizResult,
-                onGenerate   = { vm.generateQuiz(); quizChosen = -1; quizResult = null },
-                onChoose     = { quizChosen = it },
-                onSubmit     = {
-                    if (quizChosen >= 0) {
-                        quizResult = vm.submitQuizAnswer(quizChosen)
-                    }
-                },
-                onClose      = { showQuiz = false },
-            )
-            Spacer(Modifier.height(8.dp))
+            ModalBottomSheet(
+                onDismissRequest = { showQuiz = false },
+                sheetState = sheetState,
+                containerColor = Surface
+            ) {
+                QuizPanel(
+                    quiz         = quiz,
+                    answered     = quizAnswered,
+                    chosen       = quizChosen,
+                    result       = quizResult,
+                    onGenerate   = { vm.generateQuiz(); quizChosen = -1; quizResult = null },
+                    onChoose     = { quizChosen = it },
+                    onSubmit     = {
+                        if (quizChosen >= 0) {
+                            quizResult = vm.submitQuizAnswer(quizChosen)
+                        }
+                    },
+                    onClose      = { showQuiz = false },
+                )
+                Spacer(Modifier.height(16.dp))
+            }
         }
 
         // ── Input row ──────────────────────────────────────────────────────
+        val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "pulse")
+        val pulseAlpha by infiniteTransition.animateFloat(
+            initialValue = 0.2f, targetValue = 0.6f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                animation = androidx.compose.animation.core.tween(800),
+                repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+            ),
+            label = "pulseAlpha"
+        )
+
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextField(
                 value = inputText, onValueChange = { inputText = it },
@@ -244,7 +264,9 @@ fun ChatScreen(vm: EliasViewModel) {
                     permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 }
             }, enabled = !isLoading,
-               modifier = Modifier.background(if (isRecording) Red.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+               modifier = Modifier
+                   .size(56.dp) // Make it slightly larger
+                   .background(if (isRecording) Red.copy(alpha = pulseAlpha) else Accent.copy(alpha = 0.1f), CircleShape)
             ) {
                 Icon(
                     if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
@@ -259,7 +281,7 @@ fun ChatScreen(vm: EliasViewModel) {
                 }
             }, enabled = !isLoading,
                 modifier = Modifier.background(Surface, CircleShape)) {
-                Icon(Icons.Default.Send, contentDescription = "Send", tint = Accent)
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Accent)
             }
         }
 
@@ -346,8 +368,23 @@ private fun EliasBubble(bubble: UiChatBubble, vm: EliasViewModel) {
                 .background(Surface)
                 .border(1.dp, Border, RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
                 .padding(16.dp, 14.dp)) {
-                val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
-                Text(parsedMessage, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
+                Column {
+                    val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
+                    Text(parsedMessage, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        FilledTonalButton(
+                            onClick = { vm.speakText(bubble.message) },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Accent.copy(alpha = 0.1f), contentColor = Accent),
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = "Listen", modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Listen", fontSize = 12.sp)
+                        }
+                    }
+                }
             }
             if (bubble.vocabulary.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))

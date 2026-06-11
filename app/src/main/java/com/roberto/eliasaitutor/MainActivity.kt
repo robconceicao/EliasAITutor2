@@ -10,11 +10,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.*
@@ -58,9 +58,9 @@ fun EliasApp(vm: EliasViewModel) {
 
     val tabs = listOf(
         TabItem("Immersion", Icons.Default.Hearing),
-        TabItem("Chat", Icons.Default.Chat),
+        TabItem("Chat", Icons.AutoMirrored.Filled.Chat),
         TabItem("Echo Mode", Icons.Default.GraphicEq),
-        TabItem("Progress", Icons.Default.ShowChart),
+        TabItem("Progress", Icons.AutoMirrored.Filled.ShowChart),
         TabItem("Store", Icons.Default.Store)
     )
 

@@ -265,7 +265,7 @@ fun ShadowingScreen(vm: EliasViewModel) {
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(
-                            progress = score!! / 100f,
+                            progress = { score!! / 100f },
                             color = scoreColor,
                             trackColor = scoreColor.copy(alpha = 0.1f),
                             strokeWidth = 6.dp,

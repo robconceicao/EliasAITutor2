@@ -78,7 +78,7 @@ fun ImmersionScreen(vm: EliasViewModel) {
         }
 
         LinearProgressIndicator(
-            progress = if (immersionData.isEmpty()) 0f else step.toFloat() / immersionData.size,
+            progress = { if (immersionData.isEmpty()) 0f else step.toFloat() / immersionData.size },
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp).clip(RoundedCornerShape(4.dp)),
             color = Accent,
             trackColor = Border
