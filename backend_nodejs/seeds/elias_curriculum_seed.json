@@ -1,0 +1,2319 @@
+{
+  "version": 1,
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Fundação",
+      "levels": "A1→A2",
+      "weeks": "1-6"
+    },
+    {
+      "phase": 2,
+      "name": "Desenvolvimento",
+      "levels": "A2→B1",
+      "weeks": "7-13"
+    },
+    {
+      "phase": 3,
+      "name": "Aprofundamento",
+      "levels": "B1→B2",
+      "weeks": "14-20"
+    },
+    {
+      "phase": 4,
+      "name": "Refinamento",
+      "levels": "B2→C1",
+      "weeks": "21-26"
+    }
+  ],
+  "weeks": [
+    {
+      "week": 1,
+      "phase": 1,
+      "level": "A1",
+      "title": "Alfabeto, Pronúncia e Verbo TO BE",
+      "grammar": "Pronomes pessoais; verbo TO BE (presente)",
+      "lexis": "Saudações, apresentações, países e nacionalidades",
+      "persona_city": "New York",
+      "conversation_prompt": "You are a friendly American native speaker from New York. Let's have a 30-minute conversation about \"Saudações, apresentações, países e nacionalidades\". Use only vocabulary appropriate for level A1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about saudações, apresentações, países e nacionalidades.",
+      "objectives": [
+        "Reconhecer e pronunciar as 26 letras do alfabeto americano.",
+        "Usar os sete pronomes pessoais (I, you, he, she, it, we, they) sem hesitar.",
+        "Conjugar o verbo TO BE no presente (am, is, are) em frases afirmativas, negativas e interrogativas.",
+        "Apresentar-se dizendo nome, idade, nacionalidade e profissão."
+      ],
+      "chunks": [
+        {
+          "en": "Nice to meet you.",
+          "ipa": "/naɪs tə ˈmiːt juː/",
+          "pt": "Prazer em conhecê-lo.",
+          "use": "Ao ser apresentado a alguém pela primeira vez."
+        },
+        {
+          "en": "How are you doing?",
+          "ipa": "/haʊ ɑːr juː ˈduːɪŋ/",
+          "pt": "Como você está?",
+          "use": "Saudação informal comum nos EUA."
+        },
+        {
+          "en": "I'm doing great.",
+          "ipa": "/aɪm ˈduːɪŋ ɡreɪt/",
+          "pt": "Estou muito bem.",
+          "use": "Resposta positiva a uma saudação."
+        },
+        {
+          "en": "Where are you from?",
+          "ipa": "/wɛr ɑːr juː frʌm/",
+          "pt": "De onde você é?",
+          "use": "Para perguntar a origem de alguém."
+        },
+        {
+          "en": "I'm from Brazil.",
+          "ipa": "/aɪm frʌm brəˈzɪl/",
+          "pt": "Eu sou do Brasil.",
+          "use": "Para dizer sua nacionalidade/origem."
+        },
+        {
+          "en": "What's your name?",
+          "ipa": "/wʌts jɔːr neɪm/",
+          "pt": "Qual é o seu nome?",
+          "use": "Para perguntar o nome de alguém."
+        },
+        {
+          "en": "My name is...",
+          "ipa": "/maɪ neɪm ɪz/",
+          "pt": "Meu nome é...",
+          "use": "Para dizer seu nome."
+        },
+        {
+          "en": "See you later.",
+          "ipa": "/siː juː ˈleɪtər/",
+          "pt": "Até mais tarde.",
+          "use": "Despedida informal."
+        },
+        {
+          "en": "Have a nice day.",
+          "ipa": "/hæv ə naɪs deɪ/",
+          "pt": "Tenha um bom dia.",
+          "use": "Despedida cordial."
+        },
+        {
+          "en": "Take care.",
+          "ipa": "/teɪk kɛr/",
+          "pt": "Se cuide.",
+          "use": "Despedida calorosa."
+        }
+      ],
+      "anki_sentences": [
+        "I am a developer from Santos. (Eu sou um desenvolvedor de Santos.)",
+        "What's your name? My name is Roberto. (Qual é o seu nome? Meu nome é Roberto.)",
+        "She is not at home right now. (Ela não está em casa agora.)",
+        "Are you from Brazil? Yes, I am. (Você é do Brasil? Sim, sou.)",
+        "Nice to meet you. How are you doing? (Prazer em conhecê-lo. Como você está?)",
+        "It is a beautiful day today. (Está um dia bonito hoje.)",
+        "We are good friends. (Nós somos bons amigos.)",
+        "They aren't ready yet. (Eles ainda não estão prontos.)"
+      ]
+    },
+    {
+      "week": 2,
+      "phase": 1,
+      "level": "A1",
+      "title": "Números, Horas e Informações Pessoais",
+      "grammar": "Artigos (a/an/the); plural dos substantivos",
+      "lexis": "Números 0-100, horas, dias, meses, dados pessoais",
+      "persona_city": "Boston",
+      "conversation_prompt": "You are a friendly American native speaker from Boston. Let's have a 30-minute conversation about \"Números 0-100, horas, dias, meses, dados pessoais\". Use only vocabulary appropriate for level A1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about números 0-100, horas, dias, meses, dados pessoais.",
+      "objectives": [
+        "Contar de 0 a 100 e dizer números de telefone, idades e preços.",
+        "Dizer e perguntar as horas (formato americano com a.m./p.m.).",
+        "Usar artigos a, an e the corretamente.",
+        "Formar o plural regular dos substantivos."
+      ],
+      "chunks": [
+        {
+          "en": "What time is it?",
+          "ipa": "/wʌt taɪm ɪz ɪt/",
+          "pt": "Que horas são?",
+          "use": "Para perguntar as horas."
+        },
+        {
+          "en": "It's half past three.",
+          "ipa": "/ɪts hæf pæst θriː/",
+          "pt": "São três e meia.",
+          "use": "Para dizer as horas."
+        },
+        {
+          "en": "How old are you?",
+          "ipa": "/haʊ oʊld ɑːr juː/",
+          "pt": "Quantos anos você tem?",
+          "use": "Para perguntar a idade."
+        },
+        {
+          "en": "I'm twenty-eight years old.",
+          "ipa": "/aɪm ˈtwɛnti eɪt jɪrz oʊld/",
+          "pt": "Tenho vinte e oito anos.",
+          "use": "Para dizer a idade."
+        },
+        {
+          "en": "Can I have a coffee, please?",
+          "ipa": "/kən aɪ hæv ə ˈkɔːfi pliːz/",
+          "pt": "Pode me dar um café, por favor?",
+          "use": "Para pedir algo educadamente."
+        },
+        {
+          "en": "How much is it?",
+          "ipa": "/haʊ mʌtʃ ɪz ɪt/",
+          "pt": "Quanto custa?",
+          "use": "Para perguntar o preço."
+        },
+        {
+          "en": "What's your phone number?",
+          "ipa": "/wʌts jɔːr foʊn ˈnʌmbər/",
+          "pt": "Qual é o seu telefone?",
+          "use": "Para pedir um número."
+        },
+        {
+          "en": "Just a moment, please.",
+          "ipa": "/dʒʌst ə ˈmoʊmənt pliːz/",
+          "pt": "Só um momento, por favor.",
+          "use": "Para pedir que alguém espere."
+        },
+        {
+          "en": "It's around noon.",
+          "ipa": "/ɪts əˈraʊnd nuːn/",
+          "pt": "É por volta do meio-dia.",
+          "use": "Para dar uma hora aproximada."
+        },
+        {
+          "en": "See you at eight.",
+          "ipa": "/siː juː æt eɪt/",
+          "pt": "Te vejo às oito.",
+          "use": "Para combinar um horário."
+        }
+      ],
+      "anki_sentences": [
+        "What time is it? It's a quarter past nine. (Que horas são? São nove e quinze.)",
+        "How old are you? I'm twenty-eight years old. (Quantos anos você tem? Tenho 28.)",
+        "Can I have a coffee, please? (Pode me dar um café, por favor?)",
+        "There are seven days in a week. (Há sete dias em uma semana.)",
+        "My phone number is nine eight seven six. (Meu telefone é nove oito sete seis.)",
+        "I work eight hours a day. (Eu trabalho oito horas por dia.)",
+        "The meeting is at half past ten. (A reunião é às dez e meia.)",
+        "I need an umbrella because it's raining. (Preciso de um guarda-chuva porque está chovendo.)"
+      ]
+    },
+    {
+      "week": 3,
+      "phase": 1,
+      "level": "A1",
+      "title": "Presente Simples e Rotina Diária",
+      "grammar": "Present Simple (afirmativo); advérbios de frequência",
+      "lexis": "Rotina, atividades diárias, verbos do dia a dia",
+      "persona_city": "Chicago",
+      "conversation_prompt": "You are a friendly American native speaker from Chicago. Let's have a 30-minute conversation about \"Rotina, atividades diárias, verbos do dia a dia\". Use only vocabulary appropriate for level A1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about rotina, atividades diárias, verbos do dia a dia.",
+      "objectives": [
+        "Conjugar o Present Simple afirmativo, com atenção ao -s da terceira pessoa.",
+        "Descrever sua rotina diária usando verbos do cotidiano.",
+        "Posicionar corretamente os advérbios de frequência.",
+        "Falar sobre hábitos e horários de forma natural."
+      ],
+      "chunks": [
+        {
+          "en": "I usually wake up early.",
+          "ipa": "/aɪ ˈjuːʒuəli weɪk ʌp ˈɜːrli/",
+          "pt": "Eu geralmente acordo cedo.",
+          "use": "Para falar de hábitos matinais."
+        },
+        {
+          "en": "What do you do for a living?",
+          "ipa": "/wʌt də juː duː fər ə ˈlɪvɪŋ/",
+          "pt": "O que você faz da vida?",
+          "use": "Para perguntar a profissão."
+        },
+        {
+          "en": "I work from nine to five.",
+          "ipa": "/aɪ wɜːrk frʌm naɪn tə faɪv/",
+          "pt": "Trabalho das nove às cinco.",
+          "use": "Para descrever horário de trabalho."
+        },
+        {
+          "en": "It depends on the day.",
+          "ipa": "/ɪt dɪˈpɛndz ɑːn ðə deɪ/",
+          "pt": "Depende do dia.",
+          "use": "Resposta natural sobre rotina variável."
+        },
+        {
+          "en": "On weekdays I'm pretty busy.",
+          "ipa": "/ɑːn ˈwiːkdeɪz aɪm ˈprɪti ˈbɪzi/",
+          "pt": "Nos dias de semana fico bem ocupado.",
+          "use": "Para falar da agenda."
+        },
+        {
+          "en": "I have a lot on my plate.",
+          "ipa": "/aɪ hæv ə lɑːt ɑːn maɪ pleɪt/",
+          "pt": "Estou com muita coisa para fazer.",
+          "use": "Expressão idiomática para estar atarefado."
+        },
+        {
+          "en": "I go to bed around midnight.",
+          "ipa": "/aɪ ɡoʊ tə bɛd əˈraʊnd ˈmɪdnaɪt/",
+          "pt": "Vou dormir por volta da meia-noite.",
+          "use": "Para falar do fim do dia."
+        },
+        {
+          "en": "Every now and then.",
+          "ipa": "/ˈɛvri naʊ ənd ðɛn/",
+          "pt": "De vez em quando.",
+          "use": "Alternativa natural para sometimes."
+        },
+        {
+          "en": "First thing in the morning.",
+          "ipa": "/fɜːrst θɪŋ ɪn ðə ˈmɔːrnɪŋ/",
+          "pt": "Logo de manhã cedo.",
+          "use": "Para indicar a primeira coisa do dia."
+        },
+        {
+          "en": "I'm a morning person.",
+          "ipa": "/aɪm ə ˈmɔːrnɪŋ ˈpɜːrsn̩/",
+          "pt": "Eu rendo melhor de manhã.",
+          "use": "Para descrever seu perfil de horário."
+        }
+      ],
+      "anki_sentences": [
+        "I usually wake up at six and have breakfast. (Geralmente acordo às seis e tomo café.)",
+        "She works from home three days a week. (Ela trabalha de casa três dias por semana.)",
+        "What do you do for a living? (O que você faz da vida?)",
+        "He never goes to bed before midnight. (Ele nunca vai dormir antes da meia-noite.)",
+        "On weekdays I'm pretty busy. (Nos dias de semana fico bem ocupado.)",
+        "We sometimes have dinner together. (Às vezes jantamos juntos.)",
+        "The bus arrives at half past seven. (O ônibus chega às sete e meia.)",
+        "I'm a morning person, so I study early. (Eu rendo de manhã, então estudo cedo.)"
+      ]
+    },
+    {
+      "week": 4,
+      "phase": 1,
+      "level": "A1",
+      "title": "Presente Simples (Negativa e Perguntas) e Família",
+      "grammar": "Present Simple (negativo e interrogativo); possessivos",
+      "lexis": "Família, relações, adjetivos de descrição pessoal",
+      "persona_city": "Los Angeles",
+      "conversation_prompt": "You are a friendly American native speaker from Los Angeles. Let's have a 30-minute conversation about \"Família, relações, adjetivos de descrição pessoal\". Use only vocabulary appropriate for level A1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about família, relações, adjetivos de descrição pessoal.",
+      "objectives": [
+        "Formar perguntas e negativas no Present Simple com do/does.",
+        "Usar adjetivos e pronomes possessivos.",
+        "Descrever sua família e relações pessoais.",
+        "Usar o genitivo saxão ('s) para indicar posse."
+      ],
+      "chunks": [
+        {
+          "en": "Do you have any siblings?",
+          "ipa": "/də juː hæv ˈɛni ˈsɪblɪŋz/",
+          "pt": "Você tem irmãos?",
+          "use": "Pergunta natural sobre família."
+        },
+        {
+          "en": "I take after my dad.",
+          "ipa": "/aɪ teɪk ˈæftər maɪ dæd/",
+          "pt": "Eu puxei ao meu pai.",
+          "use": "Para falar de semelhança familiar."
+        },
+        {
+          "en": "We're a close-knit family.",
+          "ipa": "/wɪr ə ˈkloʊs nɪt ˈfæməli/",
+          "pt": "Somos uma família unida.",
+          "use": "Para descrever a relação familiar."
+        },
+        {
+          "en": "She's the eldest of three.",
+          "ipa": "/ʃiːz ði ˈɛldəst əv θriː/",
+          "pt": "Ela é a mais velha de três.",
+          "use": "Para situar alguém entre irmãos."
+        },
+        {
+          "en": "He looks just like his mother.",
+          "ipa": "/hi lʊks dʒʌst laɪk hɪz ˈmʌðər/",
+          "pt": "Ele é a cara da mãe.",
+          "use": "Para falar de aparência."
+        },
+        {
+          "en": "My family means everything to me.",
+          "ipa": "/maɪ ˈfæməli miːnz ˈɛvriθɪŋ tə miː/",
+          "pt": "Minha família é tudo para mim.",
+          "use": "Para expressar valor afetivo."
+        },
+        {
+          "en": "What does she do?",
+          "ipa": "/wʌt dʌz ʃiː duː/",
+          "pt": "O que ela faz?",
+          "use": "Para perguntar a profissão de alguém."
+        },
+        {
+          "en": "Not that I know of.",
+          "ipa": "/nɑːt ðæt aɪ noʊ ʌv/",
+          "pt": "Que eu saiba, não.",
+          "use": "Resposta natural de incerteza."
+        },
+        {
+          "en": "We get along really well.",
+          "ipa": "/wiː ɡɛt əˈlɔːŋ ˈrɪli wɛl/",
+          "pt": "A gente se dá muito bem.",
+          "use": "Para descrever um bom relacionamento."
+        },
+        {
+          "en": "It runs in the family.",
+          "ipa": "/ɪt rʌnz ɪn ðə ˈfæməli/",
+          "pt": "É de família.",
+          "use": "Para falar de traços herdados."
+        }
+      ],
+      "anki_sentences": [
+        "Do you have any siblings? Yes, I have one brother. (Você tem irmãos? Sim, tenho um irmão.)",
+        "She doesn't work on weekends. (Ela não trabalha nos fins de semana.)",
+        "Does he live in Santos? No, he doesn't. (Ele mora em Santos? Não.)",
+        "This is my sister's house. (Esta é a casa da minha irmã.)",
+        "We get along really well. (A gente se dá muito bem.)",
+        "What does your father do for a living? (O que seu pai faz da vida?)",
+        "Their children go to the same school. (Os filhos deles vão à mesma escola.)",
+        "I take after my mom. (Eu puxei à minha mãe.)"
+      ]
+    },
+    {
+      "week": 5,
+      "phase": 1,
+      "level": "A2",
+      "title": "There is / There are; Casa e Lugares",
+      "grammar": "There is/are; preposições de lugar; some/any",
+      "lexis": "Casa, cômodos, móveis, lugares na cidade",
+      "persona_city": "Seattle",
+      "conversation_prompt": "You are a friendly American native speaker from Seattle. Let's have a 30-minute conversation about \"Casa, cômodos, móveis, lugares na cidade\". Use only vocabulary appropriate for level A2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about casa, cômodos, móveis, lugares na cidade.",
+      "objectives": [
+        "Usar there is e there are para descrever ambientes.",
+        "Empregar preposições de lugar (in, on, at, under, behind, between).",
+        "Usar some e any com substantivos contáveis e incontáveis.",
+        "Descrever sua casa e lugares da cidade."
+      ],
+      "chunks": [
+        {
+          "en": "Is there anything I can do?",
+          "ipa": "/ɪz ðɛr ˈɛniθɪŋ aɪ kən duː/",
+          "pt": "Há algo que eu possa fazer?",
+          "use": "Para se oferecer para ajudar."
+        },
+        {
+          "en": "It's just around the corner.",
+          "ipa": "/ɪts dʒʌst əˈraʊnd ðə ˈkɔːrnər/",
+          "pt": "É logo ali na esquina.",
+          "use": "Para indicar que algo é perto."
+        },
+        {
+          "en": "It's a stone's throw away.",
+          "ipa": "/ɪts ə stoʊnz θroʊ əˈweɪ/",
+          "pt": "É pertinho daqui.",
+          "use": "Expressão para curtíssima distância."
+        },
+        {
+          "en": "Make yourself at home.",
+          "ipa": "/meɪk jərˈsɛlf æt hoʊm/",
+          "pt": "Sinta-se em casa.",
+          "use": "Para receber alguém."
+        },
+        {
+          "en": "There's no place like home.",
+          "ipa": "/ðɛrz noʊ pleɪs laɪk hoʊm/",
+          "pt": "Não há lugar como o nosso lar.",
+          "use": "Expressão afetiva sobre o lar."
+        },
+        {
+          "en": "It's within walking distance.",
+          "ipa": "/ɪts wɪˈðɪn ˈwɔːkɪŋ ˈdɪstəns/",
+          "pt": "Dá para ir a pé.",
+          "use": "Para dizer que é perto o bastante."
+        },
+        {
+          "en": "Where's the nearest...?",
+          "ipa": "/wɛrz ðə ˈnɪrəst/",
+          "pt": "Onde fica o mais próximo...?",
+          "use": "Para perguntar localização."
+        },
+        {
+          "en": "Right next door.",
+          "ipa": "/raɪt nɛkst dɔːr/",
+          "pt": "Logo ao lado.",
+          "use": "Para indicar algo vizinho."
+        },
+        {
+          "en": "It's a bit out of the way.",
+          "ipa": "/ɪts ə bɪt aʊt əv ðə weɪ/",
+          "pt": "É meio fora de mão.",
+          "use": "Para dizer que algo é distante/desviado."
+        },
+        {
+          "en": "Feel free to look around.",
+          "ipa": "/fiːl friː tə lʊk əˈraʊnd/",
+          "pt": "Fique à vontade para olhar.",
+          "use": "Para convidar alguém a explorar um lugar."
+        }
+      ],
+      "anki_sentences": [
+        "There is a big sofa in the living room. (Tem um sofá grande na sala.)",
+        "Are there any restaurants near here? (Tem algum restaurante perto daqui?)",
+        "The pharmacy is right next to the bank. (A farmácia fica logo ao lado do banco.)",
+        "There aren't any windows in the garage. (Não tem janelas na garagem.)",
+        "My keys are in my bag. (Minhas chaves estão na minha bolsa.)",
+        "It's just around the corner. (É logo ali na esquina.)",
+        "There are some people at the bus stop. (Tem algumas pessoas no ponto.)",
+        "Is there a bathroom on this floor? (Tem banheiro neste andar?)"
+      ]
+    },
+    {
+      "week": 6,
+      "phase": 1,
+      "level": "A2",
+      "title": "Presente Contínuo; Consolidação A1→A2",
+      "grammar": "Present Continuous; contraste com Present Simple",
+      "lexis": "Ações em progresso, roupas, cores, clima",
+      "persona_city": "San Francisco",
+      "conversation_prompt": "You are a friendly American native speaker from San Francisco. Let's have a 30-minute conversation about \"Ações em progresso, roupas, cores, clima\". Use only vocabulary appropriate for level A2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about ações em progresso, roupas, cores, clima.",
+      "objectives": [
+        "Formar e usar o Present Continuous para ações em progresso.",
+        "Distinguir Present Simple de Present Continuous.",
+        "Descrever o que está acontecendo agora.",
+        "Consolidar todo o conteúdo A1→A2 e fazer a autoavaliação de fase."
+      ],
+      "chunks": [
+        {
+          "en": "What are you up to?",
+          "ipa": "/wʌt ɑːr juː ʌp tuː/",
+          "pt": "O que você está fazendo/aprontando?",
+          "use": "Pergunta informal sobre o momento."
+        },
+        {
+          "en": "I'm in the middle of something.",
+          "ipa": "/aɪm ɪn ðə ˈmɪdl̩ əv ˈsʌmθɪŋ/",
+          "pt": "Estou no meio de uma coisa.",
+          "use": "Para dizer que está ocupado agora."
+        },
+        {
+          "en": "Hold on a second.",
+          "ipa": "/hoʊld ɑːn ə ˈsɛkənd/",
+          "pt": "Espera um segundo.",
+          "use": "Para pedir uma pausa rápida."
+        },
+        {
+          "en": "It's pouring rain.",
+          "ipa": "/ɪts ˈpɔːrɪŋ reɪn/",
+          "pt": "Está chovendo muito.",
+          "use": "Para descrever chuva forte."
+        },
+        {
+          "en": "I'm just hanging out.",
+          "ipa": "/aɪm dʒʌst ˈhæŋɪŋ aʊt/",
+          "pt": "Só estou de boa.",
+          "use": "Para dizer que está relaxando."
+        },
+        {
+          "en": "Things are looking up.",
+          "ipa": "/θɪŋz ɑːr ˈlʊkɪŋ ʌp/",
+          "pt": "As coisas estão melhorando.",
+          "use": "Para falar de uma fase boa."
+        },
+        {
+          "en": "I'm working on it.",
+          "ipa": "/aɪm ˈwɜːrkɪŋ ɑːn ɪt/",
+          "pt": "Estou cuidando disso.",
+          "use": "Para dizer que está resolvendo algo."
+        },
+        {
+          "en": "What's going on?",
+          "ipa": "/wʌts ˈɡoʊɪŋ ɑːn/",
+          "pt": "O que está acontecendo?",
+          "use": "Pergunta geral sobre a situação."
+        },
+        {
+          "en": "I'm getting there.",
+          "ipa": "/aɪm ˈɡɛtɪŋ ðɛr/",
+          "pt": "Estou chegando lá.",
+          "use": "Para indicar progresso gradual."
+        },
+        {
+          "en": "Bear with me.",
+          "ipa": "/bɛr wɪð miː/",
+          "pt": "Tenha paciência comigo.",
+          "use": "Para pedir paciência enquanto faz algo."
+        }
+      ],
+      "anki_sentences": [
+        "What are you doing? I'm studying English. (O que você está fazendo? Estudando inglês.)",
+        "It's pouring rain outside right now. (Está chovendo muito lá fora agora.)",
+        "I usually take the bus, but today I'm walking. (Geralmente pego o ônibus, mas hoje estou indo a pé.)",
+        "She is wearing a blue jacket today. (Ela está usando uma jaqueta azul hoje.)",
+        "Hold on a second, I'm in the middle of something. (Espera um segundo, estou no meio de uma coisa.)",
+        "The kids are playing in the park. (As crianças estão brincando no parque.)",
+        "I want a coffee. (Eu quero um café.) [verbo de estado, sem -ing]",
+        "What are you up to this weekend? (O que você vai fazer no fim de semana?)"
+      ]
+    },
+    {
+      "week": 7,
+      "phase": 2,
+      "level": "A2",
+      "title": "Passado Simples - Verbo TO BE e Verbos Regulares",
+      "grammar": "Past Simple (was/were e verbos regulares -ed)",
+      "lexis": "Eventos passados, ontem, semana passada, sentimentos",
+      "persona_city": "Austin",
+      "conversation_prompt": "You are a friendly American native speaker from Austin. Let's have a 30-minute conversation about \"Eventos passados, ontem, semana passada, sentimentos\". Use only vocabulary appropriate for level A2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about eventos passados, ontem, semana passada, sentimentos.",
+      "objectives": [
+        "Usar was/were para descrever o passado do verbo TO BE.",
+        "Formar o passado de verbos regulares com -ed e pronunciá-lo corretamente.",
+        "Narrar eventos passados e descrever sentimentos.",
+        "Usar expressões de tempo passado (yesterday, last week, ago)."
+      ],
+      "chunks": [
+        {
+          "en": "How was your day?",
+          "ipa": "/haʊ wʌz jɔːr deɪ/",
+          "pt": "Como foi seu dia?",
+          "use": "Pergunta cotidiana sobre o dia."
+        },
+        {
+          "en": "It was a long day.",
+          "ipa": "/ɪt wʌz ə lɔːŋ deɪ/",
+          "pt": "Foi um dia longo.",
+          "use": "Para comentar um dia cansativo."
+        },
+        {
+          "en": "I had a blast.",
+          "ipa": "/aɪ hæd ə blæst/",
+          "pt": "Me diverti muito.",
+          "use": "Para dizer que se divertiu."
+        },
+        {
+          "en": "A while ago.",
+          "ipa": "/ə waɪl əˈɡoʊ/",
+          "pt": "Faz um tempo.",
+          "use": "Para indicar passado impreciso."
+        },
+        {
+          "en": "Back then.",
+          "ipa": "/bæk ðɛn/",
+          "pt": "Naquela época.",
+          "use": "Para situar algo no passado."
+        },
+        {
+          "en": "It was nothing special.",
+          "ipa": "/ɪt wʌz ˈnʌθɪŋ ˈspɛʃl̩/",
+          "pt": "Não foi nada de mais.",
+          "use": "Resposta modesta."
+        },
+        {
+          "en": "Time flew by.",
+          "ipa": "/taɪm fluː baɪ/",
+          "pt": "O tempo voou.",
+          "use": "Para dizer que passou rápido."
+        },
+        {
+          "en": "I was about to leave.",
+          "ipa": "/aɪ wʌz əˈbaʊt tə liːv/",
+          "pt": "Eu estava prestes a sair.",
+          "use": "Para falar de algo quase feito."
+        },
+        {
+          "en": "What did you get up to?",
+          "ipa": "/wʌt dɪd juː ɡɛt ʌp tuː/",
+          "pt": "O que você fez/aprontou?",
+          "use": "Pergunta informal sobre atividades passadas."
+        },
+        {
+          "en": "It felt like ages.",
+          "ipa": "/ɪt fɛlt laɪk ˈeɪdʒɪz/",
+          "pt": "Pareceu uma eternidade.",
+          "use": "Para enfatizar duração percebida."
+        }
+      ],
+      "anki_sentences": [
+        "How was your day? It was a long day. (Como foi seu dia? Foi longo.)",
+        "I worked late yesterday and I was exhausted. (Trabalhei até tarde ontem e fiquei exausto.)",
+        "We were at the beach last weekend. (Estávamos na praia no fim de semana passado.)",
+        "She called me a while ago. (Ela me ligou faz um tempo.)",
+        "I had a blast at the party. (Me diverti muito na festa.)",
+        "Were you at the meeting yesterday? (Você estava na reunião ontem?)",
+        "They didn't arrive on time. (Eles não chegaram a tempo.)",
+        "Time flew by during the trip. (O tempo voou durante a viagem.)"
+      ]
+    },
+    {
+      "week": 8,
+      "phase": 2,
+      "level": "A2",
+      "title": "Passado Simples - Verbos Irregulares",
+      "grammar": "Past Simple (verbos irregulares essenciais)",
+      "lexis": "Narrativas pessoais, viagens, histórias curtas",
+      "persona_city": "Nashville",
+      "conversation_prompt": "You are a friendly American native speaker from Nashville. Let's have a 30-minute conversation about \"Narrativas pessoais, viagens, histórias curtas\". Use only vocabulary appropriate for level A2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about narrativas pessoais, viagens, histórias curtas.",
+      "objectives": [
+        "Dominar os verbos irregulares mais comuns no passado.",
+        "Formar negativas e perguntas no passado com did/didn't.",
+        "Contar histórias e narrativas pessoais.",
+        "Usar conectores de sequência (then, after that, finally)."
+      ],
+      "chunks": [
+        {
+          "en": "To make a long story short.",
+          "ipa": "/tə meɪk ə lɔːŋ ˈstɔːri ʃɔːrt/",
+          "pt": "Resumindo a história.",
+          "use": "Para encurtar um relato."
+        },
+        {
+          "en": "You won't believe what happened.",
+          "ipa": "/juː woʊnt bɪˈliːv wʌt ˈhæpənd/",
+          "pt": "Você não vai acreditar no que aconteceu.",
+          "use": "Para iniciar uma história interessante."
+        },
+        {
+          "en": "Out of nowhere.",
+          "ipa": "/aʊt əv ˈnoʊwɛr/",
+          "pt": "Do nada.",
+          "use": "Para descrever algo inesperado."
+        },
+        {
+          "en": "Long story short.",
+          "ipa": "/lɔːŋ ˈstɔːri ʃɔːrt/",
+          "pt": "Enfim, resumindo.",
+          "use": "Para ir direto ao ponto."
+        },
+        {
+          "en": "It turned out great.",
+          "ipa": "/ɪt tɜːrnd aʊt ɡreɪt/",
+          "pt": "Acabou dando certo.",
+          "use": "Para falar do desfecho positivo."
+        },
+        {
+          "en": "Believe it or not.",
+          "ipa": "/bɪˈliːv ɪt ɔːr nɑːt/",
+          "pt": "Acredite se quiser.",
+          "use": "Para introduzir algo surpreendente."
+        },
+        {
+          "en": "The next thing I knew...",
+          "ipa": "/ðə nɛkst θɪŋ aɪ nuː/",
+          "pt": "Quando eu vi...",
+          "use": "Para narrar uma virada rápida."
+        },
+        {
+          "en": "It was meant to be.",
+          "ipa": "/ɪt wʌz mɛnt tə biː/",
+          "pt": "Era para acontecer mesmo.",
+          "use": "Para falar de destino."
+        },
+        {
+          "en": "At the end of the day.",
+          "ipa": "/æt ði ɛnd əv ðə deɪ/",
+          "pt": "No fim das contas.",
+          "use": "Para concluir um raciocínio."
+        },
+        {
+          "en": "That's when it hit me.",
+          "ipa": "/ðæts wɛn ɪt hɪt miː/",
+          "pt": "Foi aí que me dei conta.",
+          "use": "Para marcar um momento de percepção."
+        }
+      ],
+      "anki_sentences": [
+        "I went to the gym and then I had lunch. (Fui à academia e depois almocei.)",
+        "Did you see the game last night? Yes, I did. (Você viu o jogo ontem? Sim.)",
+        "She didn't come to the meeting. (Ela não veio à reunião.)",
+        "You won't believe what happened to me. (Você não vai acreditar no que me aconteceu.)",
+        "We bought a new car last month. (Compramos um carro novo mês passado.)",
+        "Long story short, it turned out great. (Resumindo, acabou dando certo.)",
+        "I didn't know the answer to that question. (Eu não sabia a resposta dessa pergunta.)",
+        "What did you do last weekend? (O que você fez no fim de semana?)"
+      ]
+    },
+    {
+      "week": 9,
+      "phase": 2,
+      "level": "B1",
+      "title": "Futuro: Going to e Will",
+      "grammar": "Be going to; will; contraste entre os dois",
+      "lexis": "Planos, intenções, previsões, decisões",
+      "persona_city": "Denver",
+      "conversation_prompt": "You are a friendly American native speaker from Denver. Let's have a 30-minute conversation about \"Planos, intenções, previsões, decisões\". Use only vocabulary appropriate for level B1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about planos, intenções, previsões, decisões.",
+      "objectives": [
+        "Usar be going to para planos e intenções.",
+        "Usar will para previsões e decisões instantâneas.",
+        "Distinguir going to de will.",
+        "Falar sobre o futuro de forma natural."
+      ],
+      "chunks": [
+        {
+          "en": "I'm planning to...",
+          "ipa": "/aɪm ˈplænɪŋ tuː/",
+          "pt": "Estou planejando...",
+          "use": "Para falar de planos."
+        },
+        {
+          "en": "I'll get right on it.",
+          "ipa": "/aɪl ɡɛt raɪt ɑːn ɪt/",
+          "pt": "Vou cuidar disso já.",
+          "use": "Para prometer ação imediata."
+        },
+        {
+          "en": "We'll see.",
+          "ipa": "/wiːl siː/",
+          "pt": "Vamos ver.",
+          "use": "Resposta evasiva sobre o futuro."
+        },
+        {
+          "en": "It'll be fine.",
+          "ipa": "/ɪtl̩ biː faɪn/",
+          "pt": "Vai dar tudo certo.",
+          "use": "Para tranquilizar alguém."
+        },
+        {
+          "en": "I'm about to...",
+          "ipa": "/aɪm əˈbaʊt tuː/",
+          "pt": "Estou prestes a...",
+          "use": "Para algo iminente."
+        },
+        {
+          "en": "Sooner or later.",
+          "ipa": "/ˈsuːnər ɔːr ˈleɪtər/",
+          "pt": "Mais cedo ou mais tarde.",
+          "use": "Para indicar inevitabilidade."
+        },
+        {
+          "en": "I'll keep you posted.",
+          "ipa": "/aɪl kiːp juː ˈpoʊstɪd/",
+          "pt": "Vou te manter informado.",
+          "use": "Para prometer atualizações."
+        },
+        {
+          "en": "Let's play it by ear.",
+          "ipa": "/lɛts pleɪ ɪt baɪ ɪr/",
+          "pt": "Vamos ver como fica.",
+          "use": "Para deixar planos abertos."
+        },
+        {
+          "en": "Fingers crossed.",
+          "ipa": "/ˈfɪŋɡərz krɔːst/",
+          "pt": "Torcendo (para dar certo).",
+          "use": "Para expressar esperança."
+        },
+        {
+          "en": "In the long run.",
+          "ipa": "/ɪn ðə lɔːŋ rʌn/",
+          "pt": "A longo prazo.",
+          "use": "Para falar do futuro distante."
+        }
+      ],
+      "anki_sentences": [
+        "I'm going to travel to the US next year. (Vou viajar para os EUA ano que vem.)",
+        "Don't worry, I'll help you with that. (Não se preocupe, eu te ajudo com isso.)",
+        "What are you going to do this weekend? (O que você vai fazer no fim de semana?)",
+        "I think it will be fine. (Acho que vai dar tudo certo.)",
+        "I'll keep you posted. (Vou te manter informado.)",
+        "She's going to start a new job next month. (Ela vai começar um emprego novo.)",
+        "We'll see how it goes. (Vamos ver como fica.)",
+        "I won't tell anyone, I promise. (Não vou contar a ninguém, prometo.)"
+      ]
+    },
+    {
+      "week": 10,
+      "phase": 2,
+      "level": "B1",
+      "title": "Comparativos e Superlativos",
+      "grammar": "Comparativos (-er/more) e superlativos (-est/most)",
+      "lexis": "Comparações, cidades, produtos, preferências",
+      "persona_city": "Portland",
+      "conversation_prompt": "You are a friendly American native speaker from Portland. Let's have a 30-minute conversation about \"Comparações, cidades, produtos, preferências\". Use only vocabulary appropriate for level B1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about comparações, cidades, produtos, preferências.",
+      "objectives": [
+        "Formar comparativos de adjetivos curtos e longos.",
+        "Formar superlativos corretamente.",
+        "Usar comparativos irregulares (good/better/best).",
+        "Comparar pessoas, lugares e coisas."
+      ],
+      "chunks": [
+        {
+          "en": "It's the best of both worlds.",
+          "ipa": "/ɪts ðə bɛst əv boʊθ wɜːrldz/",
+          "pt": "É o melhor dos dois mundos.",
+          "use": "Para algo que combina vantagens."
+        },
+        {
+          "en": "Easier said than done.",
+          "ipa": "/ˈiːziər sɛd ðæn dʌn/",
+          "pt": "Falar é mais fácil que fazer.",
+          "use": "Para algo difícil na prática."
+        },
+        {
+          "en": "Better late than never.",
+          "ipa": "/ˈbɛtər leɪt ðæn ˈnɛvər/",
+          "pt": "Antes tarde do que nunca.",
+          "use": "Para valorizar algo atrasado."
+        },
+        {
+          "en": "The sooner the better.",
+          "ipa": "/ðə ˈsuːnər ðə ˈbɛtər/",
+          "pt": "Quanto antes, melhor.",
+          "use": "Para indicar urgência."
+        },
+        {
+          "en": "More or less.",
+          "ipa": "/mɔːr ɔːr lɛs/",
+          "pt": "Mais ou menos.",
+          "use": "Para aproximar uma resposta."
+        },
+        {
+          "en": "It could be worse.",
+          "ipa": "/ɪt kʊd biː wɜːrs/",
+          "pt": "Poderia ser pior.",
+          "use": "Para relativizar um problema."
+        },
+        {
+          "en": "Just as good.",
+          "ipa": "/dʒʌst æz ɡʊd/",
+          "pt": "Igualmente bom.",
+          "use": "Para comparar como equivalente."
+        },
+        {
+          "en": "By far the best.",
+          "ipa": "/baɪ fɑːr ðə bɛst/",
+          "pt": "De longe o melhor.",
+          "use": "Para enfatizar superioridade."
+        },
+        {
+          "en": "The bigger picture.",
+          "ipa": "/ðə ˈbɪɡər ˈpɪktʃər/",
+          "pt": "O quadro geral.",
+          "use": "Para falar da visão ampla."
+        },
+        {
+          "en": "Last but not least.",
+          "ipa": "/læst bʌt nɑːt liːst/",
+          "pt": "Por último, mas não menos importante.",
+          "use": "Para concluir uma lista."
+        }
+      ],
+      "anki_sentences": [
+        "São Paulo is much bigger than Santos. (São Paulo é bem maior que Santos.)",
+        "This is the best decision of my life. (Esta é a melhor decisão da minha vida.)",
+        "Your idea is better than mine. (Sua ideia é melhor que a minha.)",
+        "It's the most beautiful beach I've ever seen. (É a praia mais bonita que já vi.)",
+        "Better late than never. (Antes tarde do que nunca.)",
+        "This restaurant is more expensive than that one. (Este restaurante é mais caro que aquele.)",
+        "It could be worse. (Poderia ser pior.)",
+        "She is by far the best student. (Ela é de longe a melhor aluna.)"
+      ]
+    },
+    {
+      "week": 11,
+      "phase": 2,
+      "level": "B1",
+      "title": "Modais 1: Can, Could, May (Habilidade e Permissão)",
+      "grammar": "Can/could (habilidade); can/may (permissão); pedidos",
+      "lexis": "Habilidades, permissões, pedidos educados",
+      "persona_city": "Philadelphia",
+      "conversation_prompt": "You are a friendly American native speaker from Philadelphia. Let's have a 30-minute conversation about \"Habilidades, permissões, pedidos educados\". Use only vocabulary appropriate for level B1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about habilidades, permissões, pedidos educados.",
+      "objectives": [
+        "Usar can/could para habilidade e possibilidade.",
+        "Usar can/may/could para permissão e pedidos.",
+        "Fazer pedidos educados.",
+        "Falar sobre habilidades presentes e passadas."
+      ],
+      "chunks": [
+        {
+          "en": "Can you give me a hand?",
+          "ipa": "/kən juː ɡɪv miː ə hænd/",
+          "pt": "Pode me dar uma ajuda?",
+          "use": "Pedido informal de ajuda."
+        },
+        {
+          "en": "Could you do me a favor?",
+          "ipa": "/kʊd juː duː miː ə ˈfeɪvər/",
+          "pt": "Pode me fazer um favor?",
+          "use": "Pedido educado."
+        },
+        {
+          "en": "I can't make it.",
+          "ipa": "/aɪ kænt meɪk ɪt/",
+          "pt": "Não vou conseguir ir.",
+          "use": "Para recusar um convite."
+        },
+        {
+          "en": "Take it or leave it.",
+          "ipa": "/teɪk ɪt ɔːr liːv ɪt/",
+          "pt": "É pegar ou largar.",
+          "use": "Para dar uma opção final."
+        },
+        {
+          "en": "You can count on me.",
+          "ipa": "/juː kən kaʊnt ɑːn miː/",
+          "pt": "Você pode contar comigo.",
+          "use": "Para oferecer apoio."
+        },
+        {
+          "en": "Can I get back to you?",
+          "ipa": "/kən aɪ ɡɛt bæk tə juː/",
+          "pt": "Posso te dar um retorno depois?",
+          "use": "Para adiar uma resposta."
+        },
+        {
+          "en": "It can't hurt to try.",
+          "ipa": "/ɪt kænt hɜːrt tə traɪ/",
+          "pt": "Não custa tentar.",
+          "use": "Para encorajar uma tentativa."
+        },
+        {
+          "en": "Could you spare a minute?",
+          "ipa": "/kʊd juː spɛr ə ˈmɪnɪt/",
+          "pt": "Você tem um minuto?",
+          "use": "Para pedir atenção de alguém."
+        },
+        {
+          "en": "I could use some help.",
+          "ipa": "/aɪ kʊd juːz sʌm hɛlp/",
+          "pt": "Uma ajuda cairia bem.",
+          "use": "Para pedir ajuda indiretamente."
+        },
+        {
+          "en": "Whenever you can.",
+          "ipa": "/wɛnˈɛvər juː kæn/",
+          "pt": "Quando você puder.",
+          "use": "Para indicar flexibilidade."
+        }
+      ],
+      "anki_sentences": [
+        "Can you give me a hand with this? (Pode me dar uma ajuda com isso?)",
+        "I'm sorry, I can't make it tonight. (Desculpe, não vou conseguir ir hoje à noite.)",
+        "Could you speak more slowly, please? (Você poderia falar mais devagar, por favor?)",
+        "When I was young, I could run very fast. (Quando jovem, eu corria muito rápido.)",
+        "You can count on me. (Você pode contar comigo.)",
+        "May I ask you a question? (Posso te fazer uma pergunta?)",
+        "It can't hurt to try. (Não custa tentar.)",
+        "I could use some help here. (Uma ajuda aqui cairia bem.)"
+      ]
+    },
+    {
+      "week": 12,
+      "phase": 2,
+      "level": "B1",
+      "title": "Modais 2: Must, Have to, Should (Obrigação e Conselho)",
+      "grammar": "Must/have to (obrigação); should (conselho)",
+      "lexis": "Regras, obrigações, conselhos, trabalho",
+      "persona_city": "Pittsburgh",
+      "conversation_prompt": "You are a friendly American native speaker from Pittsburgh. Let's have a 30-minute conversation about \"Regras, obrigações, conselhos, trabalho\". Use only vocabulary appropriate for level B1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about regras, obrigações, conselhos, trabalho.",
+      "objectives": [
+        "Usar must e have to para obrigação.",
+        "Usar should para dar conselhos.",
+        "Distinguir os graus de obrigação.",
+        "Falar sobre regras, deveres e recomendações."
+      ],
+      "chunks": [
+        {
+          "en": "You'd better hurry.",
+          "ipa": "/jud ˈbɛtər ˈhɜːri/",
+          "pt": "É melhor se apressar.",
+          "use": "Conselho forte com leve aviso."
+        },
+        {
+          "en": "I have to run.",
+          "ipa": "/aɪ hæv tə rʌn/",
+          "pt": "Tenho que ir correndo.",
+          "use": "Para sair com pressa."
+        },
+        {
+          "en": "It's a must.",
+          "ipa": "/ɪts ə mʌst/",
+          "pt": "É imperdível/obrigatório.",
+          "use": "Para recomendar fortemente."
+        },
+        {
+          "en": "If I were you...",
+          "ipa": "/ɪf aɪ wɜːr juː/",
+          "pt": "Se eu fosse você...",
+          "use": "Para introduzir um conselho."
+        },
+        {
+          "en": "Rules are rules.",
+          "ipa": "/ruːlz ɑːr ruːlz/",
+          "pt": "Regras são regras.",
+          "use": "Para justificar uma obrigação."
+        },
+        {
+          "en": "You should give it a shot.",
+          "ipa": "/juː ʃʊd ɡɪv ɪt ə ʃɑːt/",
+          "pt": "Você devia tentar.",
+          "use": "Para encorajar."
+        },
+        {
+          "en": "There's no need to.",
+          "ipa": "/ðɛrz noʊ niːd tuː/",
+          "pt": "Não há necessidade.",
+          "use": "Para dizer que não é preciso."
+        },
+        {
+          "en": "Take my advice.",
+          "ipa": "/teɪk maɪ ədˈvaɪs/",
+          "pt": "Siga meu conselho.",
+          "use": "Para reforçar uma recomendação."
+        },
+        {
+          "en": "I'm supposed to...",
+          "ipa": "/aɪm səˈpoʊzd tuː/",
+          "pt": "Eu deveria/era para eu...",
+          "use": "Para falar de expectativa/obrigação."
+        },
+        {
+          "en": "It's up to you.",
+          "ipa": "/ɪts ʌp tə juː/",
+          "pt": "A decisão é sua.",
+          "use": "Para deixar a escolha com alguém."
+        }
+      ],
+      "anki_sentences": [
+        "I have to work tomorrow, so I can't go out. (Tenho que trabalhar amanhã, então não posso sair.)",
+        "You should see a doctor about that. (Você deveria ver um médico sobre isso.)",
+        "You mustn't use your phone during the exam. (Você não pode usar o celular na prova.)",
+        "You don't have to apologize, it's okay. (Você não precisa se desculpar, está tudo bem.)",
+        "If I were you, I would take the job. (Se eu fosse você, aceitaria o emprego.)",
+        "She has to finish the report by Friday. (Ela tem que terminar o relatório até sexta.)",
+        "It's up to you. (A decisão é sua.)",
+        "You'd better hurry or you'll be late. (É melhor se apressar ou vai se atrasar.)"
+      ]
+    },
+    {
+      "week": 13,
+      "phase": 2,
+      "level": "B1",
+      "title": "Conectores e Discurso; Consolidação A2→B1",
+      "grammar": "Conectores (because, so, but, although); ordem das ideias",
+      "lexis": "Explicações, causas, consequências, contrastes",
+      "persona_city": "Atlanta",
+      "conversation_prompt": "You are a friendly American native speaker from Atlanta. Let's have a 30-minute conversation about \"Explicações, causas, consequências, contrastes\". Use only vocabulary appropriate for level B1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about explicações, causas, consequências, contrastes.",
+      "objectives": [
+        "Conectar ideias com because, so, but, although.",
+        "Explicar causas e consequências.",
+        "Desenvolver respostas mais longas e encadeadas.",
+        "Consolidar todo o conteúdo A2→B1 e fazer a autoavaliação de fase."
+      ],
+      "chunks": [
+        {
+          "en": "That's why...",
+          "ipa": "/ðæts waɪ/",
+          "pt": "É por isso que...",
+          "use": "Para introduzir uma consequência."
+        },
+        {
+          "en": "The reason is...",
+          "ipa": "/ðə ˈriːzn̩ ɪz/",
+          "pt": "O motivo é...",
+          "use": "Para explicar uma causa."
+        },
+        {
+          "en": "On the other hand.",
+          "ipa": "/ɑːn ði ˈʌðər hænd/",
+          "pt": "Por outro lado.",
+          "use": "Para introduzir contraste."
+        },
+        {
+          "en": "Even though.",
+          "ipa": "/ˈiːvn̩ ðoʊ/",
+          "pt": "Mesmo que / embora.",
+          "use": "Concessão enfática."
+        },
+        {
+          "en": "As a result.",
+          "ipa": "/æz ə rɪˈzʌlt/",
+          "pt": "Como resultado.",
+          "use": "Para introduzir consequência."
+        },
+        {
+          "en": "For instance.",
+          "ipa": "/fər ˈɪnstəns/",
+          "pt": "Por exemplo.",
+          "use": "Para dar exemplos."
+        },
+        {
+          "en": "In other words.",
+          "ipa": "/ɪn ˈʌðər wɜːrdz/",
+          "pt": "Em outras palavras.",
+          "use": "Para reformular."
+        },
+        {
+          "en": "That being said.",
+          "ipa": "/ðæt ˈbiːɪŋ sɛd/",
+          "pt": "Dito isso.",
+          "use": "Para introduzir uma ressalva."
+        },
+        {
+          "en": "What I mean is...",
+          "ipa": "/wʌt aɪ miːn ɪz/",
+          "pt": "O que quero dizer é...",
+          "use": "Para esclarecer."
+        },
+        {
+          "en": "All in all.",
+          "ipa": "/ɔːl ɪn ɔːl/",
+          "pt": "No geral.",
+          "use": "Para concluir."
+        }
+      ],
+      "anki_sentences": [
+        "I study English because I want a better career. (Estudo inglês porque quero uma carreira melhor.)",
+        "It was raining, so I stayed home. (Estava chovendo, então fiquei em casa.)",
+        "I like my job, but the hours are long. (Gosto do meu trabalho, mas os horários são longos.)",
+        "Although it's challenging, it's very rewarding. (Embora seja desafiador, é muito gratificante.)",
+        "That's why I practice every day. (É por isso que eu pratico todo dia.)",
+        "On the other hand, it can be tiring. (Por outro lado, pode ser cansativo.)",
+        "All in all, it was a great experience. (No geral, foi uma ótima experiência.)",
+        "What I mean is that consistency matters most. (O que quero dizer é que a consistência importa mais.)"
+      ]
+    },
+    {
+      "week": 14,
+      "phase": 3,
+      "level": "B1",
+      "title": "Present Perfect (Experiências e Mudanças)",
+      "grammar": "Present Perfect; ever/never/already/yet; for/since",
+      "lexis": "Experiências de vida, conquistas, mudanças",
+      "persona_city": "Baltimore",
+      "conversation_prompt": "You are a friendly American native speaker from Baltimore. Let's have a 30-minute conversation about \"Experiências de vida, conquistas, mudanças\". Use only vocabulary appropriate for level B1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about experiências de vida, conquistas, mudanças.",
+      "objectives": [
+        "Formar o Present Perfect (have/has + particípio).",
+        "Usar ever, never, already, yet, just.",
+        "Distinguir Present Perfect de Past Simple.",
+        "Falar sobre experiências de vida e mudanças."
+      ],
+      "chunks": [
+        {
+          "en": "Have you ever...?",
+          "ipa": "/hæv juː ˈɛvər/",
+          "pt": "Você já...?",
+          "use": "Para perguntar sobre experiências."
+        },
+        {
+          "en": "I've been meaning to...",
+          "ipa": "/aɪv bɪn ˈmiːnɪŋ tuː/",
+          "pt": "Eu venho querendo...",
+          "use": "Para algo que pretende fazer há tempo."
+        },
+        {
+          "en": "So far, so good.",
+          "ipa": "/soʊ fɑːr soʊ ɡʊd/",
+          "pt": "Até agora, tudo bem.",
+          "use": "Para falar do progresso."
+        },
+        {
+          "en": "I've had enough.",
+          "ipa": "/aɪv hæd ɪˈnʌf/",
+          "pt": "Já chega / não aguento mais.",
+          "use": "Para expressar limite."
+        },
+        {
+          "en": "It's been a while.",
+          "ipa": "/ɪts bɪn ə waɪl/",
+          "pt": "Faz tempo.",
+          "use": "Ao reencontrar alguém."
+        },
+        {
+          "en": "I've never thought about it.",
+          "ipa": "/aɪv ˈnɛvər θɔːt əˈbaʊt ɪt/",
+          "pt": "Nunca pensei nisso.",
+          "use": "Para reagir a uma ideia nova."
+        },
+        {
+          "en": "Been there, done that.",
+          "ipa": "/bɪn ðɛr dʌn ðæt/",
+          "pt": "Já passei por isso.",
+          "use": "Para falar de experiência prévia."
+        },
+        {
+          "en": "Have we met before?",
+          "ipa": "/hæv wiː mɛt bɪˈfɔːr/",
+          "pt": "A gente já se conhece?",
+          "use": "Ao achar alguém familiar."
+        },
+        {
+          "en": "I've come a long way.",
+          "ipa": "/aɪv kʌm ə lɔːŋ weɪ/",
+          "pt": "Eu evoluí muito.",
+          "use": "Para falar de progresso pessoal."
+        },
+        {
+          "en": "It hasn't sunk in yet.",
+          "ipa": "/ɪt ˈhæznt sʌŋk ɪn jɛt/",
+          "pt": "Ainda não caiu a ficha.",
+          "use": "Para algo que ainda processa."
+        }
+      ],
+      "anki_sentences": [
+        "Have you ever been to the United States? (Você já foi aos EUA?)",
+        "I have lived in Santos for ten years. (Moro em Santos há dez anos.)",
+        "She has just finished her work. (Ela acabou de terminar o trabalho.)",
+        "I haven't seen that movie yet. (Ainda não vi esse filme.)",
+        "It's been a while since we last met. (Faz tempo desde que nos vimos.)",
+        "I've never thought about it that way. (Nunca pensei nisso dessa forma.)",
+        "They have already paid the bill. (Eles já pagaram a conta.)",
+        "I've come a long way in my English. (Evoluí muito no meu inglês.)"
+      ]
+    },
+    {
+      "week": 15,
+      "phase": 3,
+      "level": "B2",
+      "title": "Present Perfect Continuous e Past Continuous",
+      "grammar": "Present Perfect Continuous; Past Continuous; when/while",
+      "lexis": "Atividades em andamento, situações interrompidas",
+      "persona_city": "Las Vegas",
+      "conversation_prompt": "You are a friendly American native speaker from Las Vegas. Let's have a 30-minute conversation about \"Atividades em andamento, situações interrompidas\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about atividades em andamento, situações interrompidas.",
+      "objectives": [
+        "Usar Present Perfect Continuous para ênfase na duração.",
+        "Usar Past Continuous para ações em progresso no passado.",
+        "Combinar Past Continuous e Past Simple (when/while).",
+        "Descrever situações interrompidas."
+      ],
+      "chunks": [
+        {
+          "en": "I've been up to a lot.",
+          "ipa": "/aɪv bɪn ʌp tə ə lɑːt/",
+          "pt": "Tenho feito bastante coisa.",
+          "use": "Para falar de atividades recentes."
+        },
+        {
+          "en": "What have you been up to?",
+          "ipa": "/wʌt hæv juː bɪn ʌp tuː/",
+          "pt": "O que você tem feito?",
+          "use": "Pergunta sobre o que andou fazendo."
+        },
+        {
+          "en": "I was in the middle of...",
+          "ipa": "/aɪ wʌz ɪn ðə ˈmɪdl̩ əv/",
+          "pt": "Eu estava no meio de...",
+          "use": "Para descrever ação interrompida."
+        },
+        {
+          "en": "It came out of nowhere.",
+          "ipa": "/ɪt keɪm aʊt əv ˈnoʊwɛr/",
+          "pt": "Veio do nada.",
+          "use": "Para algo inesperado no passado."
+        },
+        {
+          "en": "I've been meaning to ask you.",
+          "ipa": "/aɪv bɪn ˈmiːnɪŋ tə æsk juː/",
+          "pt": "Eu vinha querendo te perguntar.",
+          "use": "Para introduzir uma pergunta adiada."
+        },
+        {
+          "en": "While we're at it.",
+          "ipa": "/waɪl wɪr æt ɪt/",
+          "pt": "Já que estamos nisso.",
+          "use": "Para aproveitar o momento."
+        },
+        {
+          "en": "I lost track of time.",
+          "ipa": "/aɪ lɔːst træk əv taɪm/",
+          "pt": "Perdi a noção do tempo.",
+          "use": "Quando o tempo passou sem perceber."
+        },
+        {
+          "en": "It was just one of those days.",
+          "ipa": "/ɪt wʌz dʒʌst wʌn əv ðoʊz deɪz/",
+          "pt": "Foi um daqueles dias.",
+          "use": "Para um dia difícil."
+        },
+        {
+          "en": "Speaking of which.",
+          "ipa": "/ˈspiːkɪŋ əv wɪtʃ/",
+          "pt": "Por falar nisso.",
+          "use": "Para mudar para um tema relacionado."
+        },
+        {
+          "en": "Out of the blue.",
+          "ipa": "/aʊt əv ðə bluː/",
+          "pt": "Do nada, de repente.",
+          "use": "Para algo súbito."
+        }
+      ],
+      "anki_sentences": [
+        "I have been studying English for six months now. (Estudo inglês há seis meses.)",
+        "What have you been up to lately? (O que você tem feito ultimamente?)",
+        "I was taking a shower when the phone rang. (Eu estava no banho quando o telefone tocou.)",
+        "While she was cooking, I was setting the table. (Enquanto ela cozinhava, eu punha a mesa.)",
+        "He's tired because he's been working all day. (Ele está cansado porque trabalhou o dia todo.)",
+        "It came out of nowhere. (Veio do nada.)",
+        "I lost track of time while reading. (Perdi a noção do tempo lendo.)",
+        "I've been meaning to ask you something. (Eu vinha querendo te perguntar uma coisa.)"
+      ]
+    },
+    {
+      "week": 16,
+      "phase": 3,
+      "level": "B2",
+      "title": "Past Perfect e Sequência Narrativa",
+      "grammar": "Past Perfect; sequência de tempos no passado",
+      "lexis": "Histórias complexas, ordem de eventos, biografia",
+      "persona_city": "Oklahoma City",
+      "conversation_prompt": "You are a friendly American native speaker from Oklahoma City. Let's have a 30-minute conversation about \"Histórias complexas, ordem de eventos, biografia\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about histórias complexas, ordem de eventos, biografia.",
+      "objectives": [
+        "Formar o Past Perfect (had + particípio).",
+        "Ordenar eventos no passado.",
+        "Narrar histórias com camadas temporais.",
+        "Usar before, after, by the time."
+      ],
+      "chunks": [
+        {
+          "en": "By the time I knew it...",
+          "ipa": "/baɪ ðə taɪm aɪ nuː ɪt/",
+          "pt": "Quando me dei conta...",
+          "use": "Para marcar uma percepção tardia."
+        },
+        {
+          "en": "It had been a long time.",
+          "ipa": "/ɪt hæd bɪn ə lɔːŋ taɪm/",
+          "pt": "Já fazia muito tempo.",
+          "use": "Para situar duração no passado."
+        },
+        {
+          "en": "Little did I know.",
+          "ipa": "/ˈlɪtl̩ dɪd aɪ noʊ/",
+          "pt": "Mal sabia eu.",
+          "use": "Para introduzir uma reviravolta."
+        },
+        {
+          "en": "I had no idea.",
+          "ipa": "/aɪ hæd noʊ aɪˈdɪə/",
+          "pt": "Eu não fazia ideia.",
+          "use": "Para expressar surpresa retrospectiva."
+        },
+        {
+          "en": "Up until then.",
+          "ipa": "/ʌp ənˈtɪl ðɛn/",
+          "pt": "Até aquele momento.",
+          "use": "Para marcar um ponto no passado."
+        },
+        {
+          "en": "As it turned out.",
+          "ipa": "/æz ɪt tɜːrnd aʊt/",
+          "pt": "Como se revelou.",
+          "use": "Para introduzir o desfecho."
+        },
+        {
+          "en": "In hindsight.",
+          "ipa": "/ɪn ˈhaɪndsaɪt/",
+          "pt": "Em retrospecto.",
+          "use": "Para refletir sobre o passado."
+        },
+        {
+          "en": "It had crossed my mind.",
+          "ipa": "/ɪt hæd krɔːst maɪ maɪnd/",
+          "pt": "Tinha me passado pela cabeça.",
+          "use": "Para falar de um pensamento prévio."
+        },
+        {
+          "en": "Before I knew it.",
+          "ipa": "/bɪˈfɔːr aɪ nuː ɪt/",
+          "pt": "Sem que eu percebesse.",
+          "use": "Para algo que aconteceu rápido."
+        },
+        {
+          "en": "Looking back.",
+          "ipa": "/ˈlʊkɪŋ bæk/",
+          "pt": "Olhando para trás.",
+          "use": "Para refletir sobre experiências."
+        }
+      ],
+      "anki_sentences": [
+        "When I arrived, the meeting had already started. (Quando cheguei, a reunião já tinha começado.)",
+        "She had never been abroad before that trip. (Ela nunca tinha ido ao exterior antes daquela viagem.)",
+        "By the time we got there, the movie had ended. (Quando chegamos, o filme já tinha acabado.)",
+        "I realized I had forgotten my wallet. (Percebi que tinha esquecido minha carteira.)",
+        "Little did I know it would change my life. (Mal sabia eu que mudaria minha vida.)",
+        "In hindsight, it was the right decision. (Em retrospecto, foi a decisão certa.)",
+        "I had no idea you were coming. (Eu não fazia ideia de que você viria.)",
+        "Looking back, I learned a lot from it. (Olhando para trás, aprendi muito com isso.)"
+      ]
+    },
+    {
+      "week": 17,
+      "phase": 3,
+      "level": "B2",
+      "title": "Condicionais (Zero, First e Second)",
+      "grammar": "Zero, First e Second Conditionals; if/unless",
+      "lexis": "Hipóteses, possibilidades, situações imaginárias",
+      "persona_city": "Memphis",
+      "conversation_prompt": "You are a friendly American native speaker from Memphis. Let's have a 30-minute conversation about \"Hipóteses, possibilidades, situações imaginárias\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about hipóteses, possibilidades, situações imaginárias.",
+      "objectives": [
+        "Usar a Zero e a First Conditional para situações reais.",
+        "Usar a Second Conditional para situações hipotéticas.",
+        "Distinguir if de unless.",
+        "Falar sobre possibilidades e hipóteses."
+      ],
+      "chunks": [
+        {
+          "en": "If all else fails.",
+          "ipa": "/ɪf ɔːl ɛls feɪlz/",
+          "pt": "Se tudo der errado.",
+          "use": "Para um plano B."
+        },
+        {
+          "en": "If I were in your shoes.",
+          "ipa": "/ɪf aɪ wɜːr ɪn jɔːr ʃuːz/",
+          "pt": "Se eu estivesse no seu lugar.",
+          "use": "Para dar conselho hipotético."
+        },
+        {
+          "en": "Just in case.",
+          "ipa": "/dʒʌst ɪn keɪs/",
+          "pt": "Só por precaução.",
+          "use": "Para prevenção."
+        },
+        {
+          "en": "If it were up to me.",
+          "ipa": "/ɪf ɪt wɜːr ʌp tə miː/",
+          "pt": "Se dependesse de mim.",
+          "use": "Para opinião hipotética."
+        },
+        {
+          "en": "What if...?",
+          "ipa": "/wʌt ɪf/",
+          "pt": "E se...?",
+          "use": "Para levantar hipóteses."
+        },
+        {
+          "en": "Chances are.",
+          "ipa": "/ˈtʃænsɪz ɑːr/",
+          "pt": "Provavelmente.",
+          "use": "Para indicar probabilidade."
+        },
+        {
+          "en": "If you ask me.",
+          "ipa": "/ɪf juː æsk miː/",
+          "pt": "Na minha opinião.",
+          "use": "Para dar opinião."
+        },
+        {
+          "en": "If worse comes to worst.",
+          "ipa": "/ɪf wɜːrs kʌmz tə wɜːrst/",
+          "pt": "Na pior das hipóteses.",
+          "use": "Para o pior cenário."
+        },
+        {
+          "en": "Either way.",
+          "ipa": "/ˈiːðər weɪ/",
+          "pt": "De qualquer forma.",
+          "use": "Para indicar que o resultado é o mesmo."
+        },
+        {
+          "en": "Provided that.",
+          "ipa": "/prəˈvaɪdɪd ðæt/",
+          "pt": "Desde que.",
+          "use": "Para impor uma condição."
+        }
+      ],
+      "anki_sentences": [
+        "If it rains tomorrow, I'll stay home. (Se chover amanhã, fico em casa.)",
+        "If I won the lottery, I would travel the world. (Se eu ganhasse na loteria, viajaria o mundo.)",
+        "If I were you, I would take the job. (Se eu fosse você, aceitaria o emprego.)",
+        "Unless you hurry, you'll miss the bus. (A menos que você se apresse, perderá o ônibus.)",
+        "What would you do if you could start over? (O que você faria se pudesse recomeçar?)",
+        "If all else fails, we'll figure something out. (Se tudo der errado, a gente dá um jeito.)",
+        "Chances are, it will work out fine. (Provavelmente vai dar certo.)",
+        "If you ask me, it's a great idea. (Na minha opinião, é uma ótima ideia.)"
+      ]
+    },
+    {
+      "week": 18,
+      "phase": 3,
+      "level": "B2",
+      "title": "Condicional Third e Arrependimentos",
+      "grammar": "Third Conditional; wish; mixed conditionals (intro)",
+      "lexis": "Arrependimentos, situações passadas hipotéticas",
+      "persona_city": "Louisville",
+      "conversation_prompt": "You are a friendly American native speaker from Louisville. Let's have a 30-minute conversation about \"Arrependimentos, situações passadas hipotéticas\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about arrependimentos, situações passadas hipotéticas.",
+      "objectives": [
+        "Usar a Third Conditional para situações passadas irreais.",
+        "Expressar arrependimentos com wish.",
+        "Entender as mixed conditionals (introdução).",
+        "Falar sobre o que poderia ter sido diferente."
+      ],
+      "chunks": [
+        {
+          "en": "I wish I could.",
+          "ipa": "/aɪ wɪʃ aɪ kʊd/",
+          "pt": "Quem dera eu pudesse.",
+          "use": "Para recusar com pesar."
+        },
+        {
+          "en": "If only.",
+          "ipa": "/ɪf ˈoʊnli/",
+          "pt": "Se ao menos.",
+          "use": "Para expressar desejo intenso."
+        },
+        {
+          "en": "Hindsight is 20/20.",
+          "ipa": "/ˈhaɪndsaɪt ɪz ˈtwɛnti ˈtwɛnti/",
+          "pt": "É fácil falar depois.",
+          "use": "Sobre julgar o passado."
+        },
+        {
+          "en": "I should have known better.",
+          "ipa": "/aɪ ʃʊd hæv noʊn ˈbɛtər/",
+          "pt": "Eu deveria saber.",
+          "use": "Para um arrependimento."
+        },
+        {
+          "en": "What's done is done.",
+          "ipa": "/wʌts dʌn ɪz dʌn/",
+          "pt": "O que está feito, está feito.",
+          "use": "Para aceitar o passado."
+        },
+        {
+          "en": "I'd give anything to...",
+          "ipa": "/aɪd ɡɪv ˈɛniθɪŋ tuː/",
+          "pt": "Eu daria tudo para...",
+          "use": "Para um desejo forte."
+        },
+        {
+          "en": "It wasn't meant to be.",
+          "ipa": "/ɪt ˈwʌznt mɛnt tə biː/",
+          "pt": "Não era para ser.",
+          "use": "Para aceitar um desfecho."
+        },
+        {
+          "en": "I have no regrets.",
+          "ipa": "/aɪ hæv noʊ rɪˈɡrɛts/",
+          "pt": "Não me arrependo de nada.",
+          "use": "Para afirmar paz com o passado."
+        },
+        {
+          "en": "If push comes to shove.",
+          "ipa": "/ɪf pʊʃ kʌmz tə ʃʌv/",
+          "pt": "Se a coisa apertar.",
+          "use": "Para situação extrema."
+        },
+        {
+          "en": "Live and learn.",
+          "ipa": "/lɪv ənd lɜːrn/",
+          "pt": "Vivendo e aprendendo.",
+          "use": "Para tirar lição de um erro."
+        }
+      ],
+      "anki_sentences": [
+        "If I had studied more, I would have passed the exam. (Se eu tivesse estudado mais, teria passado.)",
+        "I wish I had learned English sooner. (Eu queria ter aprendido inglês mais cedo.)",
+        "If only I had known about it. (Se ao menos eu soubesse disso.)",
+        "What's done is done. (O que está feito, está feito.)",
+        "I wish you were here with me. (Eu queria que você estivesse aqui comigo.)",
+        "I should have known better. (Eu deveria saber.)",
+        "If I'd left earlier, I wouldn't have missed it. (Se eu tivesse saído antes, não teria perdido.)",
+        "Live and learn. (Vivendo e aprendendo.)"
+      ]
+    },
+    {
+      "week": 19,
+      "phase": 3,
+      "level": "B2",
+      "title": "Voz Passiva",
+      "grammar": "Passive voice (presente, passado, perfeito, modais)",
+      "lexis": "Processos, invenções, notícias, procedimentos",
+      "persona_city": "Richmond",
+      "conversation_prompt": "You are a friendly American native speaker from Richmond. Let's have a 30-minute conversation about \"Processos, invenções, notícias, procedimentos\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about processos, invenções, notícias, procedimentos.",
+      "objectives": [
+        "Formar a voz passiva em vários tempos verbais.",
+        "Decidir quando usar a passiva.",
+        "Usar by para indicar o agente.",
+        "Descrever processos, fatos e notícias."
+      ],
+      "chunks": [
+        {
+          "en": "It is said that...",
+          "ipa": "/ɪt ɪz sɛd ðæt/",
+          "pt": "Dizem que...",
+          "use": "Para relatar boatos/crenças."
+        },
+        {
+          "en": "It's worth mentioning.",
+          "ipa": "/ɪts wɜːrθ ˈmɛnʃənɪŋ/",
+          "pt": "Vale mencionar.",
+          "use": "Para introduzir um ponto."
+        },
+        {
+          "en": "As far as I'm concerned.",
+          "ipa": "/æz fɑːr æz aɪm kənˈsɜːrnd/",
+          "pt": "No que me diz respeito.",
+          "use": "Para dar opinião."
+        },
+        {
+          "en": "It is widely known.",
+          "ipa": "/ɪt ɪz ˈwaɪdli noʊn/",
+          "pt": "É amplamente sabido.",
+          "use": "Para um fato consensual."
+        },
+        {
+          "en": "To be honest.",
+          "ipa": "/tə biː ˈɑːnəst/",
+          "pt": "Para ser sincero.",
+          "use": "Para introduzir uma opinião franca."
+        },
+        {
+          "en": "It's been brought to my attention.",
+          "ipa": "/ɪts bɪn brɔːt tə maɪ əˈtɛnʃən/",
+          "pt": "Fui informado de que.",
+          "use": "Linguagem formal."
+        },
+        {
+          "en": "Needless to say.",
+          "ipa": "/ˈniːdləs tə seɪ/",
+          "pt": "Nem é preciso dizer.",
+          "use": "Para algo óbvio."
+        },
+        {
+          "en": "It goes without saying.",
+          "ipa": "/ɪt ɡoʊz wɪˈðaʊt ˈseɪɪŋ/",
+          "pt": "Não precisa nem dizer.",
+          "use": "Para algo evidente."
+        },
+        {
+          "en": "It is well documented.",
+          "ipa": "/ɪt ɪz wɛl ˈdɑːkjəmɛntɪd/",
+          "pt": "Está bem documentado.",
+          "use": "Para fatos comprovados."
+        },
+        {
+          "en": "All things considered.",
+          "ipa": "/ɔːl θɪŋz kənˈsɪdərd/",
+          "pt": "Considerando tudo.",
+          "use": "Para concluir uma análise."
+        }
+      ],
+      "anki_sentences": [
+        "English is spoken in many countries. (O inglês é falado em muitos países.)",
+        "The house was built in 1995. (A casa foi construída em 1995.)",
+        "The report has been finished. (O relatório foi concluído.)",
+        "The results will be announced tomorrow. (Os resultados serão anunciados amanhã.)",
+        "It is said that he is very talented. (Dizem que ele é muito talentoso.)",
+        "My car was stolen last night. (Meu carro foi roubado ontem à noite.)",
+        "To be honest, it could be improved. (Para ser sincero, poderia ser melhorado.)",
+        "It goes without saying that practice is key. (Nem precisa dizer que a prática é essencial.)"
+      ]
+    },
+    {
+      "week": 20,
+      "phase": 3,
+      "level": "B2",
+      "title": "Reported Speech; Consolidação B1→B2",
+      "grammar": "Reported speech; say/tell; backshift de tempos",
+      "lexis": "Relatos de conversas, fofocas, notícias",
+      "persona_city": "New Orleans",
+      "conversation_prompt": "You are a friendly American native speaker from New Orleans. Let's have a 30-minute conversation about \"Relatos de conversas, fofocas, notícias\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about relatos de conversas, fofocas, notícias.",
+      "objectives": [
+        "Transformar fala direta em discurso indireto (reported speech).",
+        "Aplicar o backshift dos tempos verbais.",
+        "Distinguir say de tell.",
+        "Relatar conversas, perguntas e pedidos. Consolidar B1→B2."
+      ],
+      "chunks": [
+        {
+          "en": "Word has it that...",
+          "ipa": "/wɜːrd hæz ɪt ðæt/",
+          "pt": "Dizem por aí que...",
+          "use": "Para introduzir um boato."
+        },
+        {
+          "en": "She told me off.",
+          "ipa": "/ʃiː toʊld miː ɔːf/",
+          "pt": "Ela me deu uma bronca.",
+          "use": "Para relatar uma repreensão."
+        },
+        {
+          "en": "Rumor has it.",
+          "ipa": "/ˈruːmər hæz ɪt/",
+          "pt": "Diz a lenda / o boato.",
+          "use": "Para introduzir um rumor."
+        },
+        {
+          "en": "He made it clear.",
+          "ipa": "/hiː meɪd ɪt klɪr/",
+          "pt": "Ele deixou claro.",
+          "use": "Para relatar algo enfático."
+        },
+        {
+          "en": "To put it simply.",
+          "ipa": "/tə pʊt ɪt ˈsɪmpli/",
+          "pt": "Simplificando.",
+          "use": "Para reformular de forma simples."
+        },
+        {
+          "en": "Or so they say.",
+          "ipa": "/ɔːr soʊ ðeɪ seɪ/",
+          "pt": "Ou pelo menos dizem.",
+          "use": "Para relativizar um relato."
+        },
+        {
+          "en": "She pointed out that.",
+          "ipa": "/ʃiː ˈpɔɪntɪd aʊt ðæt/",
+          "pt": "Ela observou que.",
+          "use": "Para relatar uma observação."
+        },
+        {
+          "en": "Long story short.",
+          "ipa": "/lɔːŋ ˈstɔːri ʃɔːrt/",
+          "pt": "Resumindo.",
+          "use": "Para encurtar um relato."
+        },
+        {
+          "en": "From what I heard.",
+          "ipa": "/frʌm wʌt aɪ hɜːrd/",
+          "pt": "Pelo que ouvi.",
+          "use": "Para relatar com cautela."
+        },
+        {
+          "en": "He swore that.",
+          "ipa": "/hiː swɔːr ðæt/",
+          "pt": "Ele jurou que.",
+          "use": "Para relatar com ênfase."
+        }
+      ],
+      "anki_sentences": [
+        "He said he was busy that day. (Ele disse que estava ocupado naquele dia.)",
+        "She told me she would come later. (Ela me disse que viria mais tarde.)",
+        "He asked where I lived. (Ele perguntou onde eu morava.)",
+        "She asked if I was ready. (Ela perguntou se eu estava pronto.)",
+        "He told me not to worry. (Ele me disse para não me preocupar.)",
+        "Rumor has it they're moving abroad. (Dizem que eles vão se mudar para o exterior.)",
+        "She made it clear she disagreed. (Ela deixou claro que discordava.)",
+        "From what I heard, the project was a success. (Pelo que ouvi, o projeto foi um sucesso.)"
+      ]
+    },
+    {
+      "week": 21,
+      "phase": 4,
+      "level": "B2",
+      "title": "Phrasal Verbs Essenciais",
+      "grammar": "Phrasal verbs (separáveis/inseparáveis); uso natural",
+      "lexis": "Rotina, relações, trabalho, resolução de problemas",
+      "persona_city": "Tucson",
+      "conversation_prompt": "You are a friendly American native speaker from Tucson. Let's have a 30-minute conversation about \"Rotina, relações, trabalho, resolução de problemas\". Use only vocabulary appropriate for level B2. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about rotina, relações, trabalho, resolução de problemas.",
+      "objectives": [
+        "Reconhecer e usar phrasal verbs frequentes.",
+        "Distinguir phrasal verbs separáveis de inseparáveis.",
+        "Entender o significado idiomático além do literal.",
+        "Usar phrasal verbs naturalmente na fala."
+      ],
+      "chunks": [
+        {
+          "en": "Let's hang out sometime.",
+          "ipa": "/lɛts hæŋ aʊt ˈsʌmtaɪm/",
+          "pt": "Vamos sair qualquer dia.",
+          "use": "Convite informal."
+        },
+        {
+          "en": "I'll figure it out.",
+          "ipa": "/aɪl ˈfɪɡjər ɪt aʊt/",
+          "pt": "Vou dar um jeito.",
+          "use": "Para resolver um problema."
+        },
+        {
+          "en": "Something came up.",
+          "ipa": "/ˈsʌmθɪŋ keɪm ʌp/",
+          "pt": "Surgiu um imprevisto.",
+          "use": "Para justificar mudança de planos."
+        },
+        {
+          "en": "I'm worn out.",
+          "ipa": "/aɪm wɔːrn aʊt/",
+          "pt": "Estou esgotado.",
+          "use": "Para expressar exaustão."
+        },
+        {
+          "en": "Let's catch up.",
+          "ipa": "/lɛts kætʃ ʌp/",
+          "pt": "Vamos colocar o papo em dia.",
+          "use": "Para reencontrar alguém."
+        },
+        {
+          "en": "It didn't work out.",
+          "ipa": "/ɪt ˈdɪdnt wɜːrk aʊt/",
+          "pt": "Não deu certo.",
+          "use": "Para falar de um plano que falhou."
+        },
+        {
+          "en": "Hang in there.",
+          "ipa": "/hæŋ ɪn ðɛr/",
+          "pt": "Aguenta firme.",
+          "use": "Para encorajar alguém."
+        },
+        {
+          "en": "I'm running out of time.",
+          "ipa": "/aɪm ˈrʌnɪŋ aʊt əv taɪm/",
+          "pt": "Estou ficando sem tempo.",
+          "use": "Para indicar urgência."
+        },
+        {
+          "en": "Let me look into it.",
+          "ipa": "/lɛt miː lʊk ˈɪntə ɪt/",
+          "pt": "Deixa eu investigar isso.",
+          "use": "Para prometer verificação."
+        },
+        {
+          "en": "Things will work out.",
+          "ipa": "/θɪŋz wɪl wɜːrk aʊt/",
+          "pt": "As coisas vão se resolver.",
+          "use": "Para tranquilizar."
+        }
+      ],
+      "anki_sentences": [
+        "Don't give up on your dreams. (Não desista dos seus sonhos.)",
+        "I need to find out what happened. (Preciso descobrir o que aconteceu.)",
+        "Let's hang out this weekend. (Vamos sair neste fim de semana.)",
+        "I get along really well with my coworkers. (Me dou muito bem com meus colegas.)",
+        "Don't worry, I'll figure it out. (Não se preocupe, vou dar um jeito.)",
+        "Something came up, so I have to cancel. (Surgiu um imprevisto, então preciso cancelar.)",
+        "Can you turn it off, please? (Você pode desligar isso, por favor?)",
+        "Hang in there, things will work out. (Aguenta firme, as coisas vão se resolver.)"
+      ]
+    },
+    {
+      "week": 22,
+      "phase": 4,
+      "level": "C1",
+      "title": "Orações Relativas e Estruturas de Ênfase",
+      "grammar": "Relative clauses (defining/non-defining); cleft sentences",
+      "lexis": "Descrições detalhadas, ênfase, definições",
+      "persona_city": "Albuquerque",
+      "conversation_prompt": "You are a friendly American native speaker from Albuquerque. Let's have a 30-minute conversation about \"Descrições detalhadas, ênfase, definições\". Use only vocabulary appropriate for level C1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about descrições detalhadas, ênfase, definições.",
+      "objectives": [
+        "Usar orações relativas defining e non-defining.",
+        "Escolher entre who, which, that, where, when, whose.",
+        "Usar estruturas de ênfase (cleft sentences).",
+        "Descrever com precisão e dar destaque a informações."
+      ],
+      "chunks": [
+        {
+          "en": "Which reminds me.",
+          "ipa": "/wɪtʃ rɪˈmaɪndz miː/",
+          "pt": "Por falar nisso.",
+          "use": "Para introduzir um lembrete."
+        },
+        {
+          "en": "The thing is.",
+          "ipa": "/ðə θɪŋ ɪz/",
+          "pt": "O lance é o seguinte.",
+          "use": "Para introduzir um ponto central."
+        },
+        {
+          "en": "That's the whole point.",
+          "ipa": "/ðæts ðə hoʊl pɔɪnt/",
+          "pt": "É justamente esse o ponto.",
+          "use": "Para enfatizar a ideia principal."
+        },
+        {
+          "en": "Which is why.",
+          "ipa": "/wɪtʃ ɪz waɪ/",
+          "pt": "É por isso que.",
+          "use": "Para conectar causa e conclusão."
+        },
+        {
+          "en": "What matters most.",
+          "ipa": "/wʌt ˈmætərz moʊst/",
+          "pt": "O que mais importa.",
+          "use": "Para destacar prioridade."
+        },
+        {
+          "en": "Someone I look up to.",
+          "ipa": "/ˈsʌmwʌn aɪ lʊk ʌp tuː/",
+          "pt": "Alguém que admiro.",
+          "use": "Para falar de uma referência."
+        },
+        {
+          "en": "The way I see it.",
+          "ipa": "/ðə weɪ aɪ siː ɪt/",
+          "pt": "Do meu ponto de vista.",
+          "use": "Para introduzir opinião."
+        },
+        {
+          "en": "All things considered.",
+          "ipa": "/ɔːl θɪŋz kənˈsɪdərd/",
+          "pt": "Levando tudo em conta.",
+          "use": "Para concluir."
+        },
+        {
+          "en": "That's where it gets tricky.",
+          "ipa": "/ðæts wɛr ɪt ɡɛts ˈtrɪki/",
+          "pt": "É aí que complica.",
+          "use": "Para apontar uma dificuldade."
+        },
+        {
+          "en": "Which brings me to.",
+          "ipa": "/wɪtʃ brɪŋz miː tuː/",
+          "pt": "O que me leva a.",
+          "use": "Para introduzir o próximo tópico."
+        }
+      ],
+      "anki_sentences": [
+        "The man who called is my boss. (O homem que ligou é meu chefe.)",
+        "My sister, who lives abroad, is visiting us. (Minha irmã, que mora no exterior, está nos visitando.)",
+        "This is the house where I grew up. (Esta é a casa onde cresci.)",
+        "What I need most is some rest. (O que eu mais preciso é de descanso.)",
+        "It was she who solved the problem. (Foi ela quem resolveu o problema.)",
+        "He's someone I really look up to. (Ele é alguém que eu realmente admiro.)",
+        "The way I see it, we should wait. (Do meu ponto de vista, deveríamos esperar.)",
+        "Which brings me to my next point. (O que me leva ao meu próximo ponto.)"
+      ]
+    },
+    {
+      "week": 23,
+      "phase": 4,
+      "level": "C1",
+      "title": "Colocações e Expressões Idiomáticas",
+      "grammar": "Collocations (make/do/take/have); idioms comuns",
+      "lexis": "Linguagem natural, expressões americanas",
+      "persona_city": "Tulsa",
+      "conversation_prompt": "You are a friendly American native speaker from Tulsa. Let's have a 30-minute conversation about \"Linguagem natural, expressões americanas\". Use only vocabulary appropriate for level C1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about linguagem natural, expressões americanas.",
+      "objectives": [
+        "Usar colocações com make, do, take, have, get.",
+        "Reconhecer e empregar expressões idiomáticas comuns.",
+        "Soar mais natural e nativo.",
+        "Reaproveitar expressões de séries e músicas na fala."
+      ],
+      "chunks": [
+        {
+          "en": "It's a piece of cake.",
+          "ipa": "/ɪts ə piːs əv keɪk/",
+          "pt": "É moleza.",
+          "use": "Para algo muito fácil."
+        },
+        {
+          "en": "Let's call it a day.",
+          "ipa": "/lɛts kɔːl ɪt ə deɪ/",
+          "pt": "Vamos encerrar por hoje.",
+          "use": "Para terminar o trabalho."
+        },
+        {
+          "en": "I'm under the weather.",
+          "ipa": "/aɪm ˈʌndər ðə ˈwɛðər/",
+          "pt": "Estou meio adoentado.",
+          "use": "Para indisposição leve."
+        },
+        {
+          "en": "We're on the same page.",
+          "ipa": "/wɪr ɑːn ðə seɪm peɪdʒ/",
+          "pt": "Estamos em sintonia.",
+          "use": "Para confirmar acordo."
+        },
+        {
+          "en": "Let's break the ice.",
+          "ipa": "/lɛts breɪk ðə aɪs/",
+          "pt": "Vamos quebrar o gelo.",
+          "use": "Para iniciar interação."
+        },
+        {
+          "en": "It cost an arm and a leg.",
+          "ipa": "/ɪt kɔːst ən ɑːrm ənd ə lɛɡ/",
+          "pt": "Custou os olhos da cara.",
+          "use": "Para algo caro."
+        },
+        {
+          "en": "The ball is in your court.",
+          "ipa": "/ðə bɔːl ɪz ɪn jɔːr kɔːrt/",
+          "pt": "A decisão é sua.",
+          "use": "Para passar a responsabilidade."
+        },
+        {
+          "en": "Let's play it by ear.",
+          "ipa": "/lɛts pleɪ ɪt baɪ ɪr/",
+          "pt": "Vamos ver no improviso.",
+          "use": "Para deixar em aberto."
+        },
+        {
+          "en": "It's not rocket science.",
+          "ipa": "/ɪts nɑːt ˈrɑːkɪt ˈsaɪəns/",
+          "pt": "Não é nenhum bicho de sete cabeças.",
+          "use": "Para algo simples."
+        },
+        {
+          "en": "Let's touch base.",
+          "ipa": "/lɛts tʌtʃ beɪs/",
+          "pt": "Vamos nos alinhar.",
+          "use": "Para combinar um contato rápido."
+        }
+      ],
+      "anki_sentences": [
+        "I need to make an important decision. (Preciso tomar uma decisão importante.)",
+        "The test was a piece of cake. (A prova foi moleza.)",
+        "I'm feeling a bit under the weather today. (Estou meio adoentado hoje.)",
+        "Let's call it a day, I'm exhausted. (Vamos encerrar por hoje, estou exausto.)",
+        "Are we on the same page about this? (Estamos em sintonia sobre isso?)",
+        "That phone cost an arm and a leg. (Aquele celular custou os olhos da cara.)",
+        "The ball is in your court now. (Agora a decisão é sua.)",
+        "Don't worry, it's not rocket science. (Não se preocupe, não é nenhum bicho de sete cabeças.)"
+      ]
+    },
+    {
+      "week": 24,
+      "phase": 4,
+      "level": "C1",
+      "title": "Conectivos Avançados e Registro Formal/Informal",
+      "grammar": "Discourse markers; registro formal vs informal",
+      "lexis": "Argumentação, e-mails, apresentações, debate",
+      "persona_city": "Honolulu",
+      "conversation_prompt": "You are a friendly American native speaker from Honolulu. Let's have a 30-minute conversation about \"Argumentação, e-mails, apresentações, debate\". Use only vocabulary appropriate for level C1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about argumentação, e-mails, apresentações, debate.",
+      "objectives": [
+        "Usar discourse markers avançados para estruturar a fala.",
+        "Distinguir registro formal de informal.",
+        "Adaptar a linguagem ao contexto e ao interlocutor.",
+        "Argumentar e debater com clareza."
+      ],
+      "chunks": [
+        {
+          "en": "I couldn't agree more.",
+          "ipa": "/aɪ ˈkʊdnt əˈɡriː mɔːr/",
+          "pt": "Concordo plenamente.",
+          "use": "Para concordar enfaticamente."
+        },
+        {
+          "en": "I beg to differ.",
+          "ipa": "/aɪ bɛɡ tə ˈdɪfər/",
+          "pt": "Permita-me discordar.",
+          "use": "Discordância educada e formal."
+        },
+        {
+          "en": "That's a fair point.",
+          "ipa": "/ðæts ə fɛr pɔɪnt/",
+          "pt": "É um bom argumento.",
+          "use": "Para reconhecer um ponto."
+        },
+        {
+          "en": "Let me play devil's advocate.",
+          "ipa": "/lɛt miː pleɪ ˈdɛvl̩z ˈædvəkət/",
+          "pt": "Vou fazer o advogado do diabo.",
+          "use": "Para propor o contraponto."
+        },
+        {
+          "en": "To put it bluntly.",
+          "ipa": "/tə pʊt ɪt ˈblʌntli/",
+          "pt": "Falando sem rodeios.",
+          "use": "Para ser direto."
+        },
+        {
+          "en": "With all due respect.",
+          "ipa": "/wɪð ɔːl djuː rɪˈspɛkt/",
+          "pt": "Com o devido respeito.",
+          "use": "Antes de discordar formalmente."
+        },
+        {
+          "en": "That said.",
+          "ipa": "/ðæt sɛd/",
+          "pt": "Dito isso.",
+          "use": "Para introduzir uma ressalva."
+        },
+        {
+          "en": "On a serious note.",
+          "ipa": "/ɑːn ə ˈsɪriəs noʊt/",
+          "pt": "Falando sério.",
+          "use": "Para mudar para um tom sério."
+        },
+        {
+          "en": "To be fair.",
+          "ipa": "/tə biː fɛr/",
+          "pt": "Para ser justo.",
+          "use": "Para introduzir uma ponderação."
+        },
+        {
+          "en": "Let's agree to disagree.",
+          "ipa": "/lɛts əˈɡriː tə ˌdɪsəˈɡriː/",
+          "pt": "Vamos concordar em discordar.",
+          "use": "Para encerrar um impasse."
+        }
+      ],
+      "anki_sentences": [
+        "It's expensive; however, it's worth every penny. (É caro; porém, vale cada centavo.)",
+        "From my perspective, we should wait. (Do meu ponto de vista, deveríamos esperar.)",
+        "I see your point, but I have to disagree. (Entendo seu ponto, mas tenho que discordar.)",
+        "With all due respect, I think that's wrong. (Com o devido respeito, acho que está errado.)",
+        "At the end of the day, it's your decision. (No fim das contas, a decisão é sua.)",
+        "I couldn't agree more with that. (Concordo plenamente com isso.)",
+        "To be fair, both sides have a point. (Para ser justo, os dois lados têm razão.)",
+        "Let's agree to disagree on this one. (Vamos concordar em discordar nessa.)"
+      ]
+    },
+    {
+      "week": 25,
+      "phase": 4,
+      "level": "C1",
+      "title": "Nuances, Formação de Palavras e Sotaques",
+      "grammar": "Used to/would; prefixos e sufixos; variações regionais",
+      "lexis": "Vocabulário avançado, sotaques americanos",
+      "persona_city": "Anchorage",
+      "conversation_prompt": "You are a friendly American native speaker from Anchorage. Let's have a 30-minute conversation about \"Vocabulário avançado, sotaques americanos\". Use only vocabulary appropriate for level C1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about vocabulário avançado, sotaques americanos.",
+      "objectives": [
+        "Distinguir nuances entre palavras parecidas (used to/would, etc.).",
+        "Formar palavras com prefixos e sufixos.",
+        "Reconhecer variações regionais e sotaques americanos.",
+        "Expandir vocabulário de forma sistemática."
+      ],
+      "chunks": [
+        {
+          "en": "Come to think of it.",
+          "ipa": "/kʌm tə θɪŋk əv ɪt/",
+          "pt": "Pensando bem.",
+          "use": "Para reconsiderar algo."
+        },
+        {
+          "en": "Now that you mention it.",
+          "ipa": "/naʊ ðæt juː ˈmɛnʃən ɪt/",
+          "pt": "Agora que você falou.",
+          "use": "Para concordar após reflexão."
+        },
+        {
+          "en": "More often than not.",
+          "ipa": "/mɔːr ˈɔːfən ðæn nɑːt/",
+          "pt": "Na maioria das vezes.",
+          "use": "Para indicar frequência alta."
+        },
+        {
+          "en": "For the most part.",
+          "ipa": "/fər ðə moʊst pɑːrt/",
+          "pt": "Em grande parte.",
+          "use": "Para generalizar com ressalva."
+        },
+        {
+          "en": "Give or take.",
+          "ipa": "/ɡɪv ɔːr teɪk/",
+          "pt": "Mais ou menos.",
+          "use": "Para aproximar um valor."
+        },
+        {
+          "en": "By and large.",
+          "ipa": "/baɪ ənd lɑːrdʒ/",
+          "pt": "De modo geral.",
+          "use": "Para uma avaliação ampla."
+        },
+        {
+          "en": "If memory serves.",
+          "ipa": "/ɪf ˈmɛməri sɜːrvz/",
+          "pt": "Se a memória não falha.",
+          "use": "Para relatar com cautela."
+        },
+        {
+          "en": "On second thought.",
+          "ipa": "/ɑːn ˈsɛkənd θɔːt/",
+          "pt": "Pensando melhor.",
+          "use": "Para mudar de ideia."
+        },
+        {
+          "en": "As a rule of thumb.",
+          "ipa": "/æz ə ruːl əv θʌm/",
+          "pt": "Como regra geral.",
+          "use": "Para uma orientação prática."
+        },
+        {
+          "en": "When all is said and done.",
+          "ipa": "/wɛn ɔːl ɪz sɛd ənd dʌn/",
+          "pt": "No fim das contas.",
+          "use": "Para concluir."
+        }
+      ],
+      "anki_sentences": [
+        "I used to live in São Paulo when I was younger. (Eu morava em São Paulo quando era mais jovem.)",
+        "Every summer, we would go to the beach. (Todo verão, a gente ia à praia.)",
+        "I can hardly believe it. (Mal posso acreditar.)",
+        "Come to think of it, you're right. (Pensando bem, você tem razão.)",
+        "More often than not, it works. (Na maioria das vezes, funciona.)",
+        "On second thought, let's wait. (Pensando melhor, vamos esperar.)",
+        "I think you misunderstood me. (Acho que você me entendeu mal.)",
+        "By and large, the plan succeeded. (De modo geral, o plano deu certo.)"
+      ]
+    },
+    {
+      "week": 26,
+      "phase": 4,
+      "level": "C1",
+      "title": "Domínio Final: Debate, Fluência e Certificação",
+      "grammar": "Revisão integrada; fluência e clareza sob pressão",
+      "lexis": "Temas atuais, tecnologia, sociedade, futuro",
+      "persona_city": "Madison",
+      "conversation_prompt": "You are a friendly American native speaker from Madison. Let's have a 30-minute conversation about \"Temas atuais, tecnologia, sociedade, futuro\". Use only vocabulary appropriate for level C1. Correct my mistakes naturally during the conversation, without interrupting the flow. Start by asking me a simple question about temas atuais, tecnologia, sociedade, futuro.",
+      "objectives": [
+        "Integrar todas as estruturas em fala fluente e natural.",
+        "Sustentar um debate sobre temas atuais com clareza.",
+        "Demonstrar nível C1 funcional em um simulado oral.",
+        "Planejar a manutenção do inglês após o programa."
+      ],
+      "chunks": [
+        {
+          "en": "There's no denying that.",
+          "ipa": "/ðɛrz noʊ dɪˈnaɪɪŋ ðæt/",
+          "pt": "Não dá para negar que.",
+          "use": "Para afirmar com força."
+        },
+        {
+          "en": "It's worth pointing out.",
+          "ipa": "/ɪts wɜːrθ ˈpɔɪntɪŋ aʊt/",
+          "pt": "Vale ressaltar.",
+          "use": "Para destacar um ponto."
+        },
+        {
+          "en": "What strikes me most.",
+          "ipa": "/wʌt straɪks miː moʊst/",
+          "pt": "O que mais me chama atenção.",
+          "use": "Para enfatizar uma impressão."
+        },
+        {
+          "en": "I'd argue that.",
+          "ipa": "/aɪd ˈɑːrɡjuː ðæt/",
+          "pt": "Eu diria que.",
+          "use": "Para defender uma posição."
+        },
+        {
+          "en": "To a certain extent.",
+          "ipa": "/tə ə ˈsɜːrtn̩ ɪkˈstɛnt/",
+          "pt": "Até certo ponto.",
+          "use": "Para concordar parcialmente."
+        },
+        {
+          "en": "A double-edged sword.",
+          "ipa": "/ə ˈdʌbl̩ ɛdʒd sɔːrd/",
+          "pt": "Uma faca de dois gumes.",
+          "use": "Para algo com prós e contras."
+        },
+        {
+          "en": "Granted, but...",
+          "ipa": "/ˈɡræntɪd bʌt/",
+          "pt": "Concedo, mas...",
+          "use": "Para admitir e contrapor."
+        },
+        {
+          "en": "That's beside the point.",
+          "ipa": "/ðæts bɪˈsaɪd ðə pɔɪnt/",
+          "pt": "Isso não vem ao caso.",
+          "use": "Para redirecionar o foco."
+        },
+        {
+          "en": "When push comes to shove.",
+          "ipa": "/wɛn pʊʃ kʌmz tə ʃʌv/",
+          "pt": "Na hora do aperto.",
+          "use": "Para o momento decisivo."
+        },
+        {
+          "en": "At the end of the day.",
+          "ipa": "/æt ði ɛnd əv ðə deɪ/",
+          "pt": "No fim das contas.",
+          "use": "Para concluir um argumento."
+        }
+      ],
+      "anki_sentences": [
+        "In my view, technology is a double-edged sword. (Na minha opinião, a tecnologia é uma faca de dois gumes.)",
+        "There's no denying that practice makes progress. (Não dá para negar que a prática gera progresso.)",
+        "All things considered, it was a transformative journey. (Considerando tudo, foi uma jornada transformadora.)",
+        "I'd argue that speaking is the core skill. (Eu diria que falar é a habilidade central.)",
+        "What strikes me most is how much I've grown. (O que mais me chama atenção é o quanto evoluí.)",
+        "At the end of the day, it's about showing up. (No fim das contas, é sobre comparecer todo dia.)",
+        "This is just the beginning, not the end. (Este é só o começo, não o fim.)",
+        "I'm proud of how far I've come. (Tenho orgulho do quanto avancei.)"
+      ]
+    }
+  ]
+}

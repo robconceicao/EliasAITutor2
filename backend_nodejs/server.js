@@ -10,8 +10,27 @@ import dotenv from 'dotenv';
 import ws from 'ws';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { registerBargeInHandler, registerGeneration, clearGeneration } from './bargeInHandler.js';
 import { TurnTakingEngine, TURN_DECISION } from './turnTakingEngine.js';
+import {
+  buildSystemPrompt,
+  DEFAULT_ELIAS_SYSTEM_PROMPT,
+  phaseForWeek,
+} from './services/promptBuilder.js';
+import {
+  setMongoEnabled,
+  upsertWeeks,
+  getWeek,
+} from './services/programStore.js';
+import {
+  resolveMainChatVoiceId,
+  openTtsWebSocketWithFallback,
+  STREAM_MODEL_ID,
+} from './services/elevenLabsClient.js';
+import programRoutes from './routes/programRoutes.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env first (for any existing env vars)
 dotenv.config();
@@ -38,6 +57,8 @@ dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use(express.json({ limit: '2mb' }));
+app.use(programRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -54,13 +75,29 @@ const googleAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env
 let useMongo = false;
 if (process.env.MONGODB_URI) {
   mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
+    .then(async () => {
       console.log('✅ Conectado ao MongoDB');
       useMongo = true;
+      setMongoEnabled(true);
+      await loadCurriculumSeed();
     })
     .catch(err => console.error('❌ Erro no MongoDB:', err));
 } else {
   console.log('⚠️ MONGODB_URI não configurada. Usando histórico em memória por sessão.');
+  setMongoEnabled(false);
+  loadCurriculumSeed();
+}
+
+/** Load F1 curriculum seed into memory (+ Mongo if enabled). Idempotent. */
+async function loadCurriculumSeed() {
+  try {
+    const { loadCurriculumSeedFile } = await import('./services/loadCurriculumSeed.js');
+    const { version, weeks } = loadCurriculumSeedFile();
+    const n = await upsertWeeks(weeks);
+    console.log(`📚 Curriculum seed v${version ?? '?'} loaded: ${n} weeks`);
+  } catch (e) {
+    console.error('❌ Failed to load curriculum seed:', e.message);
+  }
 }
 
 // Schemas
@@ -72,47 +109,16 @@ const MensagemSchema = new mongoose.Schema({
 
 const ConversaSchema = new mongoose.Schema({
   userId: { type: String, required: true, unique: true },
-  mensagens: [MensagemSchema]
+  mensagens: [MensagemSchema],
+  /** ElevenLabs voice locked for this conversation (session continuity §7.2). */
+  voiceId: { type: String, default: null },
 });
 const Conversa = mongoose.model('Conversa', ConversaSchema);
 
-const SYSTEM_PROMPT = { 
+/** Default system prompt (non-program chat) — content unchanged for regression safety. */
+const SYSTEM_PROMPT = {
   role: 'system',
-  content: `You are Elias, a master of the "Natural Approach" (Stephen Krashen's theory). Your goal is subconscious ACQUISITION, not conscious learning.
-
-CORE PRINCIPLES:
-1. INPUT HYPOTHESIS (i+1): Respond with English that is JUST ONE STEP above the student's current complexity. Keep it 90% understandable.
-2. COMPELLING INPUT: Make the conversation so interesting (mystery, humor, drama) that the student forgets they are using a foreign language.
-3. LOW AFFECTIVE FILTER: Be extremely supportive. Simplify if they struggle.
-4. NO GRAMMAR LECTURES: We acquire grammar through understanding messages.
-5. STRICT BEGINNER MODE: If student is BEGINNER, use 3-8 words per sentence max. Use only A1 vocabulary. Repeat key words. Use emojis. Avoid complex clauses.
-
-TUTORING RULES:
-1. COMMUNICATIVE FIRST: Respond to the MEANING first. 
-2. MANDATORY RECASTING: Correct errors naturally in your reply without pointing them out.
-3. PRONUNCIATION: Add a "🗣️ Pronunciation Tip:..." inside <RESPONSE> if they make a phonetic error.
-4. VOCABULARY: Introduce 2-3 phrasal chunks.
-5. HELP REQUESTS: If they ask for help or say "Não entendi", translate/explain in Portuguese before continuing in English.
-
-RESPONSE FORMAT (XML):
-You MUST format your entire response using the following XML tags:
-<RESPONSE>
-Your conversational reply to the student in English. Keep it short (2-3 sentences max).
-</RESPONSE>
-<VOCABULARY>
-Chunk: definition | natural usage example
-</VOCABULARY>
-<MISTAKE_LOG>
-Mistake: [error] → [correction] | Why: [Natural recast explanation]
-If no mistakes: None
-</MISTAKE_LOG>
-<SENTIMENT>
-detected: [frustrated|enthusiastic|confused|neutral]
-confidence: [0-100]
-cue: [signal noticed]
-</SENTIMENT>
-
-IMPORTANT: You are a real person from San Diego. Never mention AI or rules. Focus on the CONNECTION.`
+  content: DEFAULT_ELIAS_SYSTEM_PROMPT,
 };
 
 const turnEngines = new Map();
@@ -123,11 +129,46 @@ io.on('connection', (socket) => {
 
   let userIdAtual = socket.id; // Fallback to socket ID if no auth
   let estadoGeracao = { ativo: false, elevenSocket: null, textoParcialIA: "" };
-  let historicoMemoria = [SYSTEM_PROMPT];
+  /** Active system prompt for this socket — default or program-mode. */
+  let activeSystemPrompt = { ...SYSTEM_PROMPT };
+  let programSession = { active: false, week: null, sessionType: null };
+  let historicoMemoria = [activeSystemPrompt];
+  /**
+   * Session-locked ElevenLabs voiceId (§7.1).
+   * Set once on iniciar_sessao / restore; never re-read env mid-conversation.
+   */
+  let sessionVoiceId = null;
 
   const engine = new TurnTakingEngine(socket.id);
   turnEngines.set(socket.id, engine);
   registerBargeInHandler(socket);
+
+  function applySystemPromptToHistory() {
+    if (historicoMemoria.length === 0 || historicoMemoria[0].role !== 'system') {
+      historicoMemoria.unshift(activeSystemPrompt);
+    } else {
+      historicoMemoria[0] = activeSystemPrompt;
+    }
+  }
+
+  /** Lock voice for this socket session; persist on Conversa when Mongo is on. */
+  async function lockSessionVoice(preferredFromDb = null) {
+    if (sessionVoiceId) return sessionVoiceId;
+    sessionVoiceId = preferredFromDb || resolveMainChatVoiceId();
+    console.log(`🔊 Session voice locked: ${sessionVoiceId} (model=${STREAM_MODEL_ID})`);
+    if (useMongo && userIdAtual) {
+      try {
+        await Conversa.updateOne(
+          { userId: userIdAtual },
+          { $set: { voiceId: sessionVoiceId } },
+          { upsert: false }
+        );
+      } catch (e) {
+        /* non-fatal */
+      }
+    }
+    return sessionVoiceId;
+  }
 
   engine.onDecision = async (decision, transcript) => {
       if (decision === TURN_DECISION.RESPOND) {
@@ -145,25 +186,113 @@ io.on('connection', (socket) => {
 
   socket.on('speech_start', () => engine.onSpeechStart());
 
-  // 1. Authenticate user and load history
-  socket.on('iniciar_sessao', async (userId) => {
+  // 1. Authenticate user and load history (default Elias chat — unchanged)
+  socket.on('iniciar_sessao', async (userIdOrPayload) => {
+    // Accept string userId (legacy) OR { userId, week, sessionType } for program mode
+    let userId = userIdOrPayload;
+    let week = null;
+    let sessionType = null;
+    if (userIdOrPayload && typeof userIdOrPayload === 'object') {
+      userId = userIdOrPayload.userId;
+      week = userIdOrPayload.week ?? null;
+      sessionType = userIdOrPayload.sessionType ?? null;
+    }
+
     userIdAtual = userId || socket.id;
-    console.log(`👤 Usuário ${userIdAtual} iniciou sessão.`);
-    
+    console.log(`👤 Usuário ${userIdAtual} iniciou sessão.`, week ? `(programa week=${week})` : '');
+
+    if (week != null) {
+      // F3 — Modo Programa: dynamic system prompt
+      const weekDoc = await getWeek(Number(week));
+      if (weekDoc) {
+        const phase = weekDoc.phase || phaseForWeek(Number(week));
+        activeSystemPrompt = buildSystemPrompt({
+          weekDoc,
+          phase,
+          programMode: true,
+        });
+        programSession = { active: true, week: Number(week), sessionType: sessionType || 'themed' };
+        historicoMemoria = [activeSystemPrompt];
+        await lockSessionVoice(null);
+        socket.emit('programa_sessao_pronta', {
+          week: Number(week),
+          phase,
+          sessionType: programSession.sessionType,
+          voiceId: sessionVoiceId,
+        });
+        return;
+      }
+      console.warn(`⚠️ Semana ${week} não encontrada — fallback prompt padrão`);
+    }
+
+    // Default non-program flow
+    activeSystemPrompt = { ...SYSTEM_PROMPT };
+    programSession = { active: false, week: null, sessionType: null };
+
     if (useMongo) {
       let conversa = await Conversa.findOne({ userId: userIdAtual });
       if (!conversa) {
-        conversa = new Conversa({ userId: userIdAtual, mensagens: [SYSTEM_PROMPT] });
+        conversa = new Conversa({
+          userId: userIdAtual,
+          mensagens: [SYSTEM_PROMPT],
+          voiceId: resolveMainChatVoiceId(),
+        });
         await conversa.save();
       }
       historicoMemoria = conversa.mensagens;
+      applySystemPromptToHistory();
+      // §7.2 — reuse stored voiceId; legacy docs without field → new default
+      await lockSessionVoice(conversa.voiceId || null);
+      if (!conversa.voiceId) {
+        conversa.voiceId = sessionVoiceId;
+        await conversa.save().catch(() => {});
+      }
       socket.emit('historico_carregado', conversa.mensagens);
+    } else {
+      historicoMemoria = [activeSystemPrompt];
+      await lockSessionVoice(null);
     }
   });
 
+  // Explicit program session start (F3)
+  socket.on('iniciar_sessao_programa', async (payload = {}) => {
+    const userId = payload.userId || userIdAtual;
+    const week = payload.week;
+    const sessionType = payload.sessionType || 'themed';
+    userIdAtual = userId || socket.id;
+    const weekDoc = await getWeek(Number(week));
+    if (!weekDoc) {
+      socket.emit('erro_backend', `Week ${week} not found`);
+      return;
+    }
+    const phase = weekDoc.phase || phaseForWeek(Number(week));
+    activeSystemPrompt = buildSystemPrompt({ weekDoc, phase, programMode: true });
+    programSession = { active: true, week: Number(week), sessionType };
+    historicoMemoria = [activeSystemPrompt];
+    await lockSessionVoice(null);
+    console.log(`📚 Programa sessão: week=${week} phase=${phase} type=${sessionType}`);
+    socket.emit('programa_sessao_pronta', {
+      week: Number(week),
+      phase,
+      sessionType,
+      voiceId: sessionVoiceId,
+    });
+  });
+
   // 1.1 Restore session after reconnect
-  socket.on('restore_session', (payload) => {
+  socket.on('restore_session', async (payload) => {
     console.log(`🔄 Tentativa de restaurar sessão: ${payload.sessionId}`);
+    // Keep existing sessionVoiceId if already locked; else load from DB or default (§7.2)
+    if (!sessionVoiceId) {
+      let storedVoice = null;
+      if (useMongo && userIdAtual) {
+        try {
+          const conv = await Conversa.findOne({ userId: userIdAtual }).lean();
+          storedVoice = conv?.voiceId || null;
+        } catch (_) {}
+      }
+      await lockSessionVoice(storedVoice);
+    }
     if (payload.isRestore && payload.historySnapshot) {
       try {
         const snapshot = JSON.parse(payload.historySnapshot);
@@ -173,7 +302,9 @@ io.on('connection', (socket) => {
             content: m.message
           }));
           if (historicoMemoria.length === 0 || historicoMemoria[0].role !== 'system') {
-            historicoMemoria.unshift(SYSTEM_PROMPT);
+            historicoMemoria.unshift(activeSystemPrompt);
+          } else {
+            historicoMemoria[0] = activeSystemPrompt;
           }
           console.log(`✅ Sessão restaurada com ${historicoMemoria.length} mensagens.`);
           socket.emit('session_restored', payload.sessionId);
@@ -182,6 +313,16 @@ io.on('connection', (socket) => {
         console.error("Erro ao restaurar sessão:", e);
       }
     }
+  });
+
+  // Expose transcript for F8 when client ends a practice session
+  socket.on('get_session_transcript', (ack) => {
+    const lines = historicoMemoria
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.content}`)
+      .join('\n');
+    if (typeof ack === 'function') ack({ transcript: lines });
+    else socket.emit('session_transcript', { transcript: lines });
   });
 
   // 2. User Barge-in (Interruption)
@@ -214,26 +355,17 @@ io.on('connection', (socket) => {
       await handleAIResponse(textoUsuario, modelOverride);
   });
 
-  // 4. Shadowing / Fallback TTS via ElevenLabs
+  // 4. Shadowing / Fallback TTS via ElevenLabs (same voice config as main chat)
   socket.on('shadow_speak', async (texto) => {
     try {
       console.log(`🎙️ Shadow speak requisitado: ${texto}`);
-      const voiceId = "pNInz6obpgDQGcFmaJcg"; // Adam
-      const elevenUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_flash_v2_5`;
-      const elevenSocket = new WebSocket(elevenUrl);
-      
-      await new Promise((resolve, reject) => {
-          elevenSocket.on('open', resolve);
-          elevenSocket.on('error', reject);
-      });
-
-      const initMessage = {
-          "text": " ",
-          "voice_settings": { "stability": 0.5, "similarity_boost": 0.8 },
-          "xi_api_key": process.env.ELEVENLABS_API_KEY || ""
-      };
-      elevenSocket.send(JSON.stringify(initMessage));
-
+      if (!sessionVoiceId) await lockSessionVoice(null);
+      const tts = await openTtsWebSocketWithFallback(sessionVoiceId);
+      if (tts.textOnly || !tts.socket) {
+        socket.emit('tts_unavailable', { reason: 'voice_open_failed', mode: 'text_only' });
+        return;
+      }
+      const elevenSocket = tts.socket;
       const pseudoEstado = { ativo: true };
       const seqTracker = { val: 0 };
       escutarRetornoElevenLabs(elevenSocket, socket, pseudoEstado, seqTracker);
@@ -244,6 +376,7 @@ io.on('connection', (socket) => {
       }
     } catch (e) {
       console.error("Erro no shadow_speak:", e);
+      socket.emit('tts_unavailable', { reason: e.message, mode: 'text_only' });
     }
   });
 
@@ -267,29 +400,19 @@ io.on('connection', (socket) => {
       const ttsAbort = new AbortController();
       registerGeneration(socket.id, llmAbort, ttsAbort);
 
-      // Connect to ElevenLabs WebSocket
-      const voiceId = "pNInz6obpgDQGcFmaJcg"; // Adam
-      const elevenUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=eleven_flash_v2_5`;
-      
-      const elevenSocket = new WebSocket(elevenUrl);
-      
-      // Wait for socket to open
-      await new Promise((resolve, reject) => {
-          elevenSocket.on('open', resolve);
-          elevenSocket.on('error', reject);
-      });
+      // Connect to ElevenLabs WebSocket (session-locked voice + fallback §8)
+      if (!sessionVoiceId) await lockSessionVoice(null);
+      const tts = await openTtsWebSocketWithFallback(sessionVoiceId);
+      const elevenSocket = tts.socket;
+      const textOnlyMode = tts.textOnly || !elevenSocket;
 
-      // Send initial configuration
-      const initMessage = {
-          "text": " ",
-          "voice_settings": { "stability": 0.5, "similarity_boost": 0.8 },
-          "xi_api_key": process.env.ELEVENLABS_API_KEY || ""
-      };
-      elevenSocket.send(JSON.stringify(initMessage));
-
-      estadoGeracao.elevenSocket = elevenSocket;
-      
-      escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker);
+      if (textOnlyMode) {
+        console.warn('📝 TTS unavailable — continuing in text-only mode');
+        socket.emit('tts_unavailable', { reason: 'voice_open_failed', mode: 'text_only' });
+      } else {
+        estadoGeracao.elevenSocket = elevenSocket;
+        escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker);
+      }
 
       // We should check llmAbort.signal.aborted during generation loop
 
@@ -317,7 +440,7 @@ io.on('connection', (socket) => {
         // Stream only the text inside <RESPONSE> tags to ElevenLabs and user app
         const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
         if (newResponseText.length > 0) {
-          if (elevenSocket.readyState === WebSocket.OPEN) {
+          if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
             elevenSocket.send(JSON.stringify({ "text": newResponseText, "try_trigger_generation": true }));
           }
           socket.emit("texto_chunk", newResponseText);
@@ -346,7 +469,7 @@ io.on('connection', (socket) => {
             const stream = await anthropic.messages.create({
               model: 'claude-sonnet-4-6',
               max_tokens: 250,
-              system: SYSTEM_PROMPT.content,
+              system: activeSystemPrompt.content,
               messages: mensagensParaClaude,
               stream: true,
             });
@@ -372,7 +495,7 @@ io.on('connection', (socket) => {
 
             const geminiModel = googleAI.getGenerativeModel({ 
               model: "gemini-1.5-flash",
-              systemInstruction: SYSTEM_PROMPT.content
+              systemInstruction: activeSystemPrompt.content
             });
 
             const result = await geminiModel.generateContentStream({
@@ -393,7 +516,7 @@ io.on('connection', (socket) => {
               throw new Error("DeepSeek API key is not configured");
             }
             const formattedMessages = [
-              { role: 'system', content: SYSTEM_PROMPT.content },
+              { role: 'system', content: activeSystemPrompt.content },
               ...historicoMemoria.filter(m => m.role !== 'system').map(m => ({
                 role: m.role === 'assistant' ? 'assistant' : 'user',
                 content: m.content
@@ -445,7 +568,7 @@ io.on('connection', (socket) => {
             }
             // Prepare formatted messages for Groq
             const formattedMessages = [
-              { role: 'system', content: SYSTEM_PROMPT.content },
+              { role: 'system', content: activeSystemPrompt.content },
               ...historicoMemoria.filter(m => m.role !== 'system').map(m => ({
                 role: m.role === 'assistant' ? 'assistant' : 'user',
                 content: m.content
@@ -501,7 +624,7 @@ io.on('connection', (socket) => {
         throw lastError || new Error("Todos os modelos de linguagem falharam na geração");
       }
 
-      if (elevenSocket.readyState === WebSocket.OPEN) {
+      if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
         elevenSocket.send(JSON.stringify({ "text": "" })); // send empty string to close generation
       }
 

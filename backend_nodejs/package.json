@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "seed": "node seedProgram.js",
+    "seed:tts": "node seedProgram.js --tts",
+    "test:program": "node test_program_api.js",
+    "test": "node test_program_api.js"
   },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
