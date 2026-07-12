@@ -25,6 +25,7 @@ import {
 } from './services/programStore.js';
 import {
   resolveMainChatVoiceId,
+  resolveFallbackVoiceId,
   openTtsWebSocketWithFallback,
   STREAM_MODEL_ID,
 } from './services/elevenLabsClient.js';
@@ -407,8 +408,13 @@ io.on('connection', (socket) => {
       const textOnlyMode = tts.textOnly || !elevenSocket;
 
       if (textOnlyMode) {
-        console.warn('📝 TTS unavailable — continuing in text-only mode');
-        socket.emit('tts_unavailable', { reason: 'voice_open_failed', mode: 'text_only' });
+        console.warn(
+          `📝 TTS unavailable — text-only mode. reason=${tts.error || 'voice_open_failed'}`
+        );
+        socket.emit('tts_unavailable', {
+          reason: tts.error || 'voice_open_failed',
+          mode: 'text_only',
+        });
       } else {
         estadoGeracao.elevenSocket = elevenSocket;
         escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker);
@@ -771,6 +777,20 @@ app.get('/', (req, res) => {
   res.send('Elias AI Tutor Backend is running!');
 });
 
+/** Lightweight health — no secrets. Used to verify deploy + TTS env. */
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    elevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
+    mainChatVoiceId: resolveMainChatVoiceId(),
+    fallbackVoiceId: resolveFallbackVoiceId(),
+    mongo: useMongo,
+  });
+});
+
 server.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(
+    `[boot] TTS main=${resolveMainChatVoiceId()} elevenLabsKey=${Boolean(process.env.ELEVENLABS_API_KEY)}`
+  );
 });

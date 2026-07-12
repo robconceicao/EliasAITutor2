@@ -187,7 +187,7 @@ export function openTtsWebSocket(voiceId, { timeoutMs = 8000 } = {}) {
  * 3) text-only (socket null)
  *
  * @param {string} preferredVoiceId
- * @returns {Promise<{ socket: import('ws').WebSocket|null, voiceId: string|null, textOnly: boolean }>}
+ * @returns {Promise<{ socket: import('ws').WebSocket|null, voiceId: string|null, textOnly: boolean, error: string|null }>}
  */
 export async function openTtsWebSocketWithFallback(preferredVoiceId) {
   const primary = preferredVoiceId || resolveMainChatVoiceId();
@@ -195,6 +195,12 @@ export async function openTtsWebSocketWithFallback(preferredVoiceId) {
   const candidates = [primary, fallback].filter(
     (v, i, arr) => v && arr.indexOf(v) === i
   );
+
+  if (!apiKey()) {
+    const msg = 'ELEVENLABS_API_KEY missing';
+    console.error(`[elevenLabs] ${msg} — text-only mode`);
+    return { socket: null, voiceId: null, textOnly: true, error: msg };
+  }
 
   let lastErr = null;
   for (const vid of candidates) {
@@ -206,17 +212,18 @@ export async function openTtsWebSocketWithFallback(preferredVoiceId) {
         );
       }
       // init already sent during handshake validation
-      return { socket, voiceId: vid, textOnly: false };
+      return { socket, voiceId: vid, textOnly: false, error: null };
     } catch (e) {
       lastErr = e;
       console.warn(`[elevenLabs] voice open failed (${vid}): ${e.message}`);
     }
   }
 
+  const errMsg = lastErr?.message || 'unknown';
   console.error(
-    `[elevenLabs] All chat voices failed — text-only mode. last=${lastErr?.message || 'unknown'}`
+    `[elevenLabs] All chat voices failed — text-only mode. last=${errMsg}`
   );
-  return { socket: null, voiceId: null, textOnly: true };
+  return { socket: null, voiceId: null, textOnly: true, error: errMsg };
 }
 
 // ─── Chunk pre-generation (F7) ──────────────────────────────
