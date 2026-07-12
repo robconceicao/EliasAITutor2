@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -201,17 +202,23 @@ private fun ProgramSessionTimerBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    "Semana $week · %d:%02d / %d min".format(mm, ss, goalMinutes),
+                    "PROGRAM · Semana $week",
                     color = if (goalReached) Color(0xFF10B981) else Accent,
-                    fontSize = 13.sp
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "%d:%02d / %d min".format(mm, ss, goalMinutes),
+                    color = Color(0xFFE8EAF0),
+                    fontSize = 14.sp
                 )
                 Text(
                     if (goalReached) "Meta atingida — continue se quiser"
-                    else "Pronúncia Máxima · IPA · schwa · linking · elisão · entonação",
+                    else "Pronúncia Máxima · relatório ≥10 min",
                     color = Muted,
-                    fontSize = 11.sp
+                    fontSize = 10.sp
                 )
             }
             TextButton(onClick = onEnd) {

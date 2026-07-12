@@ -370,8 +370,10 @@ private fun LevelSelectionBox(onLevelSelected: (String) -> Unit) {
             Text("To get started, tell me your current English level:",
                 color = Muted, fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
-            Text("💡 Tip: Elias speaks 100% English. If you don't understand something, press the Mic and say: 'Elias, não entendi, traduz pra mim?'",
-                color = Gold, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(
+                "💡 Chat livre: Elias fala em inglês. Não entendeu? Toque 🇧🇷 Traduzir na mensagem ou diga: “não entendi, traduz pra mim”.",
+                color = Gold, fontSize = 12.sp, lineHeight = 16.sp
+            )
             Spacer(Modifier.height(12.dp))
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { onLevelSelected("Beginner") }, modifier = Modifier.fillMaxWidth(),
