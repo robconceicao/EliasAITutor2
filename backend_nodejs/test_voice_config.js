@@ -46,6 +46,7 @@ try {
   assert.ok(url.includes(DEFAULT_MAIN_CHAT_VOICE_ID));
   assert.ok(url.includes('stream-input'));
   assert.ok(url.includes('eleven_flash_v2_5') || url.includes(STREAM_MODEL_ID));
+  assert.ok(url.includes('optimize_streaming_latency'), 'latency query present');
   assert.ok(!url.includes(LEGACY_ADAM_VOICE_ID));
 
   console.log('✅ voice config tests passed');

@@ -31,6 +31,7 @@ import {
   STREAM_MODEL_ID,
 } from './services/elevenLabsClient.js';
 import programRoutes from './routes/programRoutes.js';
+import { translateToPtBr } from './services/translationService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -366,6 +367,32 @@ io.on('connection', (socket) => {
   // 3. User Message Received
   socket.on('mensagem_usuario', async (textoUsuario, modelOverride) => {
       await handleAIResponse(textoUsuario, modelOverride);
+  });
+
+  // 3b. Contextual translation (Task Final v1.0) — discrete PT under Elias message
+  socket.on('traduzir_texto', async (payload = {}) => {
+    try {
+      const text =
+        typeof payload === 'string' ? payload : payload.text || payload.texto || '';
+      if (!text.trim()) {
+        socket.emit('traducao_pronta', { ok: false, error: 'empty' });
+        return;
+      }
+      const translation = await translateToPtBr(text);
+      socket.emit('traducao_pronta', {
+        ok: true,
+        text,
+        translation,
+        requestId: payload.requestId || null,
+      });
+    } catch (e) {
+      console.error('[traduzir_texto]', e.message);
+      socket.emit('traducao_pronta', {
+        ok: false,
+        error: e.message,
+        requestId: payload?.requestId || null,
+      });
+    }
   });
 
   // 4. Shadowing / Fallback TTS via ElevenLabs (same voice config as main chat)

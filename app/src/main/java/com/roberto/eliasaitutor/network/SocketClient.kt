@@ -92,6 +92,20 @@ object SocketClient {
     )
     val mensagemIaFlow: SharedFlow<UiChatBubble> = _mensagemIaFlow
 
+    data class TranslationResult(
+        val ok: Boolean,
+        val text: String,
+        val translation: String,
+        val requestId: String?,
+        val error: String? = null,
+    )
+
+    private val _traducaoFlow = MutableSharedFlow<TranslationResult>(
+        extraBufferCapacity = 5,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val traducaoFlow: SharedFlow<TranslationResult> = _traducaoFlow
+
     // Monitora as mudanças de rede
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -235,6 +249,23 @@ object SocketClient {
                     _erroFlow.tryEmit(err)
                 }
 
+                on("traducao_pronta") { args ->
+                    try {
+                        val data = args.firstOrNull() as? JSONObject ?: return@on
+                        _traducaoFlow.tryEmit(
+                            TranslationResult(
+                                ok = data.optBoolean("ok", false),
+                                text = data.optString("text"),
+                                translation = data.optString("translation"),
+                                requestId = data.optString("requestId").ifBlank { null },
+                                error = data.optString("error").ifBlank { null },
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse traducao_pronta: ${e.message}")
+                    }
+                }
+
                 connect()
             }
         } catch (e: Exception) {
@@ -361,6 +392,17 @@ object SocketClient {
     fun sendShadowSpeak(texto: String) {
         if (_connectionState.value == ConnectionState.CONNECTED) {
             socket?.emit("shadow_speak", texto)
+        }
+    }
+
+    /** Contextual translation request (LLM on backend). */
+    fun requestTranslation(text: String, requestId: String) {
+        if (_connectionState.value == ConnectionState.CONNECTED) {
+            val payload = JSONObject().apply {
+                put("text", text)
+                put("requestId", requestId)
+            }
+            socket?.emit("traduzir_texto", payload)
         }
     }
 

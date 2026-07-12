@@ -345,36 +345,65 @@ fun ProgramHomeScreen(
             }
         }
 
-        // Actions
-        Spacer(Modifier.height(8.dp))
-        ProgramActionButton(
-            icon = { Icon(Icons.AutoMirrored.Filled.Chat, null) },
-            label = "Sessão com Elias (temática)",
-            subtitle = "Meta ${ui.state.dailyGoalMinutes} min · tema + drills Pronúncia Máxima",
-            onClick = {
-                programVm.startConversationSession(
-                    ProgramSessionType.THEMED,
-                    ui.state.dailyGoalMinutes,
-                ) { week, title, lexis, grammar, phase ->
-                    onStartChat(
-                        week, title, lexis, grammar, phase,
-                        ProgramSessionType.THEMED.apiValue,
-                        ui.state.dailyGoalMinutes,
-                    )
+        // Primary CTA — wireframe: Iniciar Sessão de Hoje
+        Spacer(Modifier.height(12.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Surface),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Iniciar sessão de hoje",
+                    color = TextMain,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Text(
+                    "Semana ${ui.state.currentWeek} · ${ui.state.dailyGoalMinutes} min · TTS streaming · sem perguntar nível",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+                Button(
+                    onClick = {
+                        programVm.startConversationSession(
+                            ProgramSessionType.THEMED,
+                            ui.state.dailyGoalMinutes,
+                        ) { week, title, lexis, grammar, phase ->
+                            onStartChat(
+                                week, title, lexis, grammar, phase,
+                                ProgramSessionType.THEMED.apiValue,
+                                ui.state.dailyGoalMinutes,
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Chat, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Iniciar sessão", fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text("Foco de pronúncia de hoje", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Spacer(Modifier.height(6.dp))
+        // tags already above — drill CTA
+        ProgramActionButton(
+            icon = { Icon(Icons.Default.RecordVoiceOver, null) },
+            label = "Drill rápido (5–10 min)",
+            subtitle = "Chunks · IPA · shadowing intensivo",
+            onClick = { programVm.startChunksDrill() }
         )
         ProgramActionButton(
             icon = { Icon(Icons.Default.Bolt, null) },
             label = "Conversa rápida",
-            subtitle = "5 ou 10 min · mesmo foco de pronúncia",
+            subtitle = "5 ou 10 min · mesmo modo PROGRAM",
             onClick = { showQuickPick = true }
-        )
-        ProgramActionButton(
-            icon = { Icon(Icons.Default.RecordVoiceOver, null) },
-            label = "Shadowing intensivo · Chunks",
-            subtitle = "Drills IPA · schwa · linking · elisão · entonação",
-            onClick = { programVm.startChunksDrill() }
         )
         ProgramActionButton(
             icon = { Icon(Icons.Default.ShowChart, null) },

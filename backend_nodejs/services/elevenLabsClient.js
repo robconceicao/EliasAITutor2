@@ -80,8 +80,19 @@ function apiKey() {
   return process.env.ELEVENLABS_API_KEY || '';
 }
 
+/**
+ * Streaming WS URL — low latency defaults (Task Final v1.0):
+ * - model: eleven_flash_v2_5
+ * - optimize_streaming_latency=3 (max speed, slight quality tradeoff)
+ * - output_format pcm for Opus pipeline (handled after decode path)
+ */
 export function streamInputUrl(voiceId) {
-  return `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${STREAM_MODEL_ID}`;
+  const latency = process.env.ELEVENLABS_STREAM_LATENCY || '3';
+  const params = new URLSearchParams({
+    model_id: STREAM_MODEL_ID,
+    optimize_streaming_latency: String(latency),
+  });
+  return `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?${params.toString()}`;
 }
 
 /**
@@ -93,6 +104,10 @@ export function sendTtsInit(elevenSocket) {
       text: ' ',
       voice_settings: CHAT_VOICE_SETTINGS,
       xi_api_key: apiKey(),
+      // generation_config can nudge faster first byte on stream-input
+      generation_config: {
+        chunk_length_schedule: [50, 90, 120, 150],
+      },
     })
   );
 }

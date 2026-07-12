@@ -226,9 +226,14 @@ fun ChatScreen(vm: EliasViewModel) {
                     )
                 }
             }
-            items(bubbles) { bubble ->
+            items(bubbles.size) { index ->
+                val bubble = bubbles[index]
                 if (bubble.isUser) UserBubble(bubble.message)
-                else EliasBubble(bubble, vm)
+                else EliasBubble(
+                    bubble = bubble,
+                    onListen = { vm.speakText(bubble.message) },
+                    onTranslate = { vm.translateBubble(index) },
+                )
             }
 
             if (isLoading || isRecording || isIaSpeaking) {
@@ -396,7 +401,11 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun EliasBubble(bubble: UiChatBubble, vm: EliasViewModel) {
+private fun EliasBubble(
+    bubble: UiChatBubble,
+    onListen: () -> Unit,
+    onTranslate: () -> Unit,
+) {
     val sentimentColor = when (bubble.sentiment) {
         "frustrated"   -> Red
         "enthusiastic" -> Green
@@ -429,17 +438,60 @@ private fun EliasBubble(bubble: UiChatBubble, vm: EliasViewModel) {
                 Column {
                     val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
                     Text(parsedMessage, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
+
+                    // Tradução contextual discreta
+                    if (bubble.isTranslating) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Traduzindo…", color = Muted, fontSize = 12.sp, fontStyle = FontStyle.Italic)
+                    } else if (!bubble.translationPt.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            bubble.translationPt!!,
+                            color = Muted,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontStyle = FontStyle.Italic
+                        )
+                    }
+
                     Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                    ) {
                         FilledTonalButton(
-                            onClick = { vm.speakText(bubble.message) },
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Accent.copy(alpha = 0.1f), contentColor = Accent),
+                            onClick = onTranslate,
+                            enabled = !bubble.isTranslating && bubble.translationPt.isNullOrBlank(),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Purple.copy(alpha = 0.12f),
+                                contentColor = Purple
+                            ),
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        ) {
+                            Text("🇧🇷", fontSize = 12.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                when {
+                                    bubble.isTranslating -> "…"
+                                    !bubble.translationPt.isNullOrBlank() -> "OK"
+                                    else -> "Traduzir"
+                                },
+                                fontSize = 12.sp
+                            )
+                        }
+                        FilledTonalButton(
+                            onClick = onListen,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Accent.copy(alpha = 0.1f),
+                                contentColor = Accent
+                            ),
                             modifier = Modifier.height(32.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                         ) {
                             Icon(Icons.Default.VolumeUp, contentDescription = "Listen", modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Listen", fontSize = 12.sp)
+                            Text("Ouvir", fontSize = 12.sp)
                         }
                     }
                 }

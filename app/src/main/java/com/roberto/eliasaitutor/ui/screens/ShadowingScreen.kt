@@ -118,7 +118,7 @@ fun ShadowingScreen(vm: EliasViewModel) {
                 shape = RoundedCornerShape(24.dp)
             ) {
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LISTEN & REPEAT", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                    Text("ECHO · SHADOWING + IPA", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                     Spacer(Modifier.height(16.dp))
                     Text(
                         "\"$phrase\"",
@@ -128,6 +128,23 @@ fun ShadowingScreen(vm: EliasViewModel) {
                         textAlign = TextAlign.Center,
                         lineHeight = 32.sp
                     )
+                    val ipa by vm.shadowIpa.collectAsState()
+                    if (ipa.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            ipa,
+                            color = Accent,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "IPA · foque schwa /ə/, linking e ritmo",
+                            color = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
 

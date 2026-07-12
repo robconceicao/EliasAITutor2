@@ -36,18 +36,24 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
 
-    /** Active Modo Programa conversation (null = free chat / Natural Approach). */
-    data class ProgramChatContext(
-        val week: Int,
-        val title: String,
-        val lexis: String,
-        val grammar: String,
-        val phase: Int,
-        val sessionType: String,
+    /**
+     * Active chat flow: FREE by default; PROGRAM when started from Programa tab.
+     * Prefer [chatContext] for new code; [programChat] kept as convenience for UI.
+     */
+    private val _chatContext = MutableStateFlow(
+        com.roberto.eliasaitutor.model.ChatContext(
+            type = com.roberto.eliasaitutor.model.ChatType.FREE
+        )
     )
+    val chatContext: StateFlow<com.roberto.eliasaitutor.model.ChatContext> = _chatContext
 
-    private val _programChat = MutableStateFlow<ProgramChatContext?>(null)
-    val programChat: StateFlow<ProgramChatContext?> = _programChat
+    /** Non-null only in PROGRAM mode (week metadata for banners). */
+    val programChat: StateFlow<com.roberto.eliasaitutor.model.ChatContext?> =
+        _chatContext.map { ctx ->
+            if (ctx.type == com.roberto.eliasaitutor.model.ChatType.PROGRAM) ctx else null
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private var pendingTranslationIndex: Int = -1
 
     private val bargeInController by lazy {
         com.roberto.eliasaitutor.audio.BargeInController(
@@ -292,6 +298,26 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         viewModelScope.launch {
+            SocketClient.traducaoFlow.collect { result ->
+                val idx = result.requestId?.toIntOrNull() ?: pendingTranslationIndex
+                if (idx < 0) return@collect
+                val bubbles = _chatBubbles.value.toMutableList()
+                if (idx >= bubbles.size) return@collect
+                val b = bubbles[idx]
+                bubbles[idx] = if (result.ok && result.translation.isNotBlank()) {
+                    b.copy(translationPt = result.translation, isTranslating = false)
+                } else {
+                    b.copy(isTranslating = false)
+                }
+                _chatBubbles.value = bubbles
+                if (!result.ok) {
+                    _toastMessage.value = "Tradução indisponível: ${result.error ?: "tente de novo"}"
+                }
+                pendingTranslationIndex = -1
+            }
+        }
+
+        viewModelScope.launch {
             SocketClient.textoChunkFlow.collect { chunk ->
                 _isLoading.value = false
                 val bubbles = _chatBubbles.value.toMutableList()
@@ -464,17 +490,16 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Keep program prompt on reconnect; otherwise default free chat session. */
     private fun rebindSocketSession(userId: String) {
-        val prog = _programChat.value
-        if (prog != null) {
-            SocketClient.iniciarSessaoPrograma(userId, prog.week, prog.sessionType)
+        val ctx = _chatContext.value
+        if (ctx.type == com.roberto.eliasaitutor.model.ChatType.PROGRAM && ctx.week != null) {
+            SocketClient.iniciarSessaoPrograma(userId, ctx.week!!, ctx.sessionType)
         } else {
             SocketClient.iniciarSessao(userId)
         }
     }
 
     /**
-     * Start Modo Programa conversation UI: clear free-chat history, bind program
-     * context, kick Elias to open with the official week greeting (no level picker).
+     * PROGRAM flow (Task Final): no level picker, week prompt, auto TTS via backend stream.
      */
     fun beginProgramSession(
         week: Int,
@@ -485,7 +510,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         sessionType: String,
         userId: String,
     ) {
-        _programChat.value = ProgramChatContext(
+        _chatContext.value = com.roberto.eliasaitutor.model.ChatContext(
+            type = com.roberto.eliasaitutor.model.ChatType.PROGRAM,
             week = week,
             title = title,
             lexis = lexis,
@@ -498,46 +524,84 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         streamingBubbleIndex = -1
         isInterrupted = false
         _selectedScenario.value = ""
+        _isLoading.value = true
 
         SocketClient.iniciarSessaoPrograma(userId, week, sessionType)
 
-        // Hidden kickoff — backend prompt already has the opening template.
-        val kickoff =
-            "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
-                "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
-                "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level. " +
-                "Open with the official Portuguese greeting, then coach with full focus on " +
-                "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation. " +
-                "Use ready drills (1–5) with phrase+IPA+contrast+shadowing; demand excellence before next phrase."
-        SocketClient.enviarMensagem(kickoff)
-        _isLoading.value = true
+        // Brief delay so backend locks program prompt + TTS before kickoff (lower first-byte lag)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(450)
+            val kickoff =
+                "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
+                    "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
+                    "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level. " +
+                    "Open with the official Portuguese greeting, then coach with full focus on " +
+                    "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation. " +
+                    "Use ready drills (1–5) with phrase+IPA+contrast+shadowing; demand excellence before next phrase. " +
+                    "TTS streams automatically — speak naturally for voice."
+            SocketClient.enviarMensagem(kickoff)
+        }
     }
 
     fun endProgramSession() {
-        _programChat.value = null
+        _chatContext.value = com.roberto.eliasaitutor.model.ChatContext(
+            type = com.roberto.eliasaitutor.model.ChatType.FREE
+        )
         val p = profile.value
         if (p.userId.isNotEmpty() && SocketClient.connectionStatus.value) {
             SocketClient.iniciarSessao(p.userId)
         }
     }
 
+    /** Translate Elias bubble at [index] via backend LLM — shows PT under the message. */
+    fun translateBubble(index: Int) {
+        val bubbles = _chatBubbles.value
+        if (index !in bubbles.indices) return
+        val b = bubbles[index]
+        if (b.isUser || b.message.isBlank()) return
+        if (b.translationPt != null) return // already translated
+        pendingTranslationIndex = index
+        _chatBubbles.value = bubbles.toMutableList().also {
+            it[index] = b.copy(isTranslating = true)
+        }
+        SocketClient.requestTranslation(b.message, requestId = index.toString())
+    }
+
+    /** Translate the last Elias message (voice: "não entendi", "traduz pra mim"). */
+    fun translateLastEliasMessage() {
+        val idx = _chatBubbles.value.indexOfLast { !it.isUser && it.message.isNotBlank() }
+        if (idx >= 0) translateBubble(idx)
+    }
+
     fun sendMessage(userText: String) {
-        val program = _programChat.value
+        val isProgram =
+            _chatContext.value.type == com.roberto.eliasaitutor.model.ChatType.PROGRAM
         val scenario = _selectedScenario.value
         val scenarioData = GameConstants.SCENARIOS[scenario]
         val minLevel = scenarioData?.first ?: 1
         val p = profile.value
 
+        // Voice/command shortcut: translate last Elias turn without new LLM chat turn
+        val lower = userText.lowercase()
+        if (
+            lower.contains("não entendi") || lower.contains("nao entendi") ||
+            lower.contains("traduz") || lower.contains("traduza") ||
+            lower.contains("translate")
+        ) {
+            translateLastEliasMessage()
+            // Still forward to Elias so he can rephrase in simple English + PT scaffold
+        }
+
         // Scenario gates only apply outside program mode
-        if (program == null && p.level < minLevel && scenario !in p.unlockedScenarios) {
+        if (!isProgram && p.level < minLevel && scenario !in p.unlockedScenarios) {
             _toastMessage.value = "🔒 Requires Level $minLevel"
             return
         }
 
         val isFirstMessage = _chatBubbles.value.isEmpty()
         val enriched = when {
-            program != null -> {
-                // Never inject free-chat level profile in program mode
+            isProgram -> {
+                // Never inject free-chat level profile in PROGRAM mode
                 userText
             }
             isFirstMessage -> {
@@ -547,9 +611,9 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             else -> userText
         }
 
-        // In free chat first message is the level chip (not shown as bubble).
-        // In program mode always show Roberto's turns.
-        if (program != null || !isFirstMessage) {
+        // FREE first message is the level chip (not shown as bubble).
+        // PROGRAM always shows Roberto's turns.
+        if (isProgram || !isFirstMessage) {
             _chatBubbles.value = _chatBubbles.value + UiChatBubble(userText, isUser = true)
         }
 
@@ -563,20 +627,38 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     // ─────────────────────────────────────────────────────────────────────────
     // SHADOWING
     // ─────────────────────────────────────────────────────────────────────────
+    private val _shadowIpa = MutableStateFlow("")
+    val shadowIpa: StateFlow<String> = _shadowIpa
+
     fun generateShadowPhrase() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 val resp = AnthropicClient.api.generateMessage(ClaudeRequest(
                     messages = listOf(ClaudeMessage("user",
-                        "Generate ONE natural American English sentence (10-18 words) for pronunciation shadowing. " +
-                        "Conversational, intermediate level. Return ONLY the sentence."))
+                        "Generate ONE natural General American English sentence (10-18 words) for pronunciation shadowing. " +
+                        "Include schwa/linking where natural. Reply ONLY with JSON: " +
+                        "{\"phrase\":\"...\",\"ipa\":\"/.../\"}"))
                 ))
-                _shadowPhrase.value   = resp.content.firstOrNull()?.text?.trim()?.trim('"') ?: ""
-                _shadowScore.value    = null
+                val raw = resp.content.firstOrNull()?.text?.trim().orEmpty()
+                    .removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                try {
+                    val obj = JSONObject(raw)
+                    _shadowPhrase.value = obj.optString("phrase").ifBlank {
+                        "I want to go to America next summer."
+                    }
+                    _shadowIpa.value = obj.optString("ipa")
+                } catch (_: Exception) {
+                    _shadowPhrase.value = raw.trim('"').ifBlank {
+                        "I want to go to America next summer."
+                    }
+                    _shadowIpa.value = "/aɪ ˈwɑnə ɡoʊ tə əˈmɛɹɪkə nɛkst ˈsʌmɚ/"
+                }
+                _shadowScore.value = null
                 _shadowFeedback.value = ""
             } catch (e: Exception) {
-                _shadowPhrase.value = "The weather in California is usually sunny and warm throughout the year."
+                _shadowPhrase.value = "I want to go to America next summer."
+                _shadowIpa.value = "/aɪ ˈwɑnə ɡoʊ tə əˈmɛɹɪkə nɛkst ˈsʌmɚ/"
             } finally { _isLoading.value = false }
         }
     }
