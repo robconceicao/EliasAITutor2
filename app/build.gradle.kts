@@ -14,14 +14,26 @@ if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
 
+// Prefer env (CI) over local.properties for signing secrets
+fun prop(name: String, default: String = ""): String =
+    System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(name, default)
+
+// Liam — never Adam (legacy Default voices expire 2026-12-31)
+val defaultElevenLabsVoiceId = "TX3LPaxmHKxFdv7VOQHJ"
+
 android {
     signingConfigs {
+        // Only configured when a keystore file is present (local or CI-decoded).
         create("release") {
-            val keystoreFile = rootProject.file(localProperties.getProperty("KEYSTORE_FILE", "elias-release-key.jks"))
-            storeFile = keystoreFile
-            storePassword = localProperties.getProperty("KEYSTORE_PASSWORD", "")
-            keyAlias = localProperties.getProperty("KEY_ALIAS", "elias-key")
-            keyPassword = localProperties.getProperty("KEY_PASSWORD", "")
+            val keystorePath = prop("KEYSTORE_FILE", "elias-release-key.jks")
+            val keystoreFile = rootProject.file(keystorePath)
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = prop("KEYSTORE_PASSWORD")
+                keyAlias = prop("KEY_ALIAS", "elias-key")
+                keyPassword = prop("KEY_PASSWORD")
+            }
         }
     }
     namespace = "com.roberto.eliasaitutor"
@@ -36,22 +48,38 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "CLAUDE_API_KEY", "\"${localProperties.getProperty("CLAUDE_API_KEY", "")}\"")
-        buildConfigField("String", "DEEPSEEK_API_KEY", "\"${localProperties.getProperty("DEEPSEEK_API_KEY", "")}\"")
-        buildConfigField("String", "OPENAI_API_KEY", "\"${localProperties.getProperty("OPENAI_API_KEY", "")}\"")
-        buildConfigField("String", "ELEVENLABS_API_KEY", "\"${localProperties.getProperty("ELEVENLABS_API_KEY", "")}\"")
-        buildConfigField("String", "SUPABASE_URL", "\"${localProperties.getProperty("SUPABASE_URL", "")}\"")
-        buildConfigField("String", "SUPABASE_KEY", "\"${localProperties.getProperty("SUPABASE_KEY", "")}\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\"")
-        buildConfigField("String", "GROQ_API_KEY", "\"${localProperties.getProperty("GROQ_API_KEY", "")}\"")
-        buildConfigField("String", "CARTESIA_API_KEY", "\"${localProperties.getProperty("CARTESIA_API_KEY", "")}\"")
-        buildConfigField("String", "BACKEND_URL", "\"${localProperties.getProperty("BACKEND_URL", "http://10.0.2.2:3000")}\"")
+        buildConfigField("String", "CLAUDE_API_KEY", "\"${prop("CLAUDE_API_KEY")}\"")
+        buildConfigField("String", "DEEPSEEK_API_KEY", "\"${prop("DEEPSEEK_API_KEY")}\"")
+        buildConfigField("String", "OPENAI_API_KEY", "\"${prop("OPENAI_API_KEY")}\"")
+        buildConfigField("String", "ELEVENLABS_API_KEY", "\"${prop("ELEVENLABS_API_KEY")}\"")
+        // Optional client-side TTS; main chat TTS uses backend MAIN_CHAT_VOICE_ID.
+        buildConfigField(
+            "String",
+            "ELEVENLABS_VOICE_ID",
+            "\"${prop("ELEVENLABS_VOICE_ID", defaultElevenLabsVoiceId)}\""
+        )
+        buildConfigField("String", "SUPABASE_URL", "\"${prop("SUPABASE_URL")}\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"${prop("SUPABASE_KEY")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${prop("GEMINI_API_KEY")}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${prop("GROQ_API_KEY")}\"")
+        buildConfigField("String", "CARTESIA_API_KEY", "\"${prop("CARTESIA_API_KEY")}\"")
+        buildConfigField(
+            "String",
+            "BACKEND_URL",
+            "\"${prop("BACKEND_URL", "http://10.0.2.2:3000")}\""
+        )
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            // Sign with release keystore when available; otherwise debug key so CI can build.
+            val releaseKeystore = rootProject.file(prop("KEYSTORE_FILE", "elias-release-key.jks"))
+            signingConfig = if (releaseKeystore.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
