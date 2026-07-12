@@ -115,9 +115,9 @@ router.patch('/sessions/:id/end', async (req, res) => {
       duration_seconds: duration,
     });
 
-    // F8: feedback only for themed/quick >= 5 min
+    // F8: full report only for themed/quick >= 10 min (Elias master prompt)
     const needsFeedback =
-      (session.type === 'themed' || session.type === 'quick') && duration >= 300;
+      (session.type === 'themed' || session.type === 'quick') && duration >= 600;
 
     let feedback_status = 'none';
     if (needsFeedback) {
