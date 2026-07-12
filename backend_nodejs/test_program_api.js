@@ -119,6 +119,18 @@ async function main() {
   assert(pDefault.content.includes('Natural Approach'), 'default prompt unchanged');
   assert(!pDefault.content.includes('Fluência em Inglês em 6 Meses'), 'default is not program master');
 
+  const { computeTargetDate } = await import('./services/promptBuilder.js');
+  assert(computeTargetDate('2026-01-15') === '2026-07-15', 'target = start + 6 months');
+  const pTarget = buildSystemPrompt({
+    weekDoc: w3,
+    phase: 1,
+    programMode: true,
+    startDate: '2026-03-01',
+  });
+  assert(pTarget.content.includes('2026-03-01'), 'prompt injects start date');
+  assert(pTarget.content.includes('September') || pTarget.content.includes('2026-09-01'), 'prompt injects +6m target');
+  assert(!pTarget.content.includes('27 December 2026'), 'no fixed legacy target date');
+
   console.log('\n✅ All program API smoke tests passed');
 }
 

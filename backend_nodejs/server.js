@@ -22,6 +22,7 @@ import {
   setMongoEnabled,
   upsertWeeks,
   getWeek,
+  getProgramState,
 } from './services/programStore.js';
 import {
   resolveMainChatVoiceId,
@@ -207,10 +208,12 @@ io.on('connection', (socket) => {
       const weekDoc = await getWeek(Number(week));
       if (weekDoc) {
         const phase = weekDoc.phase || phaseForWeek(Number(week));
+        const progState = await getProgramState();
         activeSystemPrompt = buildSystemPrompt({
           weekDoc,
           phase,
           programMode: true,
+          startDate: progState?.start_date || null,
         });
         programSession = { active: true, week: Number(week), sessionType: sessionType || 'themed' };
         historicoMemoria = [activeSystemPrompt];
@@ -267,16 +270,25 @@ io.on('connection', (socket) => {
       return;
     }
     const phase = weekDoc.phase || phaseForWeek(Number(week));
-    activeSystemPrompt = buildSystemPrompt({ weekDoc, phase, programMode: true });
+    const progState = await getProgramState();
+    activeSystemPrompt = buildSystemPrompt({
+      weekDoc,
+      phase,
+      programMode: true,
+      startDate: progState?.start_date || null,
+    });
     programSession = { active: true, week: Number(week), sessionType };
     historicoMemoria = [activeSystemPrompt];
     await lockSessionVoice(null);
-    console.log(`📚 Programa sessão: week=${week} phase=${phase} type=${sessionType}`);
+    console.log(
+      `📚 Programa sessão: week=${week} phase=${phase} type=${sessionType} start=${progState?.start_date || '?'}`
+    );
     socket.emit('programa_sessao_pronta', {
       week: Number(week),
       phase,
       sessionType,
       voiceId: sessionVoiceId,
+      startDate: progState?.start_date || null,
     });
   });
 

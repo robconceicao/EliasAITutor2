@@ -136,3 +136,34 @@ object ProgramPhaseUi {
         else -> PhaseInfo("Programa", 0xFF64748B)
     }
 }
+
+/** Fluency target = start_date + 6 months (aligned with backend promptBuilder). */
+object ProgramDates {
+    fun targetDateIso(startDateYmd: String, months: Long = 6): String {
+        return try {
+            val start = java.time.LocalDate.parse(startDateYmd)
+            start.plusMonths(months).toString()
+        } catch (_: Exception) {
+            java.time.LocalDate.now().plusMonths(months).toString()
+        }
+    }
+
+    /** e.g. 12/01/2027 */
+    fun targetDateBr(startDateYmd: String): String {
+        return try {
+            val d = java.time.LocalDate.parse(targetDateIso(startDateYmd))
+            "%02d/%02d/%04d".format(d.dayOfMonth, d.monthValue, d.year)
+        } catch (_: Exception) {
+            "—"
+        }
+    }
+
+    fun startDateBr(startDateYmd: String): String {
+        return try {
+            val d = java.time.LocalDate.parse(startDateYmd)
+            "%02d/%02d/%04d".format(d.dayOfMonth, d.monthValue, d.year)
+        } catch (_: Exception) {
+            startDateYmd.ifBlank { "—" }
+        }
+    }
+}

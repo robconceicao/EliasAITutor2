@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.roberto.eliasaitutor.program.ProgramDates
 import com.roberto.eliasaitutor.program.ProgramPhaseUi
 import com.roberto.eliasaitutor.program.ProgramSessionType
 import com.roberto.eliasaitutor.program.ProgramViewModel
@@ -170,8 +171,14 @@ fun ProgramHomeScreen(
         ) {
             Column {
                 Text("Elias · Programa", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                val start = ui.state.startDate
+                val targetBr = if (start.isNotBlank()) {
+                    ProgramDates.targetDateBr(start)
+                } else {
+                    "6 meses após o início"
+                }
                 Text(
-                    "Fluência C1 · General American · até 27/12/2026",
+                    "Fluência C1 · General American · meta até $targetBr",
                     color = Muted,
                     fontSize = 11.sp
                 )
@@ -290,8 +297,10 @@ fun ProgramHomeScreen(
                         ) { Text("+1 sem.") }
                     }
                 } else {
+                    val startBr = ProgramDates.startDateBr(ui.state.startDate)
+                    val targetBr = ProgramDates.targetDateBr(ui.state.startDate)
                     Text(
-                        "Avanço automático · início ${ui.state.startDate}",
+                        "Avanço automático · início $startBr · meta C1 $targetBr",
                         color = Muted,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 8.dp)
@@ -428,18 +437,26 @@ private fun ProgramOnboardingDialog(onConfirm: (String, String) -> Unit) {
         title = { Text("Fluência em Inglês em 6 Meses") },
         text = {
             Column {
+                val targetBr = ProgramDates.targetDateBr(today)
                 Text(
-                    "Elias será seu tutor, mentor e coach de pronúncia (General American) até C1 — 27/12/2026.",
+                    "Elias será seu tutor, mentor e coach de pronúncia (General American) até C1.",
                     fontSize = 13.sp
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Diário: 90 min estudo + 30 min conversação. Nunca pergunte nível — a semana define o foco.",
+                    "Meta de fluência: 6 meses após o início → até $targetBr (se começar hoje).",
+                    fontSize = 12.sp,
+                    color = Muted
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Diário: 90 min estudo + 30 min conversação. O nível vem da semana + desempenho — nunca é perguntado.",
                     fontSize = 12.sp,
                     color = Muted
                 )
                 Spacer(Modifier.height(12.dp))
                 Text("Data de início: $today", fontSize = 13.sp)
+                Text("Meta C1: $targetBr", fontSize = 13.sp, color = Accent)
                 Spacer(Modifier.height(8.dp))
                 Row {
                     FilterChip(

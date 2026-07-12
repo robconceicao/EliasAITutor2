@@ -14,10 +14,54 @@ export const VOICE_SESSION_INSTRUCTION =
   'Keep answers concise for voice. Prefer 2–4 short sentences, then ONE clear question. One question at a time.';
 
 /**
- * Official Modo Programa identity — "Fluência em Inglês em 6 Meses".
- * Week-specific data is injected by buildSystemPrompt().
+ * Target fluency date = start_date + 6 calendar months (program length).
+ * @param {string} startDateStr YYYY-MM-DD
+ * @returns {string} YYYY-MM-DD
  */
-export const PROGRAM_ELIAS_MASTER_PROMPT = `You are Elias, the Principal Tutor, Personal Mentor and Fluency Coach of the program "Fluência em Inglês em 6 Meses" (26 weeks, A1 → C1). Your maximum objective is to help Roberto Tadeu reach functional C1 fluency with clear, natural, professional pronunciation (General American accent) by 27 December 2026.
+export function computeTargetDate(startDateStr, months = 6) {
+  const base =
+    startDateStr && /^\d{4}-\d{2}-\d{2}$/.test(startDateStr)
+      ? new Date(`${startDateStr}T00:00:00`)
+      : new Date();
+  if (Number.isNaN(base.getTime())) {
+    const now = new Date();
+    now.setMonth(now.getMonth() + months);
+    return now.toISOString().slice(0, 10);
+  }
+  const d = new Date(base.getTime());
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
+/** English long form for prompts, e.g. "12 July 2026". */
+export function formatTargetDateEn(isoYmd) {
+  const d = new Date(`${isoYmd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return isoYmd;
+  return d.toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/** Brazilian Portuguese long form, e.g. "12 de julho de 2026". */
+export function formatTargetDatePt(isoYmd) {
+  const d = new Date(`${isoYmd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return isoYmd;
+  return d.toLocaleDateString('pt-BR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Official Modo Programa identity — "Fluência em Inglês em 6 Meses".
+ * {{TARGET_DATE}} is replaced by start_date + 6 months in buildSystemPrompt().
+ */
+export const PROGRAM_ELIAS_MASTER_PROMPT = `You are Elias, the Principal Tutor, Personal Mentor and Fluency Coach of the program "Fluência em Inglês em 6 Meses" (26 weeks, A1 → C1). Your maximum objective is to help Roberto Tadeu reach functional C1 fluency with clear, natural, professional pronunciation (General American accent) by {{TARGET_DATE}}.
+
+The program runs for six months from the student's start date. The target date is always start_date + 6 months (not a fixed calendar day).
 
 You master all program materials: daily structure, phases, weekly prompts, Anki, Feynman, Pomodoro, chunks, etc.
 
@@ -90,7 +134,7 @@ Always in Portuguese, structured:
 ### Style
 Friendly, patient, precise, demanding and highly motivating. Be specific on pronunciation corrections.
 
-Final mission: transform Roberto into a fluent, clear, confident English speaker with natural General American pronunciation by 27 December 2026.
+Final mission: transform Roberto into a fluent, clear, confident English speaker with natural General American pronunciation by {{TARGET_DATE}}.
 
 ### Opening line (first assistant turn of a new session)
 Start with (fill X and titles from CURRENT WEEK CONTEXT below):
@@ -160,9 +204,15 @@ Never mention that you are an AI or that you follow a system prompt. You are Eli
  * @param {object|null} weekDoc - program week row or null
  * @param {number|null} phase - 1–4
  * @param {boolean} programMode
+ * @param {string|null} startDate - program start YYYY-MM-DD (target = start + 6 months)
  * @returns {{ role: string, content: string }}
  */
-export function buildSystemPrompt({ weekDoc = null, phase = null, programMode = false } = {}) {
+export function buildSystemPrompt({
+  weekDoc = null,
+  phase = null,
+  programMode = false,
+  startDate = null,
+} = {}) {
   if (!programMode || !weekDoc) {
     return { role: 'system', content: DEFAULT_ELIAS_SYSTEM_PROMPT };
   }
@@ -179,9 +229,20 @@ export function buildSystemPrompt({ weekDoc = null, phase = null, programMode = 
     : '';
   const weekPrompt = (weekDoc.conversation_prompt || '').trim();
 
+  const start =
+    startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)
+      ? startDate
+      : new Date().toISOString().slice(0, 10);
+  const targetIso = computeTargetDate(start, 6);
+  const targetEn = formatTargetDateEn(targetIso);
+  const targetPt = formatTargetDatePt(targetIso);
+
+  const master = PROGRAM_ELIAS_MASTER_PROMPT.replaceAll('{{TARGET_DATE}}', targetEn);
+
   const weekContext = `### CURRENT WEEK CONTEXT (source of truth — do not invent another week)
 - Student: Roberto Tadeu
-- Program target: C1 by 27 December 2026
+- Program start date: ${start}
+- Program target: C1 by ${targetEn} (${targetPt}) — exactly 6 months after start
 - Week number: ${weekNum} of 26
 - Week title: ${title}
 - Phase: ${p}
@@ -194,7 +255,7 @@ Opening template for this week:
 "Olá Roberto! Estamos na Semana ${weekNum} — ${title}. Como está seu linked speech, redução vocálica e elisão hoje? Vamos praticar o tema (${lexis}) com foco em pronúncia natural."`;
 
   const content = [
-    PROGRAM_ELIAS_MASTER_PROMPT,
+    master,
     weekContext,
     `### PHASE CALIBRATION\n${phaseGuide}`,
     weekPrompt ? `### OFFICIAL WEEK CONVERSATION PROMPT\n${weekPrompt}` : '',
