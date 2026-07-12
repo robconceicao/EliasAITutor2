@@ -329,6 +329,24 @@ object SocketClient {
         socket?.emit("iniciar_sessao", userId)
     }
 
+    /**
+     * F3 — start program-mode conversation with dynamic system prompt.
+     * Does not alter audio frame protocol.
+     */
+    fun iniciarSessaoPrograma(userId: String, week: Int, sessionType: String) {
+        val payload = JSONObject().apply {
+            put("userId", userId)
+            put("week", week)
+            put("sessionType", sessionType)
+        }
+        socket?.emit("iniciar_sessao_programa", payload)
+    }
+
+    /** Request backend transcript snapshot (response via session_transcript event). */
+    fun requestSessionTranscript() {
+        socket?.emit("get_session_transcript")
+    }
+
     fun enviarMensagem(texto: String) {
         if (_connectionState.value == ConnectionState.CONNECTED) {
             val msgObj = JSONObject().apply {

@@ -61,8 +61,10 @@ fun ChatScreen(vm: EliasViewModel) {
     val bubbles       by vm.chatBubbles.collectAsState()
     val isLoading     by vm.isLoading.collectAsState()
     val scenario      by vm.selectedScenario.collectAsState()
+    val programChat   by vm.programChat.collectAsState()
     val quiz          by vm.quiz.collectAsState()
     val quizAnswered  by vm.quizAnswered.collectAsState()
+    val inProgram = programChat != null
 
     var inputText     by remember { mutableStateOf("") }
     var showQuiz      by remember { mutableStateOf(false) }
@@ -93,65 +95,111 @@ fun ChatScreen(vm: EliasViewModel) {
 
     Column(Modifier.fillMaxSize().background(Bg).padding(12.dp)) {
 
-        // ── Scenario selector ──────────────────────────────────────────────
-        var scenarioExpanded by remember { mutableStateOf(false) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Scenario:", color = Muted, fontSize = 13.sp)
-            Spacer(Modifier.width(8.dp))
-            Box {
-                OutlinedButton(onClick = { scenarioExpanded = true },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent),
-                    border = BorderStroke(1.dp, Border)) {
-                    Text(scenario, fontSize = 13.sp)
-                }
-                DropdownMenu(scenarioExpanded, { scenarioExpanded = false },
-                    Modifier.background(Surface)) {
-                    GameConstants.SCENARIOS.forEach { (name, data) ->
-                        val locked = profile.level < data.first && name !in profile.unlockedScenarios
-                        DropdownMenuItem(
-                            text = { Text("$name ${if (locked) "🔒" else ""}", color = if (locked) Muted else TextMain) },
-                            onClick = { vm.selectScenario(name); scenarioExpanded = false },
+        // ── Header: program mode vs free chat scenario ───────────────────
+        val statusColor = when (connectionState) {
+            ConnectionState.CONNECTED -> Green
+            ConnectionState.CONNECTING -> Gold
+            ConnectionState.RECONNECTING -> Color(0xFFff9800)
+            ConnectionState.DISCONNECTED -> Red
+        }
+        val statusText = when (connectionState) {
+            ConnectionState.CONNECTED -> "Online"
+            ConnectionState.CONNECTING -> "Connecting..."
+            ConnectionState.RECONNECTING -> "Reconnecting..."
+            ConnectionState.DISCONNECTED -> "Offline"
+        }
+
+        if (inProgram) {
+            val pc = programChat!!
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Elias · Semana ${pc.week}",
+                            color = Accent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
                         )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(statusColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Box(
+                                Modifier.size(6.dp).clip(CircleShape).background(statusColor)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(pc.title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    if (pc.lexis.isNotBlank()) {
+                        Text("Tema: ${pc.lexis}", color = Muted, fontSize = 11.sp)
+                    }
+                    Text(
+                        "Foco: linked speech · schwa · elisão · IPA · shadowing",
+                        color = Purple,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        } else {
+            var scenarioExpanded by remember { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Scenario:", color = Muted, fontSize = 13.sp)
+                Spacer(Modifier.width(8.dp))
+                Box {
+                    OutlinedButton(onClick = { scenarioExpanded = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent),
+                        border = BorderStroke(1.dp, Border)) {
+                        Text(scenario.ifBlank { "Livre" }, fontSize = 13.sp)
+                    }
+                    DropdownMenu(scenarioExpanded, { scenarioExpanded = false },
+                        Modifier.background(Surface)) {
+                        GameConstants.SCENARIOS.forEach { (name, data) ->
+                            val locked = profile.level < data.first && name !in profile.unlockedScenarios
+                            DropdownMenuItem(
+                                text = { Text("$name ${if (locked) "🔒" else ""}", color = if (locked) Muted else TextMain) },
+                                onClick = { vm.selectScenario(name); scenarioExpanded = false },
+                            )
+                        }
                     }
                 }
-            }
-            Spacer(Modifier.weight(1f))
-            val bonus = GameConstants.SCENARIOS[scenario]?.second ?: 0
-            if (bonus > 0) {
-                Text("+$bonus XP", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(12.dp))
-            }
-            
-            // Connection Status Badge
-            val statusColor = when (connectionState) {
-                ConnectionState.CONNECTED -> Green
-                ConnectionState.CONNECTING -> Gold
-                ConnectionState.RECONNECTING -> Color(0xFFff9800)
-                ConnectionState.DISCONNECTED -> Red
-            }
-            val statusText = when (connectionState) {
-                ConnectionState.CONNECTED -> "Online"
-                ConnectionState.CONNECTING -> "Connecting..."
-                ConnectionState.RECONNECTING -> "Reconnecting..."
-                ConnectionState.DISCONNECTED -> "Offline"
-            }
-            
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(statusColor.copy(alpha = 0.15f))
-                    .border(1.dp, statusColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Box(
-                    Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(statusColor)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                val bonus = GameConstants.SCENARIOS[scenario]?.second ?: 0
+                if (bonus > 0) {
+                    Text("+$bonus XP", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(12.dp))
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(statusColor.copy(alpha = 0.15f))
+                        .border(1.dp, statusColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(statusText, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
@@ -161,11 +209,21 @@ fun ChatScreen(vm: EliasViewModel) {
         LazyColumn(state = listState, modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
-            if (bubbles.isEmpty()) {
+            if (bubbles.isEmpty() && !inProgram) {
                 item {
                     LevelSelectionBox { level ->
                         vm.sendMessage(level)
                     }
+                }
+            }
+            if (bubbles.isEmpty() && inProgram && isLoading) {
+                item {
+                    Text(
+                        "Elias está preparando a abertura da semana…",
+                        color = Muted,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             }
             items(bubbles) { bubble ->

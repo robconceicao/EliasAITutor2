@@ -36,6 +36,19 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
 
+    /** Active Modo Programa conversation (null = free chat / Natural Approach). */
+    data class ProgramChatContext(
+        val week: Int,
+        val title: String,
+        val lexis: String,
+        val grammar: String,
+        val phase: Int,
+        val sessionType: String,
+    )
+
+    private val _programChat = MutableStateFlow<ProgramChatContext?>(null)
+    val programChat: StateFlow<ProgramChatContext?> = _programChat
+
     private val bargeInController by lazy {
         com.roberto.eliasaitutor.audio.BargeInController(
             audioPlayer = opusAudioPlayer,
@@ -236,7 +249,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             profile.collect { p ->
                 if (p.userId.isNotEmpty() && SocketClient.connectionStatus.value) {
-                    SocketClient.iniciarSessao(p.userId)
+                    rebindSocketSession(p.userId)
                 }
             }
         }
@@ -246,7 +259,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                 if (connected) {
                     val p = profile.value
                     if (p.userId.isNotEmpty()) {
-                        SocketClient.iniciarSessao(p.userId)
+                        rebindSocketSession(p.userId)
                     }
                 }
             }
@@ -449,32 +462,98 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     // ─────────────────────────────────────────────────────────────────────────
     fun selectScenario(name: String) { _selectedScenario.value = name }
 
+    /** Keep program prompt on reconnect; otherwise default free chat session. */
+    private fun rebindSocketSession(userId: String) {
+        val prog = _programChat.value
+        if (prog != null) {
+            SocketClient.iniciarSessaoPrograma(userId, prog.week, prog.sessionType)
+        } else {
+            SocketClient.iniciarSessao(userId)
+        }
+    }
+
+    /**
+     * Start Modo Programa conversation UI: clear free-chat history, bind program
+     * context, kick Elias to open with the official week greeting (no level picker).
+     */
+    fun beginProgramSession(
+        week: Int,
+        title: String,
+        lexis: String,
+        grammar: String,
+        phase: Int,
+        sessionType: String,
+        userId: String,
+    ) {
+        _programChat.value = ProgramChatContext(
+            week = week,
+            title = title,
+            lexis = lexis,
+            grammar = grammar,
+            phase = phase,
+            sessionType = sessionType,
+        )
+        _chatBubbles.value = emptyList()
+        claudeHistory.clear()
+        streamingBubbleIndex = -1
+        isInterrupted = false
+        _selectedScenario.value = ""
+
+        SocketClient.iniciarSessaoPrograma(userId, week, sessionType)
+
+        // Hidden kickoff — backend prompt already has the opening template.
+        val kickoff =
+            "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
+                "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
+                "Do NOT ask level. Open immediately with the official Portuguese greeting for this week " +
+                "(linked speech, redução vocálica, elisão), then continue coaching in English " +
+                "with IPA + shadowing focus when appropriate."
+        SocketClient.enviarMensagem(kickoff)
+        _isLoading.value = true
+    }
+
+    fun endProgramSession() {
+        _programChat.value = null
+        val p = profile.value
+        if (p.userId.isNotEmpty() && SocketClient.connectionStatus.value) {
+            SocketClient.iniciarSessao(p.userId)
+        }
+    }
+
     fun sendMessage(userText: String) {
+        val program = _programChat.value
         val scenario = _selectedScenario.value
         val scenarioData = GameConstants.SCENARIOS[scenario]
         val minLevel = scenarioData?.first ?: 1
         val p = profile.value
 
-        if (p.level < minLevel && scenario !in p.unlockedScenarios) {
+        // Scenario gates only apply outside program mode
+        if (program == null && p.level < minLevel && scenario !in p.unlockedScenarios) {
             _toastMessage.value = "🔒 Requires Level $minLevel"
             return
         }
 
         val isFirstMessage = _chatBubbles.value.isEmpty()
-        val enriched = if (isFirstMessage) {
-            "Student English Level Profile: $userText\nPlease introduce yourself as Elias and start the conversation immediately matching this level."
-        } else if (scenario.isNotEmpty()) {
-            "[Scenario: $scenario]\n$userText"
-        } else {
-            userText
+        val enriched = when {
+            program != null -> {
+                // Never inject free-chat level profile in program mode
+                userText
+            }
+            isFirstMessage -> {
+                "Student English Level Profile: $userText\nPlease introduce yourself as Elias and start the conversation immediately matching this level."
+            }
+            scenario.isNotEmpty() -> "[Scenario: $scenario]\n$userText"
+            else -> userText
         }
 
-        if (!isFirstMessage) {
+        // In free chat first message is the level chip (not shown as bubble).
+        // In program mode always show Roberto's turns.
+        if (program != null || !isFirstMessage) {
             _chatBubbles.value = _chatBubbles.value + UiChatBubble(userText, isUser = true)
         }
-        
+
         SocketClient.enviarMensagem(enriched)
-        
+
         _isLoading.value = true
         isInterrupted = false
         streamingBubbleIndex = -1

@@ -5,12 +5,23 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { updateSessionFeedback, getSession } from './programStore.js';
 
-const FEEDBACK_PROMPT = `Based on this English practice conversation transcript, reply in Brazilian Portuguese with strict JSON:
-{"mistakes":[{"said":"...","correct":"...","note":"..."}],
- "better_phrases":["..."],
- "cefr_estimate":"A1|A2|B1|B2|C1",
- "next_focus":"..."}
-Rules: mistakes max 5, better_phrases max 3. No text outside the JSON.`;
+const FEEDBACK_PROMPT = `You are Elias, fluency coach. Analyze this English practice transcript for Roberto.
+Reply ONLY in Brazilian Portuguese with strict JSON (no markdown, no extra text):
+{
+  "mistakes":[
+    {"said":"...","correct":"...","note":"...","ipa":"/.../","mouth_tip":"instrução de boca/língua/ar"}
+  ],
+  "better_phrases":["forma mais natural 1","2","3"],
+  "pronunciation_focus":"feedback específico sobre redução vocálica (schwa), linked speech e elisão",
+  "cefr_estimate":"A1|A2|B1|B2|C1",
+  "next_focus":"foco da próxima sessão (quase sempre inclui pronúncia avançada)",
+  "motivation":"motivação personalizada curta"
+}
+Rules:
+- mistakes max 5; prioritize pronunciation (IPA, schwa, linking, elision) and serious grammar.
+- better_phrases max 3.
+- Always fill pronunciation_focus even if brief.
+- No text outside the JSON.`;
 
 /** ~8k tokens ≈ 32k chars conservative (D3) */
 const MAX_TRANSCRIPT_CHARS = 32000;
@@ -38,11 +49,19 @@ function parseFeedbackJson(raw) {
   try {
     const obj = JSON.parse(s.slice(start, end + 1));
     if (!Array.isArray(obj.mistakes)) obj.mistakes = [];
-    obj.mistakes = obj.mistakes.slice(0, 5);
+    obj.mistakes = obj.mistakes.slice(0, 5).map((m) => ({
+      said: m?.said || '',
+      correct: m?.correct || '',
+      note: m?.note || '',
+      ipa: m?.ipa || '',
+      mouth_tip: m?.mouth_tip || m?.mouthTip || '',
+    }));
     if (!Array.isArray(obj.better_phrases)) obj.better_phrases = [];
     obj.better_phrases = obj.better_phrases.slice(0, 3);
     if (!obj.cefr_estimate) obj.cefr_estimate = 'A2';
     if (!obj.next_focus) obj.next_focus = '';
+    if (!obj.pronunciation_focus) obj.pronunciation_focus = '';
+    if (!obj.motivation) obj.motivation = '';
     return obj;
   } catch {
     return null;

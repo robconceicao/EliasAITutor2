@@ -33,6 +33,9 @@ interface ElevenLabsApi {
 }
 
 object ElevenLabsClient {
+    /** Default voice for residual client-side TTS (never Adam). Override via ELEVENLABS_VOICE_ID. */
+    val defaultVoiceId: String get() = BuildConfig.ELEVENLABS_VOICE_ID
+
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
@@ -49,5 +52,9 @@ object ElevenLabsClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ElevenLabsApi::class.java)
+    }
+
+    suspend fun textToSpeech(text: String, voiceId: String = defaultVoiceId): ResponseBody {
+        return api.textToSpeech(voiceId, TTSRequest(text = text))
     }
 }

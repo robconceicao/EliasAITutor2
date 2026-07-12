@@ -33,8 +33,11 @@ object GameConstants {
         "🎤 The Big Stage"          to Pair(10, 100),
     )
 
-    val VOICE_AMERICAN = "pNInz6obpgDQGcFmaJgB"  // Adam
-    val VOICE_BRITISH  = "ErXwobaYiN019PkySvjV"  // Antoni
+    // Non-legacy ElevenLabs voices (Default Adam/Antoni expire 2026-12-31).
+    // Main chat TTS runs on backend via MAIN_CHAT_VOICE_ID; these constants
+    // are for any residual client-side REST calls only.
+    val VOICE_AMERICAN = "TX3LPaxmHKxFdv7VOQHJ"  // Liam — clear male (D5)
+    val VOICE_BRITISH  = "iP95p4xoKVk53GoZ742B"  // Chris — fallback family
 
     const val SYSTEM_PROMPT = """You are Elias, a master of the "Natural Approach" (Stephen Krashen's theory). 
 Your goal is subconscious ACQUISITION, not conscious learning.

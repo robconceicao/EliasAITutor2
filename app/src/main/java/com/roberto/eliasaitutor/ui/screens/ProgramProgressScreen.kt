@@ -1,0 +1,160 @@
+package com.roberto.eliasaitutor.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.roberto.eliasaitutor.program.ProgramPhaseUi
+import com.roberto.eliasaitutor.program.ProgramViewModel
+
+private val Bg = Color(0xFF0d0f14)
+private val Surface = Color(0xFF161922)
+private val Accent = Color(0xFF4f8ef7)
+private val Muted = Color(0xFF7a8099)
+private val TextMain = Color(0xFFE8EAF0)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProgramProgressScreen(
+    programVm: ProgramViewModel,
+    onBack: () -> Unit,
+) {
+    val ui by programVm.ui.collectAsState()
+    val p = ui.progress
+    val week = ui.state.currentWeek
+
+    Column(Modifier.fillMaxSize().background(Bg)) {
+        TopAppBar(
+            title = { Text("Progresso", color = TextMain) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TextMain)
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Bg)
+        )
+
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard("Streak", "${p.streak} dias", Modifier.weight(1f))
+                StatCard("Recorde", "${p.bestStreak} dias", Modifier.weight(1f))
+                StatCard("Hoje", "${p.todayMinutes} min", Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Text("Jornada 1 → 26", color = TextMain, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            JourneyBar(currentWeek = week)
+
+            Spacer(Modifier.height(20.dp))
+            Text("Últimos 30 dias", color = TextMain, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(7),
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                userScrollEnabled = false
+            ) {
+                items(p.days.takeLast(30)) { day ->
+                    val intensity = (day.minutes / 30f).coerceIn(0f, 1f)
+                    Box(
+                        Modifier
+                            .aspectRatio(1f)
+                            .background(
+                                if (day.minutes > 0) Accent.copy(alpha = 0.25f + 0.75f * intensity)
+                                else Color(0xFF2A2E3A),
+                                RoundedCornerShape(4.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (day.minutes > 0) {
+                            Text("${day.minutes}", color = TextMain, fontSize = 8.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+    ) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(label, color = Muted, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun JourneyBar(currentWeek: Int) {
+    Column {
+        Row(Modifier.fillMaxWidth().height(12.dp)) {
+            for (phase in 1..4) {
+                val phaseColor = Color(ProgramPhaseUi.info(phase).color)
+                val weeksInPhase = when (phase) {
+                    1 -> 6
+                    2 -> 7
+                    3 -> 7
+                    else -> 6
+                }
+                val startWeek = when (phase) {
+                    1 -> 1
+                    2 -> 7
+                    3 -> 14
+                    else -> 21
+                }
+                val filled = when {
+                    currentWeek >= startWeek + weeksInPhase - 1 -> 1f
+                    currentWeek < startWeek -> 0f
+                    else -> (currentWeek - startWeek + 1).toFloat() / weeksInPhase
+                }
+                Box(
+                    Modifier
+                        .weight(weeksInPhase.toFloat())
+                        .fillMaxHeight()
+                        .padding(horizontal = 1.dp)
+                        .background(Color(0xFF2A2E3A), RoundedCornerShape(4.dp))
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(filled)
+                            .background(phaseColor, RoundedCornerShape(4.dp))
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf("F1 A1", "F2 A2", "F3 B1", "F4 C1").forEach {
+                Text(it, color = Muted, fontSize = 10.sp)
+            }
+        }
+        Text("Semana atual: $currentWeek / 26", color = Accent, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+    }
+}

@@ -4,26 +4,28 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.roberto.eliasaitutor.program.ProgramViewModel
 import com.roberto.eliasaitutor.ui.screens.*
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 
@@ -33,22 +35,51 @@ private val Accent  = Color(0xFF4f8ef7)
 private val Muted   = Color(0xFF7a8099)
 
 class MainActivity : ComponentActivity() {
+    private val eliasVm: EliasViewModel by viewModels { EliasViewModel.Factory(application) }
+    private val programVm: ProgramViewModel by viewModels { ProgramViewModel.Factory(application) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val viewModel: EliasViewModel by viewModels { EliasViewModel.Factory(application) }
-
+        val openProgram = intent?.getBooleanExtra("open_program", false) == true
         setContent {
-            EliasApp(viewModel)
+            EliasApp(eliasVm, programVm, initialTab = if (openProgram) 0 else 1)
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 }
 
 @Composable
-fun EliasApp(vm: EliasViewModel) {
-    var currentTab by remember { mutableIntStateOf(0) }
+fun EliasApp(
+    vm: EliasViewModel,
+    programVm: ProgramViewModel,
+    initialTab: Int = 1,
+) {
+    var currentTab by remember { mutableIntStateOf(initialTab) }
+    var programSubScreen by remember { mutableStateOf("home") } // home | progress
     val context = LocalContext.current
     val toastMsg by vm.toastMessage.collectAsState()
-    
+    val profile by vm.profile.collectAsState()
+    val practice by programVm.practice.collectAsState()
+    val bubbles by vm.chatBubbles.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // D1 — pause timer when app backgrounds
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> programVm.onAppForeground()
+                Lifecycle.Event.ON_PAUSE -> programVm.onAppBackground()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
     LaunchedEffect(toastMsg) {
         toastMsg?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
@@ -57,9 +88,10 @@ fun EliasApp(vm: EliasViewModel) {
     }
 
     val tabs = listOf(
+        TabItem("Programa", Icons.Default.School),
         TabItem("Immersion", Icons.Default.Hearing),
         TabItem("Chat", Icons.AutoMirrored.Filled.Chat),
-        TabItem("Echo Mode", Icons.Default.GraphicEq),
+        TabItem("Echo", Icons.Default.GraphicEq),
         TabItem("Progress", Icons.AutoMirrored.Filled.ShowChart),
         TabItem("Store", Icons.Default.Store)
     )
@@ -70,9 +102,12 @@ fun EliasApp(vm: EliasViewModel) {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = currentTab == index,
-                        onClick = { currentTab = index },
+                        onClick = {
+                            currentTab = index
+                            if (index == 0) programSubScreen = "home"
+                        },
                         icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title, fontSize = 10.sp) },
+                        label = { Text(tab.title, fontSize = 9.sp) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Accent,
                             selectedTextColor = Accent,
@@ -86,13 +121,103 @@ fun EliasApp(vm: EliasViewModel) {
         },
         containerColor = Bg
     ) { innerPadding ->
-        Surface(modifier = Modifier.padding(innerPadding), color = Bg) {
+        Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (currentTab) {
-                0 -> ImmersionScreen(vm)
-                1 -> ChatScreen(vm)
-                2 -> ShadowingScreen(vm)
-                3 -> ProgressScreen(vm)
-                4 -> StoreScreen(vm)
+                0 -> {
+                    if (programSubScreen == "progress") {
+                        ProgramProgressScreen(programVm) { programSubScreen = "home" }
+                    } else {
+                        ProgramHomeScreen(
+                            programVm = programVm,
+                            userId = profile.userId.ifBlank { "local_user" },
+                            onStartChat = { week, title, lexis, grammar, phase, sessionType, _ ->
+                                val uid = profile.userId.ifBlank { "local_user" }
+                                vm.beginProgramSession(
+                                    week = week,
+                                    title = title,
+                                    lexis = lexis,
+                                    grammar = grammar,
+                                    phase = phase,
+                                    sessionType = sessionType,
+                                    userId = uid,
+                                )
+                                currentTab = 2
+                            },
+                            onOpenProgress = { programSubScreen = "progress" },
+                        )
+                    }
+                }
+                1 -> ImmersionScreen(vm)
+                2 -> ChatScreen(vm)
+                3 -> ShadowingScreen(vm)
+                4 -> ProgressScreen(vm)
+                5 -> StoreScreen(vm)
+            }
+
+            // F4 — session timer overlay on chat when program practice is active
+            if (practice != null && currentTab == 2) {
+                ProgramSessionTimerBar(
+                    elapsedSeconds = practice!!.elapsedSeconds,
+                    goalMinutes = practice!!.goalMinutes,
+                    goalReached = practice!!.goalReachedNotified,
+                    week = practice!!.week,
+                    onEnd = {
+                        val transcript = bubbles.joinToString("\n") { b ->
+                            val role = if (b.isUser) "Student" else "Tutor"
+                            "$role: ${b.message}"
+                        }
+                        programVm.endConversationSession(transcript) {
+                            vm.endProgramSession()
+                        }
+                        currentTab = 0 // back to Programa for feedback report
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgramSessionTimerBar(
+    elapsedSeconds: Int,
+    goalMinutes: Int,
+    goalReached: Boolean,
+    week: Int,
+    onEnd: () -> Unit,
+) {
+    val mm = elapsedSeconds / 60
+    val ss = elapsedSeconds % 60
+    Surface(
+        color = Surface,
+        tonalElevation = 4.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "Semana $week · %d:%02d / %d min".format(mm, ss, goalMinutes),
+                    color = if (goalReached) Color(0xFF10B981) else Accent,
+                    fontSize = 13.sp
+                )
+                Text(
+                    if (goalReached) "Meta atingida — continue se quiser"
+                    else "Pronúncia: IPA · schwa · linking · elisão",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+            }
+            TextButton(onClick = onEnd) {
+                Icon(Icons.Default.Stop, contentDescription = null, tint = Color(0xFFEF4444))
+                Spacer(Modifier.width(4.dp))
+                Text("Encerrar", color = Color(0xFFEF4444))
             }
         }
     }
