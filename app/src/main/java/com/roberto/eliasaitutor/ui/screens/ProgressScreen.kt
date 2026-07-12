@@ -39,29 +39,24 @@ fun ProgressScreen(vm: EliasViewModel) {
 
     Column(Modifier.fillMaxSize().background(Bg).verticalScroll(rememberScrollState()).padding(16.dp)) {
 
-        Text("📈 Your Progress", color = Color(0xFFe8eaf0), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Progresso", color = Color(0xFFe8eaf0), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Streak · XP · erros comuns · soft skills", color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(16.dp))
 
-        // ── Key metrics ────────────────────────────────────────────────────
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard("Level",    "${profile.level}",           "🎯", Modifier.weight(1f))
-            MetricCard("Total XP", "${profile.xp}",             "⚡", Modifier.weight(1f))
-            MetricCard("Coins",    "${profile.coins}",          "🪙", Modifier.weight(1f))
-            MetricCard("Messages", "${profile.messagesCount}",  "💬", Modifier.weight(1f))
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // ── Streak card ────────────────────────────────────────────────────
+        // ── Streak first (Task Final Fase 2) ───────────────────────────────
         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1410)),
-            border = BorderStroke(1.dp, Gold), shape = RoundedCornerShape(14.dp)) {
+            border = BorderStroke(1.dp, Gold), shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("🔥 Daily Streak", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("${profile.streak} day${if (profile.streak != 1) "s" else ""} in a row",
-                        color = Color(0xFFe8eaf0), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("+${GameConstants.STREAK_BONUS_COINS} coins awarded each consecutive day",
-                        color = Muted, fontSize = 12.sp)
+                    Text("🔥 Streak diário", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        "${profile.streak} dia${if (profile.streak != 1) "s" else ""} seguidos",
+                        color = Color(0xFFe8eaf0), fontSize = 22.sp, fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Constância > intensidade · +${GameConstants.STREAK_BONUS_COINS} coins/dia",
+                        color = Muted, fontSize = 12.sp
+                    )
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("🛡️", fontSize = 28.sp)
@@ -69,6 +64,16 @@ fun ProgressScreen(vm: EliasViewModel) {
                     Text("Shields", color = Muted, fontSize = 10.sp)
                 }
             }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ── Key metrics ────────────────────────────────────────────────────
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricCard("Level",    "${profile.level}",           "🎯", Modifier.weight(1f))
+            MetricCard("Total XP", "${profile.xp}",             "⚡", Modifier.weight(1f))
+            MetricCard("Coins",    "${profile.coins}",          "🪙", Modifier.weight(1f))
+            MetricCard("Msgs",     "${profile.messagesCount}",  "💬", Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(16.dp))
@@ -175,21 +180,85 @@ fun ProgressScreen(vm: EliasViewModel) {
         HorizontalDivider(color = Border)
         Spacer(Modifier.height(16.dp))
 
-        // ── Grammar Mistake Log ────────────────────────────────────────────
-        Text("📝 Grammar Mistakes to Fix", color = Color(0xFFe8eaf0), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        // ── Common errors (aggregated) ─────────────────────────────────────
+        Text("📝 Erros comuns", color = Color(0xFFe8eaf0), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Padrões recorrentes das suas conversas — foque neles no próximo drill",
+            color = Muted,
+            fontSize = 12.sp
+        )
         Spacer(Modifier.height(8.dp))
-        if (profile.errorLog.isEmpty()) {
-            Text("🎉 No grammar mistakes logged yet. Keep it up!", color = Green, fontSize = 13.sp)
+        val commonErrors = remember(profile.errorLog) {
+            profile.errorLog
+                .map { it.error.trim() }
+                .filter { it.isNotBlank() }
+                .groupingBy { it.lowercase().take(80) }
+                .eachCount()
+                .entries
+                .sortedByDescending { it.value }
+                .take(8)
+        }
+        if (commonErrors.isEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "🎉 Nenhum erro recorrente ainda. Continue praticando com Elias!",
+                    color = Green,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(14.dp)
+                )
+            }
         } else {
-            profile.errorLog.takeLast(15).reversed().forEach { entry ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1210)),
-                    border = BorderStroke(1.dp, Color(0xFF4a2020)), shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                    Column(Modifier.padding(10.dp)) {
-                        Text(entry.timestamp.take(10), color = Muted, fontSize = 11.sp)
-                        Text(entry.error, color = Red, fontSize = 13.sp)
+            commonErrors.forEachIndexed { i, (key, count) ->
+                val sample = profile.errorLog.find {
+                    it.error.lowercase().take(80) == key
+                }?.error ?: key
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1210)),
+                    border = BorderStroke(1.dp, Color(0xFF4a2020)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                ) {
+                    Row(
+                        Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = Red.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "×$count",
+                                color = Red,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "#${i + 1} · $sample",
+                                color = Color(0xFFe8eaf0),
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
                     }
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("Histórico recente", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            profile.errorLog.takeLast(5).reversed().forEach { entry ->
+                Text(
+                    "· ${entry.timestamp.take(10)} — ${entry.error}",
+                    color = Muted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
         }
         

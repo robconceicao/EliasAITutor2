@@ -53,19 +53,54 @@ fun ProgramProgressScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            Text(
+                "Constância do programa · meta sagrada 30 min/dia",
+                color = Muted,
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard("Streak", "${p.streak} dias", Modifier.weight(1f))
                 StatCard("Recorde", "${p.bestStreak} dias", Modifier.weight(1f))
                 StatCard("Hoje", "${p.todayMinutes} min", Modifier.weight(1f))
             }
 
+            Spacer(Modifier.height(12.dp))
+            val goal = ui.state.dailyGoalMinutes.coerceAtLeast(1)
+            val frac = (p.todayMinutes.toFloat() / goal).coerceIn(0f, 1f)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Meta de hoje", color = TextMain, fontWeight = FontWeight.SemiBold)
+                        Text("${p.todayMinutes}/$goal min", color = Accent, fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { frac },
+                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        color = Accent,
+                        trackColor = Color(0xFF2A2E3A),
+                    )
+                }
+            }
+
             Spacer(Modifier.height(20.dp))
             Text("Jornada 1 → 26", color = TextMain, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Avanço só com domínio real (gramática · vocabulário · pronúncia)",
+                color = Muted,
+                fontSize = 11.sp
+            )
             Spacer(Modifier.height(8.dp))
             JourneyBar(currentWeek = week)
 
             Spacer(Modifier.height(20.dp))
             Text("Últimos 30 dias", color = TextMain, fontWeight = FontWeight.SemiBold)
+            Text("Minutos de conversação por dia", color = Muted, fontSize = 11.sp)
             Spacer(Modifier.height(8.dp))
             LazyVerticalGrid(
                 columns = GridCells.Fixed(7),
@@ -92,6 +127,13 @@ fun ProgramProgressScreen(
                     }
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Dica: abra Progress (aba) para ver erros comuns das conversas com Elias.",
+                color = Muted,
+                fontSize = 11.sp
+            )
         }
     }
 }
