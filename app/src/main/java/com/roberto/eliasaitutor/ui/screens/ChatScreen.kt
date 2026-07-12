@@ -147,7 +147,7 @@ fun ChatScreen(vm: EliasViewModel) {
                         Text("Tema: ${pc.lexis}", color = Muted, fontSize = 11.sp)
                     }
                     Text(
-                        "Foco: linked speech · schwa · elisão · IPA · shadowing",
+                        "Pronúncia Máxima: IPA · schwa · linking · elisão · entonação · shadowing",
                         color = Purple,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 4.dp)

@@ -12,15 +12,15 @@ Reply ONLY in Brazilian Portuguese with strict JSON (no markdown, no extra text)
     {"said":"...","correct":"...","note":"...","ipa":"/.../","mouth_tip":"instrução de boca/língua/ar"}
   ],
   "better_phrases":["forma mais natural 1","2","3"],
-  "pronunciation_focus":"feedback específico sobre redução vocálica (schwa), linked speech e elisão",
+  "pronunciation_focus":"feedback sobre redução vocálica (schwa), linked speech, elisão e entonação (↓↑↑↓↓↑)",
   "cefr_estimate":"A1|A2|B1|B2|C1",
-  "next_focus":"foco da próxima sessão (quase sempre inclui pronúncia avançada)",
+  "next_focus":"foco da próxima sessão (Pronúncia Avançada Máxima: drill + técnica)",
   "motivation":"motivação personalizada curta"
 }
 Rules:
-- mistakes max 5; prioritize pronunciation (IPA, schwa, linking, elision) and serious grammar.
-- better_phrases max 3.
-- Always fill pronunciation_focus even if brief.
+- mistakes max 5; prioritize advanced pronunciation (IPA, schwa, linking, elision, intonation) and serious grammar.
+- better_phrases max 3 — prefer natural connected-speech versions.
+- Always fill pronunciation_focus (mention which of: reduction, linking, elision, intonation).
 - No text outside the JSON.`;
 
 /** ~8k tokens ≈ 32k chars conservative (D3) */

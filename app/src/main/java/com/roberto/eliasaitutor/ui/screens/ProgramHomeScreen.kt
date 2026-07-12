@@ -193,7 +193,7 @@ fun ProgramHomeScreen(
             Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf("IPA", "Shadowing", "Schwa", "Linking", "Elisão").forEach { tag ->
+            listOf("IPA", "Shadowing", "Schwa", "Linking", "Elisão", "Entonação").forEach { tag ->
                 Surface(
                     color = Accent.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(20.dp)
@@ -280,7 +280,7 @@ fun ProgramHomeScreen(
                 Text("Gramática: ${week?.grammar ?: "—"}", color = Muted, fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Foco de Elias: linked speech · redução vocálica · elisão · IPA",
+                    "Modo Pronúncia Avançada Máxima · IPA · schwa · linking · elisão · entonação",
                     color = Accent.copy(alpha = 0.9f),
                     fontSize = 12.sp
                 )
@@ -350,7 +350,7 @@ fun ProgramHomeScreen(
         ProgramActionButton(
             icon = { Icon(Icons.AutoMirrored.Filled.Chat, null) },
             label = "Sessão com Elias (temática)",
-            subtitle = "Meta ${ui.state.dailyGoalMinutes} min · tema da semana · pronúncia GA",
+            subtitle = "Meta ${ui.state.dailyGoalMinutes} min · tema + drills Pronúncia Máxima",
             onClick = {
                 programVm.startConversationSession(
                     ProgramSessionType.THEMED,
@@ -372,8 +372,8 @@ fun ProgramHomeScreen(
         )
         ProgramActionButton(
             icon = { Icon(Icons.Default.RecordVoiceOver, null) },
-            label = "Shadowing · Chunks da semana",
-            subtitle = "IPA · ouvir → repetir · redução e linking",
+            label = "Shadowing intensivo · Chunks",
+            subtitle = "Drills IPA · schwa · linking · elisão · entonação",
             onClick = { programVm.startChunksDrill() }
         )
         ProgramActionButton(

@@ -43,7 +43,7 @@ fun SessionFeedbackScreen(
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            "Pronúncia avançada · IPA · linking · schwa · elisão",
+            "Pronúncia Avançada Máxima · IPA · schwa · linking · elisão · entonação",
             color = Muted,
             fontSize = 12.sp
         )
@@ -119,7 +119,7 @@ fun SessionFeedbackScreen(
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Text(
-                        "Redução · linked speech · elisão",
+                        "Redução · linking · elisão · entonação",
                         color = Purple,
                         fontWeight = FontWeight.SemiBold
                     )

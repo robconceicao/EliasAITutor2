@@ -209,7 +209,7 @@ private fun ProgramSessionTimerBar(
                 )
                 Text(
                     if (goalReached) "Meta atingida — continue se quiser"
-                    else "Pronúncia: IPA · schwa · linking · elisão",
+                    else "Pronúncia Máxima · IPA · schwa · linking · elisão · entonação",
                     color = Muted,
                     fontSize = 11.sp
                 )

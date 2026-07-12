@@ -505,9 +505,10 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         val kickoff =
             "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
                 "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
-                "Do NOT ask level. Open immediately with the official Portuguese greeting for this week " +
-                "(linked speech, redução vocálica, elisão), then continue coaching in English " +
-                "with IPA + shadowing focus when appropriate."
+                "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level. " +
+                "Open with the official Portuguese greeting, then coach with full focus on " +
+                "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation. " +
+                "Use ready drills (1–5) with phrase+IPA+contrast+shadowing; demand excellence before next phrase."
         SocketClient.enviarMensagem(kickoff)
         _isLoading.value = true
     }
