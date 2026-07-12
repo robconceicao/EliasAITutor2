@@ -93,7 +93,11 @@ async function main() {
   assert(Array.isArray(r.json.days), 'days array');
 
   // F3 prompt unit check
-  const { buildSystemPrompt, PHASE_MASTER_PROMPTS } = await import('./services/promptBuilder.js');
+  const {
+    buildSystemPrompt,
+    PHASE_MASTER_PROMPTS,
+    PROGRAM_ELIAS_MASTER_PROMPT,
+  } = await import('./services/promptBuilder.js');
   const { loadCurriculumSeedFile } = await import('./services/loadCurriculumSeed.js');
   const { weeks } = loadCurriculumSeedFile();
   assert(weeks.length === 26, 'official seed has 26 weeks');
@@ -101,13 +105,19 @@ async function main() {
   assert(weeks[1].persona_city === 'Boston', 'week 2 city Boston (official seed)');
   const w3 = weeks.find((w) => w.week === 3);
   const p3 = buildSystemPrompt({ weekDoc: w3, phase: 1, programMode: true });
-  assert(p3.content.includes(PHASE_MASTER_PROMPTS[1]), 'week 3 includes phase 1 master');
+  assert(p3.content.includes(PROGRAM_ELIAS_MASTER_PROMPT.slice(0, 80)), 'week 3 includes program master');
+  assert(p3.content.includes(PHASE_MASTER_PROMPTS[1]), 'week 3 includes phase 1 calibration');
+  assert(p3.content.includes('Week number: 3'), 'week 3 injects week number');
+  assert(p3.content.includes(w3.title), 'week 3 injects title');
   assert(p3.content.includes(w3.conversation_prompt.slice(0, 40)), 'week 3 includes week prompt');
+  assert(p3.content.includes('<RESPONSE>'), 'program prompt keeps XML envelope');
   const w22 = weeks.find((w) => w.week === 22);
   const p22 = buildSystemPrompt({ weekDoc: w22, phase: 4, programMode: true });
-  assert(p22.content.includes(PHASE_MASTER_PROMPTS[4]), 'week 22 includes phase 4 master');
+  assert(p22.content.includes(PHASE_MASTER_PROMPTS[4]), 'week 22 includes phase 4 calibration');
+  assert(p22.content.includes('Week number: 22'), 'week 22 injects week number');
   const pDefault = buildSystemPrompt({ programMode: false });
   assert(pDefault.content.includes('Natural Approach'), 'default prompt unchanged');
+  assert(!pDefault.content.includes('Fluência em Inglês em 6 Meses'), 'default is not program master');
 
   console.log('\n✅ All program API smoke tests passed');
 }
