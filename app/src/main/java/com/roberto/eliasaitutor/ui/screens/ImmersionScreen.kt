@@ -49,7 +49,8 @@ fun ImmersionScreen(vm: EliasViewModel) {
     var step by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
     var feedback by remember { mutableStateOf<String?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
+    // Drive play UI from real TTS state (Opus stream), not an immediate callback
+    val isPlaying by vm.isIaSpeaking.collectAsState()
 
     val levelsData = remember {
         mapOf(
@@ -84,11 +85,10 @@ fun ImmersionScreen(vm: EliasViewModel) {
     val total = immersionData.size
     val inProgress = step < total
 
-    // Auto-play phrase when step changes
+    // Auto-play phrase when step changes (isPlaying tracks iaStateFlow via ViewModel)
     LaunchedEffect(currentLevel, step) {
         if (inProgress) {
-            isPlaying = true
-            vm.speakText(immersionData[step].phrase) { isPlaying = false }
+            vm.speakText(immersionData[step].phrase)
         }
     }
 
@@ -190,8 +190,7 @@ fun ImmersionScreen(vm: EliasViewModel) {
             ) {
                 Surface(
                     onClick = {
-                        isPlaying = true
-                        vm.speakText(current.phrase) { isPlaying = false }
+                        vm.speakText(current.phrase)
                     },
                     modifier = Modifier.size(100.dp),
                     shape = CircleShape,

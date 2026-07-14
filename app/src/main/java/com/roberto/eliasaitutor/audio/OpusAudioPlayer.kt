@@ -19,6 +19,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/**
+ * Main chat TTS player (Task Final v1.0).
+ *
+ * Spec mentioned ExoPlayer + MP3 stream; production path is lower-latency:
+ * ElevenLabs PCM → backend Opus frames → MediaCodec decode → AudioTrack.
+ * Do not replace with ExoPlayer for chat — it would break barge-in / jitter / Opus.
+ */
 class OpusAudioPlayer {
     companion object {
         private const val TAG = "OpusAudioPlayer"

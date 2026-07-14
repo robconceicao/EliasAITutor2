@@ -3,7 +3,10 @@ import http from 'http';
 import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { encodePCMToOpus } from './audioEncoder.js';
+import {
+  createPcmInt16OpusEncoder,
+  sampleRateFromOutputFormat,
+} from './audioEncoder.js';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -29,17 +32,20 @@ import {
   resolveFallbackVoiceId,
   openTtsWebSocketWithFallback,
   STREAM_MODEL_ID,
+  STREAM_OUTPUT_FORMAT,
 } from './services/elevenLabsClient.js';
 import programRoutes from './routes/programRoutes.js';
 import { translateToPtBr } from './services/translationService.js';
+import { scoreEchoAttempt } from './services/echoScoreService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env first (for any existing env vars)
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Load keys from local.properties if not already set (respect .env rule)
-const localPropsPath = path.resolve('../local.properties');
+// Prefer path relative to this file so cwd does not break key loading.
+const localPropsPath = path.resolve(__dirname, '../local.properties');
 if (fs.existsSync(localPropsPath)) {
   const lines = fs.readFileSync(localPropsPath, 'utf-8').split('\n');
   lines.forEach(line => {
@@ -54,9 +60,12 @@ if (fs.existsSync(localPropsPath)) {
   });
 }
 
-global.WebSocket = ws;
+// Alias: some installs store the ElevenLabs key as My-English-Coach-Key only
+if (!process.env.ELEVENLABS_API_KEY && process.env['My-English-Coach-Key']) {
+  process.env.ELEVENLABS_API_KEY = process.env['My-English-Coach-Key'];
+}
 
-dotenv.config();
+global.WebSocket = ws;
 
 const app = express();
 app.use(cors());
@@ -395,6 +404,36 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 3c. Echo Mode scoring (ASR Whisper when available + LLM / heuristic)
+  socket.on('echo_avaliar', async (payload = {}) => {
+    try {
+      const reference = payload.reference || payload.phrase || '';
+      const result = await scoreEchoAttempt({
+        reference,
+        audioBase64: payload.audioBase64 || payload.audio || '',
+        mimeType: payload.mimeType || 'audio/mp4',
+        durationMs: payload.durationMs || 0,
+        focus: payload.focus || '',
+        transcript: payload.transcript || '',
+      });
+      socket.emit('echo_score_pronto', {
+        ...result,
+        requestId: payload.requestId || null,
+      });
+    } catch (e) {
+      console.error('[echo_avaliar]', e.message);
+      socket.emit('echo_score_pronto', {
+        ok: false,
+        error: e.message,
+        score: 0,
+        feedback: '',
+        transcript: '',
+        method: 'error',
+        requestId: payload?.requestId || null,
+      });
+    }
+  });
+
   // 4. Shadowing / Fallback TTS via ElevenLabs (same voice config as main chat)
   socket.on('shadow_speak', async (texto) => {
     try {
@@ -701,30 +740,53 @@ io.on('connection', (socket) => {
   });
 });
 
-// Function to stream audio chunks directly to Android (encodes PCM to Opus frames)
+/**
+ * Stream ElevenLabs audio to Android as Opus frames.
+ * ElevenLabs stream-input must use output_format=pcm_* (Int16 LE).
+ * Encoding as Float32/MP3 was the root cause of static/hiss (chiado).
+ */
 function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker) {
   socket.emit("estado_ia", "falando");
-  
+
+  const inputSampleRate = sampleRateFromOutputFormat(STREAM_OUTPUT_FORMAT);
+  const opusEncoder = createPcmInt16OpusEncoder({ inputSampleRate });
+
+  const emitOpusFrames = (opusFrames) => {
+    opusFrames.forEach((frame) => {
+      socket.emit("audio_opus_frame", {
+        frame: frame.toString("base64"),
+        seq: seqTracker.val++,
+        ts: Date.now(),
+      });
+    });
+  };
+
   elevenSocket.on("message", (msgStr) => {
     if (!estadoGeracao.ativo) return;
     try {
-      const msg = JSON.parse(msgStr);
+      const raw = typeof msgStr === 'string' ? msgStr : msgStr.toString();
+      const msg = JSON.parse(raw);
       if (msg.audio) {
-        const pcmBuffer = Buffer.from(msg.audio, 'base64');
-        const opusFrames = encodePCMToOpus(pcmBuffer);
-        opusFrames.forEach((frame) => {
-          socket.emit("audio_opus_frame", {
-            frame: frame.toString("base64"),
-            seq: seqTracker.val++,
-            ts: Date.now()
-          });
-        });
+        // pcm_* formats: base64 of raw s16le mono (NOT mp3, NOT float32)
+        const pcmInt16 = Buffer.from(msg.audio, 'base64');
+        emitOpusFrames(opusEncoder.encode(pcmInt16));
       }
       if (msg.isFinal) {
+        emitOpusFrames(opusEncoder.flush());
         socket.emit("estado_ia", "ociosa");
       }
     } catch (e) {
       console.error("Erro processando retorno ElevenLabs:", e);
+    }
+  });
+
+  // Ensure last partial frame is not dropped if socket closes without isFinal
+  elevenSocket.on("close", () => {
+    if (!estadoGeracao.ativo) return;
+    try {
+      emitOpusFrames(opusEncoder.flush());
+    } catch (_) {
+      /* ignore */
     }
   });
 }
@@ -823,6 +885,8 @@ app.get('/health', (req, res) => {
     elevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
     mainChatVoiceId: resolveMainChatVoiceId(),
     fallbackVoiceId: resolveFallbackVoiceId(),
+    streamOutputFormat: STREAM_OUTPUT_FORMAT,
+    streamModel: STREAM_MODEL_ID,
     mongo: useMongo,
   });
 });
@@ -830,6 +894,6 @@ app.get('/health', (req, res) => {
 server.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(
-    `[boot] TTS main=${resolveMainChatVoiceId()} elevenLabsKey=${Boolean(process.env.ELEVENLABS_API_KEY)}`
+    `[boot] TTS main=${resolveMainChatVoiceId()} format=${STREAM_OUTPUT_FORMAT} model=${STREAM_MODEL_ID} elevenLabsKey=${Boolean(process.env.ELEVENLABS_API_KEY)}`
   );
 });

@@ -8,6 +8,10 @@
     "seed": "node seedProgram.js",
     "seed:tts": "node seedProgram.js --tts",
     "test:program": "node test_program_api.js",
+    "test:voice": "node test_voice_config.js",
+    "test:audio": "node test_audio_encoder.js",
+    "test:echo": "node test_echo_score.js",
+    "test:unit": "node test_voice_config.js && node test_audio_encoder.js && node test_echo_score.js",
     "test": "node test_program_api.js"
   },
 

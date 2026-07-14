@@ -47,6 +47,8 @@ try {
   assert.ok(url.includes('stream-input'));
   assert.ok(url.includes('eleven_flash_v2_5') || url.includes(STREAM_MODEL_ID));
   assert.ok(url.includes('optimize_streaming_latency'), 'latency query present');
+  // pcm_* required for Opus pipeline (mp3 default caused static/hiss)
+  assert.ok(url.includes('output_format=pcm_'), 'PCM output_format required for Opus');
   assert.ok(!url.includes(LEGACY_ADAM_VOICE_ID));
 
   console.log('✅ voice config tests passed');

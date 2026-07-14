@@ -71,26 +71,43 @@ export const CHUNK_MODEL_ID = process.env.CHUNK_TTS_MODEL || 'eleven_flash_v2_5'
 /** Streaming model — do not change without a dedicated latency spec. */
 export const STREAM_MODEL_ID = process.env.ELEVENLABS_STREAM_MODEL || 'eleven_flash_v2_5';
 
+/**
+ * PCM Int16 LE for Opus pipeline (NOT mp3 — default without this is mp3_44100_128,
+ * which caused static/hiss when decoded as PCM Float32).
+ * pcm_24000 is widely available; pcm_44100/pcm_48000 may need Pro+.
+ */
+export const STREAM_OUTPUT_FORMAT =
+  process.env.ELEVENLABS_OUTPUT_FORMAT || 'pcm_24000';
+
 export const CHAT_VOICE_SETTINGS = {
   stability: 0.5,
   similarity_boost: 0.8,
 };
 
+/**
+ * Resolve ElevenLabs API key.
+ * Supports ELEVENLABS_API_KEY and project alias My-English-Coach-Key.
+ */
 function apiKey() {
-  return process.env.ELEVENLABS_API_KEY || '';
+  return (
+    process.env.ELEVENLABS_API_KEY ||
+    process.env['My-English-Coach-Key'] ||
+    ''
+  );
 }
 
 /**
  * Streaming WS URL — low latency defaults (Task Final v1.0):
  * - model: eleven_flash_v2_5
  * - optimize_streaming_latency=3 (max speed, slight quality tradeoff)
- * - output_format pcm for Opus pipeline (handled after decode path)
+ * - output_format=pcm_* (Int16 LE) for encodePCM→Opus pipeline
  */
 export function streamInputUrl(voiceId) {
   const latency = process.env.ELEVENLABS_STREAM_LATENCY || '3';
   const params = new URLSearchParams({
     model_id: STREAM_MODEL_ID,
     optimize_streaming_latency: String(latency),
+    output_format: STREAM_OUTPUT_FORMAT,
   });
   return `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?${params.toString()}`;
 }

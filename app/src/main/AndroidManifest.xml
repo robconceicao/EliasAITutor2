@@ -11,6 +11,13 @@
     <!-- Permissão para gravar áudio (funcionalidade Shadowing) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- F6 — lembrete diário do Modo Programa -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Visibilidade para o SpeechRecognizer no Android 11+ (API 30+) -->
     <queries>
         <intent>
@@ -32,6 +39,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.EliasAITutor">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -39,6 +47,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".program.PracticeReminderReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.roberto.eliasaitutor.PROGRAM_REMIND" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

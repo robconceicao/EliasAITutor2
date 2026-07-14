@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.roberto.eliasaitutor.model.PronunciationFocus
 import com.roberto.eliasaitutor.program.ProgramDates
 import com.roberto.eliasaitutor.program.ProgramPhaseUi
 import com.roberto.eliasaitutor.program.ProgramSessionType
@@ -188,26 +189,14 @@ fun ProgramHomeScreen(
             }
         }
 
-        // Pronunciation pillars (aligned with Elias master prompt)
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf("IPA", "Shadowing", "Schwa", "Linking", "Elisão", "Entonação").forEach { tag ->
-                Surface(
-                    color = Accent.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text(
-                        tag,
-                        color = Accent,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-        }
+        // Header subtitle: Semana · Fase · Nível (wireframe)
+        val weekPreview = ui.week
+        Text(
+            "Semana ${ui.state.currentWeek} · Fase ${weekPreview?.phase ?: "—"} · Nível ${weekPreview?.level ?: "—"}",
+            color = Muted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
 
         if (ui.offline) {
             Surface(
@@ -392,7 +381,34 @@ fun ProgramHomeScreen(
         Spacer(Modifier.height(12.dp))
         Text("Foco de pronúncia de hoje", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Spacer(Modifier.height(6.dp))
-        // tags already above — drill CTA
+        // Daily highlight (same source as session kickoff)
+        val focusOfDay = remember { PronunciationFocus.focusOfDay() }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            PronunciationFocus.TAGS.forEach { tag ->
+                val selected = tag == focusOfDay
+                Surface(
+                    color = if (selected) Accent.copy(alpha = 0.35f) else Accent.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        tag,
+                        color = if (selected) TextMain else Accent,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+        Text(
+            "Hoje: $focusOfDay · ${PronunciationFocus.coachingTip(focusOfDay)}",
+            color = Muted,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
         ProgramActionButton(
             icon = { Icon(Icons.Default.RecordVoiceOver, null) },
             label = "Drill rápido (5–10 min)",

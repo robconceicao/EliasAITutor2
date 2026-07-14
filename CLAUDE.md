@@ -39,7 +39,7 @@ Tutor de inglês gamificado com IA em tempo real para Android. O usuário conver
 | LLM — primário | Anthropic SDK | ^0.33.1 |
 | LLM — fallback 1 | Google Generative AI | ^0.24.1 |
 | LLM — turn-taking | Groq SDK | ^1.2.1 |
-| TTS principal | ElevenLabs WebSocket | eleven_flash_v2_5, voiceId Adam |
+| TTS principal | ElevenLabs WebSocket | eleven_flash_v2_5, `output_format=pcm_24000`, latency=3, voiceId via `MAIN_CHAT_VOICE_ID` (default Liam; não Adam). Player Android: **OpusAudioPlayer** (não ExoPlayer) |
 | TTS secundário | @cartesia/cartesia-js | ^1.1.2 — Immersion/Shadowing apenas |
 | Codec | @discordjs/opus | ^0.10.0 |
 | DB | Mongoose (MongoDB, opcional) | ^8.9.3 |
@@ -131,7 +131,7 @@ Microfone
 
 ### Reprodução (Backend → Android)
 ```
-Backend: ElevenLabs WebSocket (eleven_flash_v2_5, voiceId: pNInz6obpgDQGcFmaJcg)
+Backend: ElevenLabs WebSocket (eleven_flash_v2_5, voiceId: MAIN_CHAT_VOICE_ID / default Liam)
   → escutarRetornoElevenLabs() → PCM Float32 chunks
   → audioEncoder.js: PCM Float32 → Opus (48kHz mono, frame 960 = 20ms)
   → socket.emit('audio_chunk', base64)

@@ -8,8 +8,14 @@ import com.roberto.eliasaitutor.data.DataStoreManager
 import com.roberto.eliasaitutor.data.GameConstants
 import com.roberto.eliasaitutor.model.*
 import com.roberto.eliasaitutor.network.*
+import android.media.MediaPlayer
+import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import java.time.LocalDate
@@ -211,18 +217,238 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
 
+    /**
+     * Immersion / Echo / replay: TTS via backend ElevenLabs stream (same Opus path as chat).
+     * [onCompletion] fires when [iaStateFlow] returns to "ociosa" after speaking
+     * (not immediately — that left play indicators stuck off).
+     */
     fun speakText(text: String, onCompletion: () -> Unit = {}) {
-        // Fallback for immersion / shadowing now uses backend ElevenLabs unification
-        com.roberto.eliasaitutor.network.SocketClient.sendShadowSpeak(text)
-        onCompletion()
+        if (text.isBlank()) {
+            onCompletion()
+            return
+        }
+        if (!SocketClient.connectionStatus.value) {
+            _toastMessage.value = "Offline — conecte-se para ouvir o áudio"
+            onCompletion()
+            return
+        }
+        SocketClient.sendShadowSpeak(text)
+        viewModelScope.launch {
+            val started = withTimeoutOrNull(10_000) {
+                SocketClient.iaStateFlow.first { it == "falando" }
+            }
+            if (started == null) {
+                delay(400)
+                onCompletion()
+                return@launch
+            }
+            withTimeoutOrNull(60_000) {
+                SocketClient.iaStateFlow.first { it == "ociosa" }
+            }
+            onCompletion()
+        }
     }
 
+    private val _shadowTranscript = MutableStateFlow("")
+    val shadowTranscript: StateFlow<String> = _shadowTranscript
+
+    /**
+     * Echo scoring:
+     * - Online: backend Whisper (Groq) + LLM / word-overlap / duration heuristic
+     * - Offline: local duration heuristic
+     * Awards XP/coins once per successful score.
+     */
     fun submitShadowingAudio(audioFile: java.io.File, phrase: String = "") {
-        // Dummy implementation
+        viewModelScope.launch {
+            _isLoading.value = true
+            _shadowScore.value = null
+            _shadowFeedback.value = ""
+            _shadowTranscript.value = ""
+            try {
+                val target = phrase.ifBlank { _shadowPhrase.value }
+                if (!audioFile.exists() || audioFile.length() < 400L) {
+                    applyShadowScore(
+                        score = 28,
+                        feedback = "Gravação vazia ou muito curta. Segure o mic e fale a frase completa de uma vez.",
+                        awardRewards = false,
+                    )
+                    return@launch
+                }
+
+                val durationMs = withContext(Dispatchers.IO) { probeAudioDurationMs(audioFile) }
+                val focus = PronunciationFocus.focusOfDay()
+
+                if (SocketClient.connectionStatus.value) {
+                    val b64 = withContext(Dispatchers.IO) {
+                        val bytes = audioFile.readBytes()
+                        // Cap ~2MB base64 payload
+                        if (bytes.size > 2_000_000) {
+                            null
+                        } else {
+                            Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        }
+                    }
+                    if (b64 == null) {
+                        applyLocalHeuristicScore(target, durationMs, focus, audioFile.length())
+                        return@launch
+                    }
+
+                    val reqId = "echo_${System.currentTimeMillis()}"
+                    SocketClient.requestEchoScore(
+                        reference = target,
+                        audioBase64 = b64,
+                        mimeType = "audio/mp4",
+                        durationMs = durationMs,
+                        focus = focus,
+                        requestId = reqId,
+                    )
+
+                    val remote = withTimeoutOrNull(45_000) {
+                        SocketClient.echoScoreFlow.first {
+                            it.requestId == null || it.requestId == reqId || it.requestId.isNullOrBlank()
+                        }
+                    }
+                    if (remote != null && remote.ok) {
+                        _shadowTranscript.value = remote.transcript
+                        val fb = buildString {
+                            append(remote.feedback.ifBlank { "Continue praticando!" })
+                            if (remote.transcript.isNotBlank() &&
+                                !remote.feedback.contains(remote.transcript)
+                            ) {
+                                append("\nVocê disse: “${remote.transcript}”")
+                            }
+                        }
+                        applyShadowScore(
+                            remote.score.coerceIn(1, 100),
+                            fb,
+                            awardRewards = true,
+                        )
+                        return@launch
+                    }
+                    // Fall through to local if backend timed out / failed
+                }
+
+                applyLocalHeuristicScore(target, durationMs, focus, audioFile.length())
+            } catch (e: Exception) {
+                applyShadowScore(
+                    score = 50,
+                    feedback = "Gravação recebida. Ouça o Echo e compare com Elias. " +
+                        PronunciationFocus.coachingTip(),
+                    awardRewards = false,
+                )
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
+
+    private suspend fun applyLocalHeuristicScore(
+        target: String,
+        durationMs: Long,
+        focus: String,
+        sizeBytes: Long,
+    ) {
+        val wordCount = target.trim()
+            .split(Regex("\\s+"))
+            .count { it.isNotEmpty() }
+            .coerceAtLeast(1)
+        val expectedMs = (wordCount * 320 + 450).coerceIn(900, 14_000)
+        val ratio = if (durationMs > 0) durationMs.toDouble() / expectedMs else 0.65
+
+        val durationScore = when {
+            durationMs in 1..399 -> 32
+            ratio < 0.35 -> 42
+            ratio < 0.55 -> 58
+            ratio <= 1.4 -> 84
+            ratio <= 2.0 -> 72
+            else -> 54
+        }
+        val sizeScore = when {
+            sizeBytes < 2_500L -> 38
+            sizeBytes < 10_000L -> 62
+            else -> 80
+        }
+        var score = ((durationScore * 0.65) + (sizeScore * 0.35)).toInt()
+        if (ratio in 0.7..1.35) score = (score + 6).coerceAtMost(94)
+        score = score.coerceIn(20, 95)
+
+        val tip = PronunciationFocus.coachingTip(focus)
+        val headline = when {
+            score >= 85 -> "Excelente ritmo e presença de voz."
+            score >= 65 -> "Bom eco — continue imitando o modelo."
+            else -> "Tente de novo: ouça Elias e repita em um fôlego."
+        }
+        val timingNote = when {
+            durationMs > 0 && ratio < 0.5 -> " A gravação parece curta demais para a frase."
+            durationMs > 0 && ratio > 1.85 -> " Fale um pouco mais fluido, sem alongar demais."
+            else -> ""
+        }
+        applyShadowScore(
+            score = score,
+            feedback = "$headline$timingNote Foco de hoje ($focus): $tip",
+            awardRewards = true,
+        )
+    }
+
+    private suspend fun applyShadowScore(score: Int, feedback: String, awardRewards: Boolean) {
+        val sc = score.coerceIn(0, 100)
+        _shadowScore.value = sc
+        _shadowFeedback.value = feedback
+        if (!awardRewards) return
+        val cur = profile.first()
+        ds.save(
+            cur.copy(
+                xp = cur.xp + GameConstants.SHADOWING_XP,
+                coins = cur.coins + GameConstants.SHADOWING_COINS,
+                clarity = (cur.clarity * 0.7 + sc * 0.3).toInt().coerceIn(0, 100),
+            )
+        )
+    }
+
+    private fun probeAudioDurationMs(file: java.io.File): Long {
+        return try {
+            val mmr = android.media.MediaMetadataRetriever()
+            mmr.setDataSource(file.absolutePath)
+            val d = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            mmr.release()
+            d
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private var localMediaPlayer: MediaPlayer? = null
 
     fun playLocalFile(file: java.io.File, onCompletion: () -> Unit = {}) {
-        // Dummy implementation
+        if (!file.exists() || file.length() == 0L) {
+            _toastMessage.value = "Nenhuma gravação para ouvir"
+            onCompletion()
+            return
+        }
+        try {
+            localMediaPlayer?.release()
+            localMediaPlayer = MediaPlayer().apply {
+                setDataSource(file.absolutePath)
+                setOnCompletionListener {
+                    it.release()
+                    if (localMediaPlayer === it) localMediaPlayer = null
+                    onCompletion()
+                }
+                setOnErrorListener { mp, _, _ ->
+                    mp.release()
+                    if (localMediaPlayer === mp) localMediaPlayer = null
+                    onCompletion()
+                    true
+                }
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            localMediaPlayer = null
+            _toastMessage.value = "Não foi possível reproduzir a gravação"
+            onCompletion()
+        }
     }
 
     // ── Scenario ───────────────────────────────────────────────────────────────
@@ -531,12 +757,15 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         // Brief delay so backend locks program prompt + TTS before kickoff (lower first-byte lag)
         viewModelScope.launch {
             kotlinx.coroutines.delay(450)
+            val dayFocus = PronunciationFocus.focusOfDay()
             val kickoff =
                 "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
                     "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
                     "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level. " +
+                    "${PronunciationFocus.kickoffHint(dayFocus)} " +
                     "Open with the official Portuguese greeting, then coach with full focus on " +
-                    "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation. " +
+                    "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation " +
+                    "(prioritize $dayFocus today). " +
                     "Use ready drills (1–5) with phrase+IPA+contrast+shadowing; demand excellence before next phrase. " +
                     "TTS streams automatically — speak naturally for voice."
             SocketClient.enviarMensagem(kickoff)
@@ -560,6 +789,10 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         val b = bubbles[index]
         if (b.isUser || b.message.isBlank()) return
         if (b.translationPt != null) return // already translated
+        if (!SocketClient.connectionStatus.value) {
+            _toastMessage.value = "Offline — conecte-se para traduzir"
+            return
+        }
         pendingTranslationIndex = index
         _chatBubbles.value = bubbles.toMutableList().also {
             it[index] = b.copy(isTranslating = true)
@@ -663,34 +896,70 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Score from known transcript (no audio file) — LLM or word-overlap. */
     fun scoreShadowing(reference: String, transcribed: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _shadowTranscript.value = transcribed
             try {
-                val resp = AnthropicClient.api.generateMessage(ClaudeRequest(
-                    max_tokens = 80,
-                    messages = listOf(ClaudeMessage("user",
-                        "Reference: \"$reference\"\nStudent said: \"$transcribed\"\n\n" +
-                        "Score pronunciation 0-100. Reply ONLY with JSON: {\"score\":<int>,\"feedback\":\"<sentence>\"}"))
-                ))
-                val raw = resp.content.firstOrNull()?.text?.trim() ?: "{\"score\":60,\"feedback\":\"Keep practicing!\"}"
-                val obj = JSONObject(raw.removePrefix("```json").removeSuffix("```").trim())
-                _shadowScore.value    = obj.optInt("score", 60).coerceIn(0, 100)
-                _shadowFeedback.value = obj.optString("feedback", "Keep practicing!")
-
-                // reward + clarity update
-                val cur = profile.first()
-                val sc  = _shadowScore.value ?: 60
-                ds.save(cur.copy(
-                    xp    = cur.xp    + GameConstants.SHADOWING_XP,
-                    coins = cur.coins + GameConstants.SHADOWING_COINS,
-                    clarity = (cur.clarity * 0.7 + sc * 0.3).toInt().coerceIn(0, 100),
-                ))
+                val focus = PronunciationFocus.focusOfDay()
+                val localOverlap = estimateWordOverlap(reference, transcribed)
+                try {
+                    val resp = AnthropicClient.api.generateMessage(
+                        ClaudeRequest(
+                            max_tokens = 80,
+                            messages = listOf(
+                                ClaudeMessage(
+                                    "user",
+                                    "Reference: \"$reference\"\nStudent said: \"$transcribed\"\n" +
+                                        "Focus: $focus\n" +
+                                        "Score pronunciation 0-100. Reply ONLY with JSON: " +
+                                        "{\"score\":<int>,\"feedback\":\"<sentence in PT-BR>\"}"
+                                )
+                            )
+                        )
+                    )
+                    val raw = resp.content.firstOrNull()?.text?.trim()
+                        ?: "{\"score\":$localOverlap,\"feedback\":\"Continue praticando!\"}"
+                    val obj = JSONObject(
+                        raw.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                    )
+                    val sc = obj.optInt("score", localOverlap).coerceIn(0, 100)
+                    val blended = ((sc * 0.75) + (localOverlap * 0.25)).toInt().coerceIn(0, 100)
+                    applyShadowScore(
+                        blended,
+                        obj.optString("feedback", "Continue praticando!"),
+                        awardRewards = true,
+                    )
+                } catch (_: Exception) {
+                    applyShadowScore(
+                        localOverlap,
+                        "Você disse: “$transcribed”. ${PronunciationFocus.coachingTip(focus)}",
+                        awardRewards = true,
+                    )
+                }
             } catch (e: Exception) {
-                _shadowScore.value    = 60
-                _shadowFeedback.value = "Keep practicing!"
-            } finally { _isLoading.value = false }
+                applyShadowScore(60, "Continue praticando!", awardRewards = false)
+            } finally {
+                _isLoading.value = false
+            }
         }
+    }
+
+    private fun estimateWordOverlap(reference: String, hypothesis: String): Int {
+        fun words(s: String) = s.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}\\s']"), " ")
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+        val ref = words(reference)
+        val hyp = words(hypothesis)
+        if (ref.isEmpty()) return 50
+        if (hyp.isEmpty()) return 15
+        val set = hyp.toSet()
+        val hit = ref.count { it in set }
+        val coverage = hit.toDouble() / ref.size
+        val extra = (hyp.size - ref.size).coerceAtLeast(0).toDouble() / ref.size
+        return (coverage * 100 - extra * 12).toInt().coerceIn(10, 98)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1003,7 +1272,11 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        super.onCleared()
+        try {
+            localMediaPlayer?.release()
+        } catch (_: Exception) {
+        }
+        localMediaPlayer = null
         try {
             opusAudioPlayer.release()
         } catch (e: Exception) {
@@ -1019,6 +1292,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        super.onCleared()
         try {
             speechRecognizer?.destroy()
         } catch (e: Exception) {

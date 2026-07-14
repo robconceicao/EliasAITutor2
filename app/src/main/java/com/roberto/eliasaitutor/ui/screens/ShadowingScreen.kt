@@ -45,11 +45,15 @@ fun ShadowingScreen(vm: EliasViewModel) {
     val phrase by vm.shadowPhrase.collectAsState()
     val score by vm.shadowScore.collectAsState()
     val feedback by vm.shadowFeedback.collectAsState()
+    val transcript by vm.shadowTranscript.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
+    val isIaSpeaking by vm.isIaSpeaking.collectAsState()
 
     var isRecording by remember { mutableStateOf(false) }
     var isPlayingElias by remember { mutableStateOf(false) }
     var isPlayingYou by remember { mutableStateOf(false) }
+    // Prefer real TTS state when Elias is playing via backend stream
+    val eliasActive = isPlayingElias || isIaSpeaking
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var lastAudioFile by remember { mutableStateOf<File?>(null) }
 
@@ -155,8 +159,8 @@ fun ShadowingScreen(vm: EliasViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 1. Listen to Elias
-                val eliasBorder = if (isPlayingElias) Accent else Border
-                val eliasBg     = if (isPlayingElias) Accent.copy(alpha = 0.2f) else Surface
+                val eliasBorder = if (eliasActive) Accent else Border
+                val eliasBg     = if (eliasActive) Accent.copy(alpha = 0.2f) else Surface
                 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
@@ -172,7 +176,7 @@ fun ShadowingScreen(vm: EliasViewModel) {
                     ) {
                         Icon(Icons.Default.PlayArrow, "Listen", tint = Accent, modifier = Modifier.size(32.dp))
                     }
-                    Text("Elias", color = if (isPlayingElias) Accent else Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text("Elias", color = if (eliasActive) Accent else Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
 
                 // 2. Record Yourself
@@ -195,19 +199,25 @@ fun ShadowingScreen(vm: EliasViewModel) {
                                         setAudioSource(MediaRecorder.AudioSource.MIC)
                                         setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                         setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                                        setAudioEncodingBitRate(128_000)
+                                        setAudioSamplingRate(44_100)
                                         setOutputFile(file.absolutePath)
                                         prepare()
                                         start()
                                     }
                                     isRecording = true
                                 } else {
-                                    recorder?.apply {
-                                        stop()
-                                        release()
+                                    try {
+                                        recorder?.apply {
+                                            stop()
+                                            release()
+                                        }
+                                    } catch (_: Exception) {
+                                        try { recorder?.release() } catch (_: Exception) {}
                                     }
                                     recorder = null
                                     isRecording = false
-                                    lastAudioFile?.let { vm.submitShadowingAudio(it) }
+                                    lastAudioFile?.let { vm.submitShadowingAudio(it, phrase) }
                                 }
                             }
                         },
@@ -307,6 +317,14 @@ fun ShadowingScreen(vm: EliasViewModel) {
                                 fontSize = 12.sp,
                                 lineHeight = 16.sp,
                                 modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        if (transcript.isNotBlank()) {
+                            Text(
+                                "ASR: “$transcript”",
+                                color = Accent.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 6.dp)
                             )
                         }
                     }
