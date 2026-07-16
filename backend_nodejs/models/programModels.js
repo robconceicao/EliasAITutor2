@@ -50,6 +50,11 @@ export const UserProgramStateSchema = new mongoose.Schema(
     last_pause_increment_date: { type: String, default: null },
     /** Latest quiz result per week: { "3": { score_percent, passed, submitted_at } } */
     quiz_scores: { type: mongoose.Schema.Types.Mixed, default: {} },
+    /**
+     * Mastery hard-gate: highest week with checkpoint ready=true.
+     * Auto mode never opens week > mastery_cleared_week + 1.
+     */
+    mastery_cleared_week: { type: Number, default: 0, min: 0, max: 26 },
   },
   { collection: 'user_program_state' }
 );

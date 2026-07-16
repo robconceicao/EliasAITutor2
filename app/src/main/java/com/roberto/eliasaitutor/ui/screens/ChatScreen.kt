@@ -521,7 +521,7 @@ private fun EliasBubble(
                         HorizontalDivider(color = Border, thickness = 1.dp)
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Tradução",
+                            "Ajuda (EN → produção · não só PT)",
                             color = Purple.copy(alpha = 0.85f),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -567,7 +567,7 @@ private fun EliasBubble(
                                     bubble.isTranslating -> "…"
                                     !bubble.translationPt.isNullOrBlank() -> "OK"
                                     !bubble.translationError.isNullOrBlank() -> "Tentar de novo"
-                                    else -> "Traduzir"
+                                    else -> "Ajudar"
                                 },
                                 fontSize = 12.sp
                             )

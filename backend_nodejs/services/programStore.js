@@ -70,19 +70,42 @@ function defaultState() {
     deficient_topics: null,
     last_pause_increment_date: null,
     quiz_scores: {},
+    /** Highest week cleared by checkpoint (0 = none). Mastery hard-gate. */
+    mastery_cleared_week: 0,
   };
 }
 
-function resolveWeek(state) {
+/**
+ * Mastery hard-gate (audit fix):
+ * - held_back: freeze on current practice week
+ * - auto: calendar week capped at mastery_cleared_week + 1 (cannot skip without ready)
+ * - manual: honor stored current_week (admin override)
+ */
+export function resolveWeek(state) {
   if (!state) return 1;
-  if (state.week_mode === 'auto') {
-    return computeEffectiveWeek(
-      state.start_date,
-      todayISO(),
-      state.total_paused_days || 0
-    );
+  const cleared = Math.max(
+    0,
+    Math.min(26, Number(state.mastery_cleared_week) || 0)
+  );
+  const masteryCap = Math.min(26, Math.max(1, cleared + 1));
+
+  if (state.held_back) {
+    // Stay on the week under review (never jump while held back)
+    const w = Number(state.current_week) || masteryCap;
+    return Math.min(26, Math.max(1, Math.min(w, masteryCap)));
   }
-  return Math.min(26, Math.max(1, state.current_week || 1));
+
+  if (state.week_mode === 'manual') {
+    return Math.min(26, Math.max(1, Number(state.current_week) || 1));
+  }
+
+  // auto: calendar can lag or lead, but never open a week without clearing prior
+  const calendar = computeEffectiveWeek(
+    state.start_date,
+    todayISO(),
+    state.total_paused_days || 0
+  );
+  return Math.min(calendar, masteryCap);
 }
 
 /** While held_back, add 1 paused day per calendar day (once). */
@@ -159,6 +182,10 @@ function normalizeState(raw) {
   s.last_pause_increment_date = s.last_pause_increment_date || null;
   s.quiz_scores =
     s.quiz_scores && typeof s.quiz_scores === 'object' ? s.quiz_scores : {};
+  s.mastery_cleared_week = Math.max(
+    0,
+    Math.min(26, Number(s.mastery_cleared_week) || 0)
+  );
   return s;
 }
 
@@ -228,6 +255,10 @@ export async function updateProgramState(patch) {
         : current.last_pause_increment_date,
     quiz_scores:
       patch.quiz_scores !== undefined ? patch.quiz_scores : current.quiz_scores,
+    mastery_cleared_week:
+      patch.mastery_cleared_week !== undefined
+        ? Math.max(0, Math.min(26, Number(patch.mastery_cleared_week) || 0))
+        : current.mastery_cleared_week,
   });
 
   if (next.week_mode !== 'auto' && next.week_mode !== 'manual') {
@@ -235,15 +266,13 @@ export async function updateProgramState(patch) {
     err.status = 422;
     throw err;
   }
-  next.current_week = Math.min(26, Math.max(1, Number(next.current_week) || 1));
   next.daily_goal_minutes = Math.max(1, Number(next.daily_goal_minutes) || 30);
 
-  if (next.week_mode === 'auto') {
-    next.current_week = computeEffectiveWeek(
-      next.start_date,
-      todayISO(),
-      next.total_paused_days || 0
-    );
+  // Always resolve via mastery hard-gate (not pure calendar)
+  if (next.week_mode === 'manual' && patch.current_week !== undefined) {
+    next.current_week = Math.min(26, Math.max(1, Number(patch.current_week) || 1));
+  } else {
+    next.current_week = resolveWeek(next);
   }
 
   memoryState = { ...next };
@@ -396,10 +425,15 @@ export async function runCheckpoint() {
   });
 
   if (result.ready) {
+    const cleared = Math.max(
+      Number(state.mastery_cleared_week) || 0,
+      Number(week) || 0
+    );
     await updateProgramState({
       held_back: false,
       review_since: null,
       deficient_topics: null,
+      mastery_cleared_week: cleared,
       // keep total_paused_days so calendar stays adjusted
     });
     const fresh = await getProgramState();
@@ -409,6 +443,7 @@ export async function runCheckpoint() {
       deficient_topics: null,
       details: result.details,
       state: fresh,
+      mastery_cleared_week: cleared,
     };
   }
 
@@ -425,6 +460,9 @@ export async function runCheckpoint() {
     held_back: true,
     review_since: todayISO(),
     deficient_topics: deficient,
+    // freeze practice week at the failed checkpoint week
+    current_week: week,
+    week_mode: state.week_mode === 'manual' ? 'manual' : 'auto',
   });
   const fresh = await getProgramState();
   return {

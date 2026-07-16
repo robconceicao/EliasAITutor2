@@ -71,4 +71,30 @@ class ProgramWeekCalcTest {
         val resolved = ProgramRepository.resolveWeekLocally(s)
         assertEquals(true, resolved.currentWeek in 1..26)
     }
+
+    @Test
+    fun masteryGate_neverOpensPastClearedPlusOne() {
+        val s = UserProgramState(
+            startDate = "2020-01-01", // calendar far ahead
+            weekMode = "auto",
+            totalPausedDays = 0,
+            masteryClearedWeek = 0,
+        )
+        assertEquals(1, ProgramRepository.resolveWeekLocally(s).currentWeek)
+
+        val s2 = s.copy(masteryClearedWeek = 2)
+        assertEquals(3, ProgramRepository.resolveWeekLocally(s2).currentWeek)
+    }
+
+    @Test
+    fun masteryGate_heldBackStaysOnCurrent() {
+        val s = UserProgramState(
+            startDate = "2020-01-01",
+            weekMode = "auto",
+            masteryClearedWeek = 1,
+            heldBack = true,
+            currentWeek = 2,
+        )
+        assertEquals(2, ProgramRepository.resolveWeekLocally(s).currentWeek)
+    }
 }

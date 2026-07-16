@@ -36,8 +36,7 @@ export function cefrAtLeast(estimate, required) {
 }
 
 /**
- * Best (highest) CEFR among session estimates for the week.
- * Empty list → null (not ready).
+ * Best (highest) CEFR among session estimates — useful for display only.
  */
 export function bestCefrEstimate(estimates) {
   let best = null;
@@ -51,6 +50,24 @@ export function bestCefrEstimate(estimates) {
     }
   }
   return best;
+}
+
+/**
+ * Conservative CEFR for mastery gate: lowest valid estimate of the week
+ * (stricter than "best session wins"). Empty → null (not ready).
+ */
+export function conservativeCefrEstimate(estimates) {
+  let worst = null;
+  let worstRank = Infinity;
+  for (const raw of estimates || []) {
+    const n = normalizeCefr(raw);
+    const r = cefrRank(n);
+    if (r > 0 && r < worstRank) {
+      worstRank = r;
+      worst = n;
+    }
+  }
+  return worst;
 }
 
 /**
@@ -102,13 +119,14 @@ export function evaluateReadiness({
     );
   }
 
-  const bestCefr = bestCefrEstimate(cefrEstimates);
-  const cefrOk = bestCefr != null && cefrAtLeast(bestCefr, expectedLevel);
-  if (bestCefr == null) {
+  // Mastery gate uses conservative (lowest) CEFR — not the best session spike
+  const gateCefr = conservativeCefrEstimate(cefrEstimates);
+  const cefrOk = gateCefr != null && cefrAtLeast(gateCefr, expectedLevel);
+  if (gateCefr == null) {
     reasons.push('Sem estimativa CEFR nas sessões da semana (pratique e encerre sessões com relatório).');
   } else if (!cefrOk) {
     reasons.push(
-      `CEFR estimado ${bestCefr} abaixo do nível da semana ${normalizeCefr(expectedLevel) || expectedLevel}.`
+      `CEFR estimado ${gateCefr} (mais baixo da semana) abaixo do nível da semana ${normalizeCefr(expectedLevel) || expectedLevel}.`
     );
   }
 
@@ -129,7 +147,8 @@ export function evaluateReadiness({
       quiz_score_percent: score,
       passing_score_percent: passMark,
       quiz_ok: quizOk,
-      best_cefr: bestCefr,
+      best_cefr: bestCefrEstimate(cefrEstimates),
+      gate_cefr: gateCefr,
       expected_level: normalizeCefr(expectedLevel) || expectedLevel,
       cefr_ok: cefrOk,
       critical_mistakes: criticalCount,

@@ -64,6 +64,10 @@ data class UserProgramState(
     @SerializedName("deficient_topics")
     @SerialName("deficient_topics")
     val deficientTopics: List<String>? = null,
+    /** Highest week cleared by checkpoint (mastery hard-gate). */
+    @SerializedName("mastery_cleared_week")
+    @SerialName("mastery_cleared_week")
+    val masteryClearedWeek: Int = 0,
 )
 
 @Serializable

@@ -6,11 +6,16 @@ import {
   evaluateReadiness,
   cefrAtLeast,
   bestCefrEstimate,
+  conservativeCefrEstimate,
   countCriticalMistakes,
   buildDeficientTopics,
   normalizeCefr,
 } from './services/evaluateReadiness.js';
-import { computeAutoWeek, computeEffectiveWeek } from './services/programStore.js';
+import {
+  computeAutoWeek,
+  computeEffectiveWeek,
+  resolveWeek,
+} from './services/programStore.js';
 
 // CEFR ordinal
 assert.strictEqual(cefrAtLeast('B1', 'A2'), true);
@@ -19,6 +24,8 @@ assert.strictEqual(cefrAtLeast('B1', 'B1'), true);
 assert.strictEqual(normalizeCefr(' b1 '), 'B1');
 assert.strictEqual(bestCefrEstimate(['A2', 'B1', 'A1']), 'B1');
 assert.strictEqual(bestCefrEstimate([]), null);
+assert.strictEqual(conservativeCefrEstimate(['A2', 'B1', 'A1']), 'A1');
+assert.strictEqual(conservativeCefrEstimate([]), null);
 
 assert.strictEqual(
   countCriticalMistakes([
@@ -61,16 +68,17 @@ assert.strictEqual(
   assert.ok(r.reasons.some((x) => /Quiz/i.test(x)));
 }
 
-// Fail CEFR
+// Fail CEFR (conservative: lowest estimate A2 blocks B1 week even if another session was B1)
 {
   const r = evaluateReadiness({
     quizScorePercent: 90,
-    cefrEstimates: ['A2'],
+    cefrEstimates: ['B1', 'A2'],
     expectedLevel: 'B1',
     feedbackList: [{ mistakes: [] }],
   });
   assert.strictEqual(r.ready, false);
   assert.ok(r.reasons.some((x) => /CEFR/i.test(x)));
+  assert.strictEqual(r.details.gate_cefr, 'A2');
 }
 
 // Fail critical count
@@ -139,4 +147,51 @@ assert.strictEqual(
   2
 );
 
-console.log('✅ evaluateReadiness + pause calendar tests passed');
+// Mastery hard-gate: calendar week 3 but nothing cleared → stay week 1
+assert.strictEqual(
+  resolveWeek({
+    week_mode: 'auto',
+    start_date: '2026-07-01',
+    total_paused_days: 0,
+    mastery_cleared_week: 0,
+    held_back: false,
+    current_week: 1,
+  }),
+  1
+);
+// Cleared week 1 → can open week 2 even if calendar says 3
+assert.strictEqual(
+  resolveWeek({
+    week_mode: 'auto',
+    start_date: '2026-07-01',
+    total_paused_days: 0,
+    mastery_cleared_week: 1,
+    held_back: false,
+  }),
+  2
+);
+// Cleared 2 + calendar 3 → week 3
+assert.strictEqual(
+  resolveWeek({
+    week_mode: 'auto',
+    start_date: '2026-07-01',
+    total_paused_days: 0,
+    mastery_cleared_week: 2,
+    held_back: false,
+  }),
+  3
+);
+// held_back freezes at current (capped)
+assert.strictEqual(
+  resolveWeek({
+    week_mode: 'auto',
+    start_date: '2026-07-01',
+    total_paused_days: 0,
+    mastery_cleared_week: 1,
+    held_back: true,
+    current_week: 2,
+  }),
+  2
+);
+
+console.log('✅ evaluateReadiness + pause calendar + mastery gate tests passed');

@@ -42,6 +42,7 @@ class ProgramRepository(private val context: Context) {
         val REVIEW_SINCE = stringPreferencesKey("review_since")
         val TOTAL_PAUSED = intPreferencesKey("total_paused_days")
         val DEFICIENT_JSON = stringPreferencesKey("deficient_topics_json")
+        val MASTERY_CLEARED = intPreferencesKey("mastery_cleared_week")
     }
 
     val cachedState: Flow<UserProgramState> = context.programDataStore.data
@@ -60,6 +61,7 @@ class ProgramRepository(private val context: Context) {
                 reviewSince = p[Keys.REVIEW_SINCE],
                 totalPausedDays = p[Keys.TOTAL_PAUSED] ?: 0,
                 deficientTopics = deficient,
+                masteryClearedWeek = p[Keys.MASTERY_CLEARED] ?: 0,
             ).let { resolveWeekLocally(it) }
         }
 
@@ -227,6 +229,7 @@ class ProgramRepository(private val context: Context) {
             if (state.reviewSince != null) it[Keys.REVIEW_SINCE] = state.reviewSince
             else it.remove(Keys.REVIEW_SINCE)
             it[Keys.TOTAL_PAUSED] = state.totalPausedDays
+            it[Keys.MASTERY_CLEARED] = state.masteryClearedWeek.coerceIn(0, 26)
             val topics = state.deficientTopics
             if (topics != null) it[Keys.DEFICIENT_JSON] = json.encodeToString(topics)
             else it.remove(Keys.DEFICIENT_JSON)
@@ -257,14 +260,24 @@ class ProgramRepository(private val context: Context) {
             }
         }
 
+        /**
+         * Mastery hard-gate (aligned with backend resolveWeek):
+         * auto week never exceeds masteryClearedWeek + 1.
+         */
         fun resolveWeekLocally(state: UserProgramState): UserProgramState {
-            return if (state.weekMode == "auto") {
-                state.copy(
-                    currentWeek = computeEffectiveWeek(
-                        state.startDate,
-                        totalPausedDays = state.totalPausedDays,
-                    )
+            val cleared = state.masteryClearedWeek.coerceIn(0, 26)
+            val masteryCap = (cleared + 1).coerceIn(1, 26)
+            if (state.heldBack) {
+                return state.copy(
+                    currentWeek = state.currentWeek.coerceIn(1, masteryCap)
                 )
+            }
+            return if (state.weekMode == "auto") {
+                val calendar = computeEffectiveWeek(
+                    state.startDate,
+                    totalPausedDays = state.totalPausedDays,
+                )
+                state.copy(currentWeek = minOf(calendar, masteryCap))
             } else {
                 state.copy(currentWeek = state.currentWeek.coerceIn(1, 26))
             }
