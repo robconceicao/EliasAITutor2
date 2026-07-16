@@ -51,6 +51,19 @@ data class UserProgramState(
     @SerializedName("daily_goal_minutes")
     @SerialName("daily_goal_minutes")
     val dailyGoalMinutes: Int = 30,
+    // B.3 adaptive tutor
+    @SerializedName("held_back")
+    @SerialName("held_back")
+    val heldBack: Boolean = false,
+    @SerializedName("review_since")
+    @SerialName("review_since")
+    val reviewSince: String? = null,
+    @SerializedName("total_paused_days")
+    @SerialName("total_paused_days")
+    val totalPausedDays: Int = 0,
+    @SerializedName("deficient_topics")
+    @SerialName("deficient_topics")
+    val deficientTopics: List<String>? = null,
 )
 
 @Serializable
@@ -97,6 +110,48 @@ data class FeedbackMistake(
     @SerializedName("mouth_tip")
     @SerialName("mouth_tip")
     val mouthTip: String = "",
+    /** "critical" | "minor" — used by evaluateReadiness (D6). */
+    val severity: String = "minor",
+)
+
+@Serializable
+data class ProgramQuizQuestion(
+    val question: String = "",
+    val options: List<String> = emptyList(),
+)
+
+@Serializable
+data class ProgramQuizPayload(
+    val week: Int = 0,
+    @SerializedName("passing_score_percent")
+    @SerialName("passing_score_percent")
+    val passingScorePercent: Int = 70,
+    val questions: List<ProgramQuizQuestion> = emptyList(),
+)
+
+@Serializable
+data class QuizSubmitResult(
+    @SerializedName("score_percent")
+    @SerialName("score_percent")
+    val scorePercent: Int = 0,
+    val passed: Boolean = false,
+    @SerializedName("passing_score_percent")
+    @SerialName("passing_score_percent")
+    val passingScorePercent: Int = 70,
+    @SerializedName("correct_count")
+    @SerialName("correct_count")
+    val correctCount: Int = 0,
+    val total: Int = 0,
+)
+
+@Serializable
+data class CheckpointResult(
+    val ready: Boolean = false,
+    val reasons: List<String> = emptyList(),
+    @SerializedName("deficient_topics")
+    @SerialName("deficient_topics")
+    val deficientTopics: List<String>? = null,
+    val state: UserProgramState? = null,
 )
 
 @Serializable

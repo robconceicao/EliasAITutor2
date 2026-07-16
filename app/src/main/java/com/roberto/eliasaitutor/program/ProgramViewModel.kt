@@ -13,8 +13,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.time.LocalDate
+
+/** D9 / A.5: max wait for program network refresh before error + retry. */
+private const val PROGRAM_REFRESH_TIMEOUT_MS = 10_000L
 
 data class ProgramUiState(
     val loading: Boolean = true,
@@ -65,6 +69,19 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
     private val _feedbackStatus = MutableStateFlow("none")
     val feedbackStatus: StateFlow<String> = _feedbackStatus.asStateFlow()
 
+    /** Weekly program quiz (F9 / B.6) — not the free-chat vocab quiz. */
+    private val _weekQuiz = MutableStateFlow<ProgramQuizPayload?>(null)
+    val weekQuiz: StateFlow<ProgramQuizPayload?> = _weekQuiz.asStateFlow()
+
+    private val _quizResult = MutableStateFlow<QuizSubmitResult?>(null)
+    val quizResult: StateFlow<QuizSubmitResult?> = _quizResult.asStateFlow()
+
+    private val _quizLoading = MutableStateFlow(false)
+    val quizLoading: StateFlow<Boolean> = _quizLoading.asStateFlow()
+
+    private val _checkpointMsg = MutableStateFlow<String?>(null)
+    val checkpointMsg: StateFlow<String?> = _checkpointMsg.asStateFlow()
+
     private var timerJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
     private var lastTranscript: String = ""
@@ -80,11 +97,38 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
             val localState = repo.cachedState.first()
             val localWeek = repo.getCachedWeeks().find { it.week == localState.currentWeek }
 
-            val net = repo.refreshFromNetwork()
+            // A.5: hard cap — never leave "Carregando…" forever
+            val net = withTimeoutOrNull(PROGRAM_REFRESH_TIMEOUT_MS) {
+                repo.refreshFromNetwork()
+            }
+
+            if (net == null) {
+                _ui.value = ProgramUiState(
+                    loading = false,
+                    offline = true,
+                    onboarded = onboarded,
+                    state = localState,
+                    week = localWeek,
+                    progress = ProgressSummary(
+                        todayMinutes = 0,
+                        goal = localState.dailyGoalMinutes,
+                        currentWeek = localState.currentWeek,
+                    ),
+                    error = "Tempo esgotado ao carregar o programa. Toque em Tentar novamente.",
+                )
+                return@launch
+            }
+
             if (net.isSuccess) {
                 val (state, weeks) = net.getOrThrow()
                 val week = weeks.find { it.week == state.currentWeek }
-                val progress = repo.getProgress()
+                val progress = withTimeoutOrNull(PROGRAM_REFRESH_TIMEOUT_MS) {
+                    repo.getProgress()
+                } ?: ProgressSummary(
+                    todayMinutes = 0,
+                    goal = state.dailyGoalMinutes,
+                    currentWeek = state.currentWeek,
+                )
                 _ui.value = ProgramUiState(
                     loading = false,
                     offline = false,
@@ -106,7 +150,7 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
                         goal = localState.dailyGoalMinutes,
                         currentWeek = localState.currentWeek,
                     ),
-                    error = "Backend indisponível — dados em cache",
+                    error = "Backend indisponível — dados em cache. Toque em Tentar novamente.",
                 )
             }
         }
@@ -157,6 +201,67 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun loadWeekQuiz(week: Int = _ui.value.state.currentWeek) {
+        viewModelScope.launch {
+            _quizLoading.value = true
+            _quizResult.value = null
+            _weekQuiz.value = null
+            val q = repo.getQuiz(week)
+            _weekQuiz.value = q
+            _quizLoading.value = false
+            if (q == null) {
+                _ui.value = _ui.value.copy(
+                    error = "Não foi possível carregar o quiz da semana $week. Tente novamente."
+                )
+            }
+        }
+    }
+
+    fun clearWeekQuiz() {
+        _weekQuiz.value = null
+        _quizResult.value = null
+    }
+
+    fun submitWeekQuiz(answers: List<Int>) {
+        viewModelScope.launch {
+            val week = _weekQuiz.value?.week ?: _ui.value.state.currentWeek
+            _quizLoading.value = true
+            val result = repo.submitQuiz(week, answers)
+            _quizResult.value = result
+            _quizLoading.value = false
+            if (result == null) {
+                _ui.value = _ui.value.copy(
+                    error = "Falha ao enviar o quiz. Verifique a conexão e tente de novo."
+                )
+            }
+        }
+    }
+
+    /** Weekly readiness gate — sets held_back / clears review on server. */
+    fun runCheckpoint() {
+        viewModelScope.launch {
+            _quizLoading.value = true
+            _checkpointMsg.value = null
+            val result = repo.runCheckpoint()
+            _quizLoading.value = false
+            if (result == null) {
+                _checkpointMsg.value = "Checkpoint indisponível. Tente novamente."
+                return@launch
+            }
+            _checkpointMsg.value = if (result.ready) {
+                "Pronto para avançar! O calendário segue normalmente."
+            } else {
+                "Revisão necessária: ${result.reasons.joinToString(" · ").ifBlank { "veja os tópicos abaixo" }}"
+            }
+            // Refresh home so held_back card appears
+            refresh()
+        }
+    }
+
+    fun clearCheckpointMsg() {
+        _checkpointMsg.value = null
+    }
+
     /**
      * Start themed or quick conversation session (F3+F4).
      * Socket/prompt binding is done by EliasViewModel.beginProgramSession via onReady.
@@ -164,7 +269,7 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
     fun startConversationSession(
         type: ProgramSessionType,
         goalMinutes: Int,
-        onReady: (week: Int, title: String, lexis: String, grammar: String, phase: Int) -> Unit,
+        onReady: (week: Int, title: String, lexis: String, grammar: String, phase: Int, level: String) -> Unit,
     ) {
         viewModelScope.launch {
             val week = _ui.value.state.currentWeek
@@ -175,6 +280,8 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
                 week <= 20 -> 3
                 else -> 4
             }
+            // A.1: CEFR always from program_weeks.level — never user self-report
+            val level = weekDoc?.level.orEmpty()
             val id = repo.createSession(week, type) ?: "local-${System.currentTimeMillis()}"
             _practice.value = ActivePracticeSession(
                 sessionId = id,
@@ -191,6 +298,7 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
                 weekDoc?.lexis ?: "",
                 weekDoc?.grammar ?: "",
                 phase,
+                level,
             )
         }
     }

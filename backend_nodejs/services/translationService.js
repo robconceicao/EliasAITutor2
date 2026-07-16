@@ -1,72 +1,45 @@
 /**
- * Contextual translation via existing LLM providers (Task Final v1.0).
- * Returns natural Brazilian Portuguese — never machine-literal only.
+ * A.3 — Contextual translation via shared LLM client (same stack as F8).
+ * Discrete PT under the English bubble — never replaces the original.
  */
+import { callLlm } from './llmClient.js';
 
-const SYSTEM = `You are a bilingual English tutor assistant.
-Translate the user's English message into natural, clear Brazilian Portuguese.
+const SYSTEM = `You are a bilingual English tutor assistant for the Elias app.
+Translate the student's English message into natural, clear Brazilian Portuguese.
 Preserve meaning, tone, and teaching intent (IPA symbols may stay as-is).
-Reply with ONLY the Portuguese translation — no quotes, no preamble.`;
+Reply with ONLY the Portuguese translation — no quotes, no preamble, no English.`;
 
+/** D9: translation network wait — default 10s per provider inside callLlm. */
+export const TRANSLATION_TIMEOUT_MS = Number(
+  process.env.TRANSLATION_TIMEOUT_MS || 10_000
+);
+
+/**
+ * @param {string} text English source
+ * @returns {Promise<string>} pt-BR translation
+ */
 export async function translateToPtBr(text) {
   const src = (text || '').trim();
   if (!src) return '';
 
-  if (process.env.GROQ_API_KEY) {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: src },
-        ],
-        temperature: 0.2,
-        max_tokens: 500,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return (data.choices?.[0]?.message?.content || '').trim();
-    }
-  }
+  const raw = await callLlm({
+    system: SYSTEM,
+    user: src,
+    maxTokens: 500,
+    temperature: 0.2,
+    timeoutMs: TRANSLATION_TIMEOUT_MS,
+  });
 
-  if (process.env.GEMINI_API_KEY) {
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const googleAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = googleAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: SYSTEM,
-    });
-    const result = await model.generateContent(src);
-    return (result.response.text() || '').trim();
+  // Strip accidental quotes / fences
+  let out = (raw || '').trim();
+  if (out.startsWith('```')) {
+    out = out.replace(/^```(?:\w+)?\s*/, '').replace(/\s*```$/, '').trim();
   }
-
-  if (process.env.DEEPSEEK_API_KEY) {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: src },
-        ],
-        temperature: 0.2,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return (data.choices?.[0]?.message?.content || '').trim();
-    }
+  if (
+    (out.startsWith('"') && out.endsWith('"')) ||
+    (out.startsWith("'") && out.endsWith("'"))
+  ) {
+    out = out.slice(1, -1).trim();
   }
-
-  throw new Error('No LLM available for translation');
+  return out;
 }

@@ -11,6 +11,8 @@ import {
   LEGACY_ADAM_VOICE_ID,
   STREAM_MODEL_ID,
   streamInputUrl,
+  FIRST_AUDIO_BYTE_TIMEOUT_MS,
+  createFirstAudioWatchdog,
 } from './services/elevenLabsClient.js';
 
 const saved = { ...process.env };
@@ -50,6 +52,10 @@ try {
   // pcm_* required for Opus pipeline (mp3 default caused static/hiss)
   assert.ok(url.includes('output_format=pcm_'), 'PCM output_format required for Opus');
   assert.ok(!url.includes(LEGACY_ADAM_VOICE_ID));
+
+  // D8: first-audio-byte timeout is explicit and watchdog is exportable
+  assert.strictEqual(FIRST_AUDIO_BYTE_TIMEOUT_MS, 8000, 'D8 first-byte default 8s');
+  assert.strictEqual(typeof createFirstAudioWatchdog, 'function');
 
   console.log('✅ voice config tests passed');
 } finally {

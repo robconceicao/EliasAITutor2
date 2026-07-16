@@ -29,9 +29,11 @@ data class UiChatBubble(
     val sentiment: String          = "neutral",
     val sentimentCue: String       = "",
     val sentimentConfidence: Int   = 50,
-    /** Tradução contextual em pt-BR (discreta sob a mensagem). */
+    /** Tradução contextual em pt-BR (discreta sob a mensagem — não substitui o inglês). */
     val translationPt: String?     = null,
     val isTranslating: Boolean     = false,
+    /** Erro de tradução (timeout/rede) — UI mostra retry. */
+    val translationError: String?  = null,
 )
 
 data class MistakeEntry(

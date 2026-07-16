@@ -11,6 +11,7 @@ import com.roberto.eliasaitutor.network.*
 import android.media.MediaPlayer
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -39,8 +40,18 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    /**
+     * A.5: visible when a chat/network wait timed out — UI must offer retry, never infinite spinner.
+     */
+    private val _loadError = MutableStateFlow<String?>(null)
+    val loadError: StateFlow<String?> = _loadError
+
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
+
+    /** Max wait for first texto_chunk / mensagem_ia after send (A.5). TTS first-byte is 8s on backend. */
+    private val responseTimeoutMs = 45_000L
+    private var responseTimeoutJob: Job? = null
 
     /**
      * Active chat flow: FREE by default; PROGRAM when started from Programa tab.
@@ -60,6 +71,30 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private var pendingTranslationIndex: Int = -1
+
+    /** Clear infinite-loading guard when any LLM/TTS progress arrives. */
+    private fun clearResponseTimeout() {
+        responseTimeoutJob?.cancel()
+        responseTimeoutJob = null
+    }
+
+    private fun armResponseTimeout() {
+        clearResponseTimeout()
+        _loadError.value = null
+        responseTimeoutJob = viewModelScope.launch {
+            delay(responseTimeoutMs)
+            if (_isLoading.value) {
+                _isLoading.value = false
+                _loadError.value =
+                    "Demorou demais para responder. Verifique a conexão e tente de novo."
+                _toastMessage.value = "Tempo esgotado — tente novamente"
+            }
+        }
+    }
+
+    fun clearLoadError() {
+        _loadError.value = null
+    }
 
     private val bargeInController by lazy {
         com.roberto.eliasaitutor.audio.BargeInController(
@@ -520,24 +555,64 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             SocketClient.erroFlow.collect { errorMsg ->
                 _toastMessage.value = "Erro no servidor: $errorMsg"
                 _isLoading.value = false
+                clearResponseTimeout()
+                _loadError.value = errorMsg
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.ttsUnavailableFlow.collect { reason ->
+                // Drop any late primary frames that may still be in the jitter buffer
+                opusAudioPlayer.stopPlayout()
+                _isIaSpeaking.value = false
+                // Backend already falls back to text-only; surface once, never hang spinner
+                clearResponseTimeout()
+                if (_isLoading.value && _chatBubbles.value.none { !it.isUser }) {
+                    // Still waiting for text — keep loading until texto_chunk or response timeout
+                    _toastMessage.value = "Voz indisponível — modo texto"
+                } else {
+                    _isLoading.value = false
+                    _toastMessage.value = "Voz indisponível (${reason.ifBlank { "timeout" }}) — texto mantido"
+                }
+            }
+        }
+
+        // Progressive TTS status (fallback voice) — light UX; full polish later
+        viewModelScope.launch {
+            SocketClient.ttsStatusFlow.collect { msg ->
+                if (msg.isNotBlank()) {
+                    _toastMessage.value = msg
+                    // Clear any primary audio still buffered while switching voices
+                    opusAudioPlayer.stopPlayout()
+                }
             }
         }
 
         viewModelScope.launch {
             SocketClient.traducaoFlow.collect { result ->
+                translationTimeoutJob?.cancel()
+                translationTimeoutJob = null
                 val idx = result.requestId?.toIntOrNull() ?: pendingTranslationIndex
                 if (idx < 0) return@collect
                 val bubbles = _chatBubbles.value.toMutableList()
                 if (idx >= bubbles.size) return@collect
                 val b = bubbles[idx]
                 bubbles[idx] = if (result.ok && result.translation.isNotBlank()) {
-                    b.copy(translationPt = result.translation, isTranslating = false)
+                    b.copy(
+                        translationPt = result.translation,
+                        isTranslating = false,
+                        translationError = null,
+                    )
                 } else {
-                    b.copy(isTranslating = false)
+                    b.copy(
+                        isTranslating = false,
+                        translationError = result.error?.ifBlank { null }
+                            ?: "Não foi possível traduzir",
+                    )
                 }
                 _chatBubbles.value = bubbles
                 if (!result.ok) {
-                    _toastMessage.value = "Tradução indisponível: ${result.error ?: "tente de novo"}"
+                    _toastMessage.value = "Tradução: ${result.error ?: "tente de novo"}"
                 }
                 pendingTranslationIndex = -1
             }
@@ -546,6 +621,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             SocketClient.textoChunkFlow.collect { chunk ->
                 _isLoading.value = false
+                clearResponseTimeout()
+                _loadError.value = null
                 val bubbles = _chatBubbles.value.toMutableList()
                 if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
                     val prev = bubbles[streamingBubbleIndex]
@@ -562,6 +639,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             SocketClient.mensagemIaFlow.collect { finalBubble ->
                 _isLoading.value = false
+                clearResponseTimeout()
+                _loadError.value = null
                 val bubbles = _chatBubbles.value.toMutableList()
                 if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
                     bubbles[streamingBubbleIndex] = finalBubble
@@ -725,7 +804,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * PROGRAM flow (Task Final): no level picker, week prompt, auto TTS via backend stream.
+     * PROGRAM flow (Task Final / A.1): no level picker, week prompt, auto TTS via backend stream.
+     * [level] must come from program_weeks.level for the current week — never user self-report.
      */
     fun beginProgramSession(
         week: Int,
@@ -735,6 +815,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         phase: Int,
         sessionType: String,
         userId: String,
+        level: String = "",
     ) {
         _chatContext.value = com.roberto.eliasaitutor.model.ChatContext(
             type = com.roberto.eliasaitutor.model.ChatType.PROGRAM,
@@ -744,6 +825,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             grammar = grammar,
             phase = phase,
             sessionType = sessionType,
+            level = level,
         )
         _chatBubbles.value = emptyList()
         claudeHistory.clear()
@@ -751,6 +833,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         isInterrupted = false
         _selectedScenario.value = ""
         _isLoading.value = true
+        armResponseTimeout()
 
         SocketClient.iniciarSessaoPrograma(userId, week, sessionType)
 
@@ -758,10 +841,11 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             kotlinx.coroutines.delay(450)
             val dayFocus = PronunciationFocus.focusOfDay()
+            val cefr = level.ifBlank { "from week curriculum" }
             val kickoff =
                 "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
-                    "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
-                    "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level. " +
+                    "Week $week — $title (CEFR $cefr). Theme/lexis: $lexis. Grammar: $grammar. " +
+                    "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level — curriculum level is $cefr. " +
                     "${PronunciationFocus.kickoffHint(dayFocus)} " +
                     "Open with the official Portuguese greeting, then coach with full focus on " +
                     "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation " +
@@ -782,7 +866,10 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Translate Elias bubble at [index] via backend LLM — shows PT under the message. */
+    private var translationTimeoutJob: Job? = null
+    private val translationTimeoutMs = 12_000L
+
+    /** Translate Elias bubble at [index] via backend LLM — PT under EN, never replaces original. */
     fun translateBubble(index: Int) {
         val bubbles = _chatBubbles.value
         if (index !in bubbles.indices) return
@@ -791,19 +878,70 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         if (b.translationPt != null) return // already translated
         if (!SocketClient.connectionStatus.value) {
             _toastMessage.value = "Offline — conecte-se para traduzir"
+            _chatBubbles.value = bubbles.toMutableList().also {
+                it[index] = b.copy(
+                    isTranslating = false,
+                    translationError = "Offline — toque para tentar de novo",
+                )
+            }
             return
         }
         pendingTranslationIndex = index
+        translationTimeoutJob?.cancel()
         _chatBubbles.value = bubbles.toMutableList().also {
-            it[index] = b.copy(isTranslating = true)
+            it[index] = b.copy(isTranslating = true, translationError = null)
         }
         SocketClient.requestTranslation(b.message, requestId = index.toString())
+        // A.5: never leave "Traduzindo…" forever
+        translationTimeoutJob = viewModelScope.launch {
+            delay(translationTimeoutMs)
+            val cur = _chatBubbles.value.toMutableList()
+            if (index !in cur.indices) return@launch
+            val bb = cur[index]
+            if (bb.isTranslating && bb.translationPt == null) {
+                cur[index] = bb.copy(
+                    isTranslating = false,
+                    translationError = "Tempo esgotado — toque para tentar de novo",
+                )
+                _chatBubbles.value = cur
+                _toastMessage.value = "Tradução demorou demais"
+                if (pendingTranslationIndex == index) pendingTranslationIndex = -1
+            }
+        }
     }
 
     /** Translate the last Elias message (voice: "não entendi", "traduz pra mim"). */
     fun translateLastEliasMessage() {
         val idx = _chatBubbles.value.indexOfLast { !it.isUser && it.message.isNotBlank() }
-        if (idx >= 0) translateBubble(idx)
+        if (idx >= 0) {
+            translateBubble(idx)
+        } else {
+            _toastMessage.value = "Nenhuma mensagem do Elias para traduzir ainda"
+        }
+    }
+
+    /**
+     * True when the user utterance is only a translation request (no extra content).
+     * In that case we translate in-place and skip a new chat turn.
+     */
+    fun isPureTranslationRequest(userText: String): Boolean {
+        val t = userText.lowercase().trim()
+            .replace(Regex("[.!?…]+$"), "")
+            .trim()
+        if (t.isBlank()) return false
+        val pure = setOf(
+            "não entendi", "nao entendi",
+            "traduz", "traduza", "traduzir", "traduza pra mim", "traduz pra mim",
+            "traduza para mim", "traduz para mim", "traduza isso", "traduz isso",
+            "me traduz", "me traduza", "em português", "em portugues",
+            "o que significa", "o que que significa", "what does it mean",
+            "translate", "translate please", "i don't understand", "i dont understand",
+        )
+        if (t in pure) return true
+        // Short help phrases that clearly ask only for translation
+        return (t.startsWith("traduz") || t.startsWith("traduza") || t.startsWith("não entendi") ||
+            t.startsWith("nao entendi") || t.startsWith("me traduz") || t.startsWith("em portugu")) &&
+            t.length <= 40
     }
 
     fun sendMessage(userText: String) {
@@ -814,15 +952,22 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         val minLevel = scenarioData?.first ?: 1
         val p = profile.value
 
-        // Voice/command shortcut: translate last Elias turn without new LLM chat turn
+        // Voice/command: translate last Elias turn
         val lower = userText.lowercase()
-        if (
+        val wantsTranslation =
             lower.contains("não entendi") || lower.contains("nao entendi") ||
-            lower.contains("traduz") || lower.contains("traduza") ||
-            lower.contains("translate")
-        ) {
+                lower.contains("traduz") || lower.contains("traduza") ||
+                lower.contains("translate") || lower.contains("em português") ||
+                lower.contains("em portugues") || lower.contains("o que significa") ||
+                lower.contains("me traduz")
+
+        if (wantsTranslation) {
             translateLastEliasMessage()
-            // Still forward to Elias so he can rephrase in simple English + PT scaffold
+            // Pure translate request → only show PT under last message (no new chat turn)
+            if (isPureTranslationRequest(userText)) {
+                return
+            }
+            // Longer utterance still goes to Elias so he can rephrase simply
         }
 
         // Scenario gates only apply outside program mode
@@ -855,6 +1000,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         _isLoading.value = true
         isInterrupted = false
         streamingBubbleIndex = -1
+        armResponseTimeout()
     }
 
     // ─────────────────────────────────────────────────────────────────────────

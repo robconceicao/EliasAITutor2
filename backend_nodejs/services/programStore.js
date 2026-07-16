@@ -6,6 +6,7 @@ import {
   ProgramWeek,
   UserProgramState,
   PracticeSession,
+  ProgramQuiz,
 } from '../models/programModels.js';
 
 /** @type {Map<number, object>} */
@@ -14,6 +15,8 @@ const memoryWeeks = new Map();
 let memoryState = null;
 /** @type {Map<string, object>} */
 const memorySessions = new Map();
+/** @type {Map<number, object>} week → quiz doc */
+const memoryQuizzes = new Map();
 
 let mongoEnabled = false;
 
@@ -30,11 +33,26 @@ function todayISO() {
 }
 
 export function computeAutoWeek(startDateStr, todayStr = todayISO()) {
+  return computeEffectiveWeek(startDateStr, todayStr, 0);
+}
+
+/**
+ * B.3 / D7 — calendar with review pauses:
+ * effective_days = (today - start) - total_paused_days
+ * week = clamp(1 + floor(effective_days / 7), 1, 26)
+ */
+export function computeEffectiveWeek(
+  startDateStr,
+  todayStr = todayISO(),
+  totalPausedDays = 0
+) {
   const start = new Date(startDateStr + 'T00:00:00');
   const today = new Date(todayStr + 'T00:00:00');
   if (Number.isNaN(start.getTime()) || Number.isNaN(today.getTime())) return 1;
   const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24));
-  const week = 1 + Math.floor(diffDays / 7);
+  const paused = Math.max(0, Number(totalPausedDays) || 0);
+  const effective = Math.max(0, diffDays - paused);
+  const week = 1 + Math.floor(effective / 7);
   return Math.min(26, Math.max(1, week));
 }
 
@@ -46,15 +64,37 @@ function defaultState() {
     week_mode: 'auto',
     reminder_time: null,
     daily_goal_minutes: 30,
+    held_back: false,
+    review_since: null,
+    total_paused_days: 0,
+    deficient_topics: null,
+    last_pause_increment_date: null,
+    quiz_scores: {},
   };
 }
 
 function resolveWeek(state) {
   if (!state) return 1;
   if (state.week_mode === 'auto') {
-    return computeAutoWeek(state.start_date);
+    return computeEffectiveWeek(
+      state.start_date,
+      todayISO(),
+      state.total_paused_days || 0
+    );
   }
   return Math.min(26, Math.max(1, state.current_week || 1));
+}
+
+/** While held_back, add 1 paused day per calendar day (once). */
+function applyDailyPauseIncrement(state) {
+  if (!state?.held_back) return state;
+  const today = todayISO();
+  if (state.last_pause_increment_date === today) return state;
+  return {
+    ...state,
+    total_paused_days: Math.max(0, Number(state.total_paused_days) || 0) + 1,
+    last_pause_increment_date: today,
+  };
 }
 
 // ─── Seed / Weeks ───────────────────────────────────────────
@@ -109,6 +149,19 @@ export function getWeekCount() {
 
 // ─── User state ─────────────────────────────────────────────
 
+function normalizeState(raw) {
+  const base = defaultState();
+  const s = { ...base, ...(raw || {}) };
+  s.held_back = !!s.held_back;
+  s.total_paused_days = Math.max(0, Number(s.total_paused_days) || 0);
+  s.deficient_topics = s.deficient_topics ?? null;
+  s.review_since = s.review_since || null;
+  s.last_pause_increment_date = s.last_pause_increment_date || null;
+  s.quiz_scores =
+    s.quiz_scores && typeof s.quiz_scores === 'object' ? s.quiz_scores : {};
+  return s;
+}
+
 export async function getProgramState() {
   let state;
   if (mongoEnabled) {
@@ -125,13 +178,32 @@ export async function getProgramState() {
       });
     }
   }
-  const current_week = resolveWeek(state);
-  return { ...state, current_week };
+
+  let next = normalizeState(state);
+  const beforePause = next.total_paused_days;
+  next = applyDailyPauseIncrement(next);
+  if (next.total_paused_days !== beforePause || next.last_pause_increment_date !== state.last_pause_increment_date) {
+    memoryState = { ...next };
+    if (mongoEnabled) {
+      await UserProgramState.findOneAndUpdate({ key: 'default' }, next, {
+        upsert: true,
+        new: true,
+      });
+    }
+  } else {
+    memoryState = { ...next };
+  }
+
+  const current_week = resolveWeek(next);
+  return {
+    ...next,
+    current_week,
+  };
 }
 
 export async function updateProgramState(patch) {
   const current = await getProgramState();
-  const next = {
+  const next = normalizeState({
     key: 'default',
     start_date: patch.start_date ?? current.start_date,
     current_week: patch.current_week ?? current.current_week,
@@ -139,7 +211,24 @@ export async function updateProgramState(patch) {
     reminder_time:
       patch.reminder_time !== undefined ? patch.reminder_time : current.reminder_time,
     daily_goal_minutes: patch.daily_goal_minutes ?? current.daily_goal_minutes,
-  };
+    held_back: patch.held_back !== undefined ? !!patch.held_back : current.held_back,
+    review_since:
+      patch.review_since !== undefined ? patch.review_since : current.review_since,
+    total_paused_days:
+      patch.total_paused_days !== undefined
+        ? Math.max(0, Number(patch.total_paused_days) || 0)
+        : current.total_paused_days,
+    deficient_topics:
+      patch.deficient_topics !== undefined
+        ? patch.deficient_topics
+        : current.deficient_topics,
+    last_pause_increment_date:
+      patch.last_pause_increment_date !== undefined
+        ? patch.last_pause_increment_date
+        : current.last_pause_increment_date,
+    quiz_scores:
+      patch.quiz_scores !== undefined ? patch.quiz_scores : current.quiz_scores,
+  });
 
   if (next.week_mode !== 'auto' && next.week_mode !== 'manual') {
     const err = new Error('week_mode must be auto or manual');
@@ -150,7 +239,11 @@ export async function updateProgramState(patch) {
   next.daily_goal_minutes = Math.max(1, Number(next.daily_goal_minutes) || 30);
 
   if (next.week_mode === 'auto') {
-    next.current_week = computeAutoWeek(next.start_date);
+    next.current_week = computeEffectiveWeek(
+      next.start_date,
+      todayISO(),
+      next.total_paused_days || 0
+    );
   }
 
   memoryState = { ...next };
@@ -161,6 +254,186 @@ export async function updateProgramState(patch) {
     });
   }
   return { ...next, current_week: resolveWeek(next) };
+}
+
+// ─── Quizzes (B.5 / B.6) ────────────────────────────────────
+
+export async function upsertQuizzes(quizSeed) {
+  const passing = Number(quizSeed?.passing_score_percent) || 70;
+  const weeks = quizSeed?.weeks || [];
+  for (const w of weeks) {
+    const doc = {
+      week: Number(w.week),
+      passing_score_percent: passing,
+      questions: Array.isArray(w.questions) ? w.questions : [],
+    };
+    memoryQuizzes.set(doc.week, { ...doc });
+    if (mongoEnabled) {
+      await ProgramQuiz.findOneAndUpdate({ week: doc.week }, doc, {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      });
+    }
+  }
+  return memoryQuizzes.size;
+}
+
+export async function getQuiz(week) {
+  const n = Number(week);
+  if (mongoEnabled) {
+    const row = await ProgramQuiz.findOne({ week: n }).lean();
+    if (row) return row;
+  }
+  return memoryQuizzes.get(n) || null;
+}
+
+/** Public payload: strip correct answers until submit. */
+export function quizForClient(quizDoc) {
+  if (!quizDoc) return null;
+  return {
+    week: quizDoc.week,
+    passing_score_percent: quizDoc.passing_score_percent ?? 70,
+    questions: (quizDoc.questions || []).map((q) => ({
+      question: q.question,
+      options: q.options || [],
+    })),
+  };
+}
+
+export async function submitQuizAnswers(week, answers) {
+  const quiz = await getQuiz(week);
+  if (!quiz) {
+    const err = new Error(`Quiz for week ${week} not found`);
+    err.status = 404;
+    throw err;
+  }
+  const questions = quiz.questions || [];
+  const ans = Array.isArray(answers) ? answers : [];
+  let correct = 0;
+  const correct_answers = [];
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const ci = Number(q.correct_index);
+    const chosen = ans[i];
+    const ok = chosen !== undefined && Number(chosen) === ci;
+    if (ok) correct += 1;
+    correct_answers.push({
+      index: i,
+      correct_index: ci,
+      correct_answer: q.correct_answer ?? q.options?.[ci] ?? '',
+      chosen_index: chosen === undefined ? null : Number(chosen),
+      is_correct: ok,
+    });
+  }
+  const total = questions.length || 1;
+  const score_percent = Math.round((correct / total) * 100);
+  const passMark = Number(quiz.passing_score_percent) || 70;
+  const passed = score_percent >= passMark;
+  const wrong_hints = correct_answers
+    .filter((c) => !c.is_correct)
+    .map((c) => questions[c.index]?.question || `Questão ${c.index + 1}`)
+    .slice(0, 10);
+
+  // Persist latest score for this week on user state
+  const state = await getProgramState();
+  const scores = { ...(state.quiz_scores || {}) };
+  scores[String(week)] = {
+    score_percent,
+    passed,
+    submitted_at: new Date().toISOString(),
+    wrong_hints,
+  };
+  await updateProgramState({ quiz_scores: scores });
+
+  return {
+    score_percent,
+    passed,
+    passing_score_percent: passMark,
+    correct_count: correct,
+    total,
+    correct_answers,
+  };
+}
+
+export async function getSessionsForWeek(week) {
+  const n = Number(week);
+  const all = await listSessions();
+  return all.filter((s) => Number(s.week) === n);
+}
+
+/**
+ * Run weekly checkpoint (B.4). Mutates held_back / deficient_topics.
+ */
+export async function runCheckpoint() {
+  const {
+    evaluateReadiness,
+    buildDeficientTopics,
+  } = await import('./evaluateReadiness.js');
+
+  const state = await getProgramState();
+  const week = state.current_week;
+  const weekDoc = await getWeek(week);
+  const quizDoc = await getQuiz(week);
+  const passMark = quizDoc?.passing_score_percent ?? 70;
+  const quizEntry = state.quiz_scores?.[String(week)] || null;
+  const quizScore = quizEntry?.score_percent ?? null;
+
+  const sessions = await getSessionsForWeek(week);
+  const feedbackList = sessions
+    .map((s) => s.feedback_json)
+    .filter((f) => f && typeof f === 'object');
+  const cefrEstimates = feedbackList
+    .map((f) => f.cefr_estimate)
+    .filter(Boolean);
+
+  const result = evaluateReadiness({
+    quizScorePercent: quizScore,
+    passingScorePercent: passMark,
+    cefrEstimates,
+    expectedLevel: weekDoc?.level || '',
+    feedbackList,
+  });
+
+  if (result.ready) {
+    await updateProgramState({
+      held_back: false,
+      review_since: null,
+      deficient_topics: null,
+      // keep total_paused_days so calendar stays adjusted
+    });
+    const fresh = await getProgramState();
+    return {
+      ready: true,
+      reasons: [],
+      deficient_topics: null,
+      details: result.details,
+      state: fresh,
+    };
+  }
+
+  const wrongHints = Array.isArray(quizEntry?.wrong_hints)
+    ? quizEntry.wrong_hints
+    : [];
+  const deficient = buildDeficientTopics({
+    weekTitle: weekDoc?.title || `Semana ${week}`,
+    wrongQuestionHints: wrongHints,
+    feedbackList,
+  });
+
+  await updateProgramState({
+    held_back: true,
+    review_since: todayISO(),
+    deficient_topics: deficient,
+  });
+  const fresh = await getProgramState();
+  return {
+    ready: false,
+    reasons: result.reasons,
+    deficient_topics: deficient,
+    details: result.details,
+    state: fresh,
+  };
 }
 
 // ─── Practice sessions ──────────────────────────────────────

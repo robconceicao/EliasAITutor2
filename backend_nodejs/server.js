@@ -24,13 +24,17 @@ import {
 import {
   setMongoEnabled,
   upsertWeeks,
+  upsertQuizzes,
   getWeek,
   getProgramState,
 } from './services/programStore.js';
 import {
   resolveMainChatVoiceId,
   resolveFallbackVoiceId,
+  openTtsWebSocket,
   openTtsWebSocketWithFallback,
+  createFirstAudioWatchdog,
+  FIRST_AUDIO_BYTE_TIMEOUT_MS,
   STREAM_MODEL_ID,
   STREAM_OUTPUT_FORMAT,
 } from './services/elevenLabsClient.js';
@@ -100,7 +104,7 @@ if (process.env.MONGODB_URI) {
   loadCurriculumSeed();
 }
 
-/** Load F1 curriculum seed into memory (+ Mongo if enabled). Idempotent. */
+/** Load F1 curriculum + B.5 quiz seeds into memory (+ Mongo if enabled). Idempotent. */
 async function loadCurriculumSeed() {
   try {
     const { loadCurriculumSeedFile } = await import('./services/loadCurriculumSeed.js');
@@ -109,6 +113,20 @@ async function loadCurriculumSeed() {
     console.log(`📚 Curriculum seed v${version ?? '?'} loaded: ${n} weeks`);
   } catch (e) {
     console.error('❌ Failed to load curriculum seed:', e.message);
+  }
+  try {
+    const quizPath = path.join(__dirname, 'seeds', 'elias_quiz_seed.json');
+    if (fs.existsSync(quizPath)) {
+      const quizSeed = JSON.parse(fs.readFileSync(quizPath, 'utf8'));
+      const qn = await upsertQuizzes(quizSeed);
+      console.log(
+        `📝 Quiz seed v${quizSeed.version ?? '?'} loaded: ${qn} weeks · pass=${quizSeed.passing_score_percent ?? 70}%`
+      );
+    } else {
+      console.warn('⚠️ Quiz seed not found:', quizPath);
+    }
+  } catch (e) {
+    console.error('❌ Failed to load quiz seed:', e.message);
   }
 }
 
@@ -378,28 +396,39 @@ io.on('connection', (socket) => {
       await handleAIResponse(textoUsuario, modelOverride);
   });
 
-  // 3b. Contextual translation (Task Final v1.0) — discrete PT under Elias message
+  // 3b. Contextual translation (A.3) — discrete PT under Elias message; never replaces EN
   socket.on('traduzir_texto', async (payload = {}) => {
+    const requestId =
+      typeof payload === 'object' && payload ? payload.requestId || null : null;
     try {
       const text =
         typeof payload === 'string' ? payload : payload.text || payload.texto || '';
       if (!text.trim()) {
-        socket.emit('traducao_pronta', { ok: false, error: 'empty' });
+        socket.emit('traducao_pronta', { ok: false, error: 'empty', requestId });
         return;
       }
       const translation = await translateToPtBr(text);
+      if (!translation) {
+        socket.emit('traducao_pronta', {
+          ok: false,
+          error: 'empty_translation',
+          requestId,
+          text,
+        });
+        return;
+      }
       socket.emit('traducao_pronta', {
         ok: true,
         text,
         translation,
-        requestId: payload.requestId || null,
+        requestId,
       });
     } catch (e) {
       console.error('[traduzir_texto]', e.message);
       socket.emit('traducao_pronta', {
         ok: false,
-        error: e.message,
-        requestId: payload?.requestId || null,
+        error: e.message || 'translation_failed',
+        requestId,
       });
     }
   });
@@ -444,12 +473,57 @@ io.on('connection', (socket) => {
         socket.emit('tts_unavailable', { reason: 'voice_open_failed', mode: 'text_only' });
         return;
       }
-      const elevenSocket = tts.socket;
+      let elevenSocket = tts.socket;
+      let activeVoice = tts.voiceId || sessionVoiceId;
       const pseudoEstado = { ativo: true };
       const seqTracker = { val: 0 };
-      escutarRetornoElevenLabs(elevenSocket, socket, pseudoEstado, seqTracker);
+      let usedFallback = false;
+      let firstByteWatchdog = null;
+
+      const attachShadowListener = (ws, voiceLabel) => {
+        escutarRetornoElevenLabs(ws, socket, pseudoEstado, seqTracker, {
+          onAudioMessage: (msg) => firstByteWatchdog?.noteMessage(msg),
+        });
+        firstByteWatchdog?.cancel();
+        firstByteWatchdog = createFirstAudioWatchdog({
+          timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+          label: `shadow:${voiceLabel || 'voice'}`,
+          onTimeout: async () => {
+            if (!pseudoEstado.ativo) return;
+            console.warn(`[shadow_speak] first-audio-byte timeout voice=${voiceLabel}`);
+            try { ws.close(); } catch (_) {}
+            const fb = resolveFallbackVoiceId();
+            if (!usedFallback && fb && fb !== voiceLabel) {
+              usedFallback = true;
+              try {
+                const fbWs = await openTtsWebSocket(fb, { timeoutMs: 5000 });
+                elevenSocket = fbWs;
+                activeVoice = fb;
+                attachShadowListener(fbWs, fb);
+                if (fbWs.readyState === WebSocket.OPEN) {
+                  firstByteWatchdog.arm();
+                  fbWs.send(JSON.stringify({ text: texto, try_trigger_generation: true }));
+                  fbWs.send(JSON.stringify({ text: '' }));
+                }
+                return;
+              } catch (e) {
+                console.warn(`[shadow_speak] fallback failed: ${e.message}`);
+              }
+            }
+            pseudoEstado.ativo = false;
+            socket.emit('tts_unavailable', {
+              reason: 'first_audio_byte_timeout',
+              mode: 'text_only',
+              timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+            });
+          },
+        });
+      };
+
+      attachShadowListener(elevenSocket, activeVoice);
 
       if (elevenSocket.readyState === WebSocket.OPEN) {
+        firstByteWatchdog.arm();
         elevenSocket.send(JSON.stringify({ "text": texto, "try_trigger_generation": true }));
         elevenSocket.send(JSON.stringify({ "text": "" }));
       }
@@ -473,6 +547,9 @@ io.on('connection', (socket) => {
       );
     }
 
+    /** Cancelled in finally — must be outer-scoped for catch/finally. */
+    let firstByteWatchdog = null;
+
     try {
       // Registrar os AbortControllers para Barge-in (TurnTaking engine cancel)
       const llmAbort = new AbortController();
@@ -482,20 +559,106 @@ io.on('connection', (socket) => {
       // Connect to ElevenLabs WebSocket (session-locked voice + fallback §8)
       if (!sessionVoiceId) await lockSessionVoice(null);
       const tts = await openTtsWebSocketWithFallback(sessionVoiceId);
-      const elevenSocket = tts.socket;
-      const textOnlyMode = tts.textOnly || !elevenSocket;
+      let elevenSocket = tts.socket;
+      let textOnlyMode = tts.textOnly || !elevenSocket;
+      let activeTtsVoice = tts.voiceId || sessionVoiceId;
+      /** Text already sent to TTS (for re-send on first-byte timeout fallback). */
+      let ttsTextSent = '';
+      let usedFirstByteFallback = false;
+      /**
+       * Stream generation token: when primary times out and we switch to fallback,
+       * late audio from the abandoned WebSocket must NOT be forwarded (no overlap).
+       */
+      let ttsStreamGen = 0;
+      const abandonTtsSocket = (ws) => {
+        ttsStreamGen += 1; // invalidate any in-flight handlers on old socket
+        try {
+          ws?.removeAllListeners?.('message');
+          ws?.removeAllListeners?.('close');
+          ws?.removeAllListeners?.('error');
+        } catch (_) {}
+        try {
+          if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+        } catch (_) {}
+        if (estadoGeracao.elevenSocket === ws) estadoGeracao.elevenSocket = null;
+        if (elevenSocket === ws) elevenSocket = null;
+      };
+
+      const goTextOnly = (reason) => {
+        textOnlyMode = true;
+        ttsStreamGen += 1;
+        elevenSocket = null;
+        estadoGeracao.elevenSocket = null;
+        firstByteWatchdog?.cancel();
+        console.warn(`📝 TTS unavailable — text-only mode. reason=${reason}`);
+        socket.emit('tts_unavailable', {
+          reason: reason || 'voice_open_failed',
+          mode: 'text_only',
+          timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+        });
+      };
+
+      const attachChatTts = (ws, voiceLabel) => {
+        const myGen = ++ttsStreamGen;
+        elevenSocket = ws;
+        estadoGeracao.elevenSocket = ws;
+        activeTtsVoice = voiceLabel;
+        escutarRetornoElevenLabs(ws, socket, estadoGeracao, seqTracker, {
+          onAudioMessage: (msg) => firstByteWatchdog?.noteMessage(msg),
+          // Discard late primary audio after fallback/text-only switch
+          isActive: () =>
+            estadoGeracao.ativo &&
+            !textOnlyMode &&
+            myGen === ttsStreamGen &&
+            estadoGeracao.elevenSocket === ws,
+        });
+        firstByteWatchdog?.cancel();
+        firstByteWatchdog = createFirstAudioWatchdog({
+          timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+          label: `chat:${voiceLabel || 'voice'}`,
+          onTimeout: async () => {
+            if (!estadoGeracao.ativo || textOnlyMode) return;
+            if (myGen !== ttsStreamGen) return; // already abandoned
+            console.warn(
+              `[tts] first-audio-byte timeout after ${FIRST_AUDIO_BYTE_TIMEOUT_MS}ms voice=${voiceLabel}`
+            );
+            // Invalidate stream BEFORE close so any late frames are dropped
+            abandonTtsSocket(ws);
+
+            const fb = resolveFallbackVoiceId();
+            if (!usedFirstByteFallback && fb && fb !== voiceLabel) {
+              usedFirstByteFallback = true;
+              try {
+                console.warn(`[tts] first-byte fallback → voice=${fb}`);
+                // Progressive status for future UI polish (client may ignore)
+                socket.emit('tts_status', {
+                  phase: 'fallback_voice',
+                  message: 'Tentando voz alternativa…',
+                  voiceId: fb,
+                });
+                const fbWs = await openTtsWebSocket(fb, { timeoutMs: 5000 });
+                sessionVoiceId = fb;
+                attachChatTts(fbWs, fb);
+                if (ttsTextSent && fbWs.readyState === WebSocket.OPEN) {
+                  firstByteWatchdog.arm();
+                  fbWs.send(
+                    JSON.stringify({ text: ttsTextSent, try_trigger_generation: true })
+                  );
+                }
+                return;
+              } catch (e) {
+                console.warn(`[tts] first-byte fallback open failed: ${e.message}`);
+              }
+            }
+            goTextOnly('first_audio_byte_timeout');
+          },
+        });
+      };
 
       if (textOnlyMode) {
-        console.warn(
-          `📝 TTS unavailable — text-only mode. reason=${tts.error || 'voice_open_failed'}`
-        );
-        socket.emit('tts_unavailable', {
-          reason: tts.error || 'voice_open_failed',
-          mode: 'text_only',
-        });
+        goTextOnly(tts.error || 'voice_open_failed');
       } else {
-        estadoGeracao.elevenSocket = elevenSocket;
-        escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker);
+        attachChatTts(elevenSocket, activeTtsVoice);
       }
 
       // We should check llmAbort.signal.aborted during generation loop
@@ -525,6 +688,11 @@ io.on('connection', (socket) => {
         const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
         if (newResponseText.length > 0) {
           if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
+            // Arm first-audio-byte watchdog on the first TTS text flush (D8)
+            if (ttsTextSent.length === 0) {
+              firstByteWatchdog?.arm();
+            }
+            ttsTextSent += newResponseText;
             elevenSocket.send(JSON.stringify({ "text": newResponseText, "try_trigger_generation": true }));
           }
           socket.emit("texto_chunk", newResponseText);
@@ -727,10 +895,18 @@ io.on('connection', (socket) => {
         socket.emit("mensagem_ia", parsed);
       }
 
+      // If TTS never produced audio but we got text, ensure client leaves loading state
+      if (textOnlyMode || (firstByteWatchdog && !firstByteWatchdog.hasAudio && ttsTextSent.length > 0)) {
+        // text already streamed via texto_chunk / mensagem_ia — client must not wait forever
+        firstByteWatchdog?.cancel();
+      }
+
     } catch (error) {
       console.error("❌ Erro no fluxo principal:", error);
+      firstByteWatchdog?.cancel();
       socket.emit("erro_backend", error.message);
     } finally {
+      firstByteWatchdog?.cancel();
       clearGeneration(socket.id);
     }
   }
@@ -744,14 +920,21 @@ io.on('connection', (socket) => {
  * Stream ElevenLabs audio to Android as Opus frames.
  * ElevenLabs stream-input must use output_format=pcm_* (Int16 LE).
  * Encoding as Float32/MP3 was the root cause of static/hiss (chiado).
+ *
+ * @param {object} [hooks]
+ * @param {(msg: object) => void} [hooks.onAudioMessage] — first-audio-byte watchdog
+ * @param {() => boolean} [hooks.isActive] — false after stream abandoned (late audio discard)
  */
-function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker) {
+function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker, hooks = {}) {
   socket.emit("estado_ia", "falando");
 
   const inputSampleRate = sampleRateFromOutputFormat(STREAM_OUTPUT_FORMAT);
   const opusEncoder = createPcmInt16OpusEncoder({ inputSampleRate });
+  const stillActive = () =>
+    estadoGeracao.ativo && (typeof hooks.isActive !== 'function' || hooks.isActive());
 
   const emitOpusFrames = (opusFrames) => {
+    if (!stillActive()) return; // hard discard after fallback switch
     opusFrames.forEach((frame) => {
       socket.emit("audio_opus_frame", {
         frame: frame.toString("base64"),
@@ -762,16 +945,24 @@ function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracke
   };
 
   elevenSocket.on("message", (msgStr) => {
-    if (!estadoGeracao.ativo) return;
+    if (!stillActive()) return;
     try {
       const raw = typeof msgStr === 'string' ? msgStr : msgStr.toString();
       const msg = JSON.parse(raw);
       if (msg.audio) {
+        if (!stillActive()) return;
+        // Notify first-audio-byte watchdog (D8) before encode
+        try {
+          hooks.onAudioMessage?.(msg);
+        } catch (_) {
+          /* ignore */
+        }
         // pcm_* formats: base64 of raw s16le mono (NOT mp3, NOT float32)
         const pcmInt16 = Buffer.from(msg.audio, 'base64');
         emitOpusFrames(opusEncoder.encode(pcmInt16));
       }
       if (msg.isFinal) {
+        if (!stillActive()) return;
         emitOpusFrames(opusEncoder.flush());
         socket.emit("estado_ia", "ociosa");
       }
@@ -782,7 +973,7 @@ function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracke
 
   // Ensure last partial frame is not dropped if socket closes without isFinal
   elevenSocket.on("close", () => {
-    if (!estadoGeracao.ativo) return;
+    if (!stillActive()) return;
     try {
       emitOpusFrames(opusEncoder.flush());
     } catch (_) {

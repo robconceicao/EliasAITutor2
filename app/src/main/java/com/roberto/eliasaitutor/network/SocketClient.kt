@@ -80,6 +80,14 @@ object SocketClient {
     private val _erroFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
     val erroFlow: SharedFlow<String> = _erroFlow
 
+    /** Backend TTS degraded to text-only (first-audio-byte timeout / voice open fail). */
+    private val _ttsUnavailableFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
+    val ttsUnavailableFlow: SharedFlow<String> = _ttsUnavailableFlow
+
+    /** Progressive TTS status (e.g. "Tentando voz alternativa…") — optional UI. */
+    private val _ttsStatusFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
+    val ttsStatusFlow: SharedFlow<String> = _ttsStatusFlow
+
     private val _textoChunkFlow = MutableSharedFlow<String>(
         extraBufferCapacity = 100,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -263,6 +271,36 @@ object SocketClient {
                     val err = args.firstOrNull() as? String ?: "Erro no servidor"
                     Log.e(TAG, "Erro do backend: $err")
                     _erroFlow.tryEmit(err)
+                }
+
+                on("tts_unavailable") { args ->
+                    try {
+                        val reason = when (val raw = args.firstOrNull()) {
+                            is JSONObject -> raw.optString("reason", "text_only")
+                            is String -> raw
+                            else -> "text_only"
+                        }
+                        Log.w(TAG, "TTS unavailable — text-only: $reason")
+                        _ttsUnavailableFlow.tryEmit(reason)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse tts_unavailable: ${e.message}")
+                        _ttsUnavailableFlow.tryEmit("text_only")
+                    }
+                }
+
+                on("tts_status") { args ->
+                    try {
+                        val msg = when (val raw = args.firstOrNull()) {
+                            is JSONObject -> raw.optString("message").ifBlank {
+                                raw.optString("phase", "tts")
+                            }
+                            is String -> raw
+                            else -> ""
+                        }
+                        if (msg.isNotBlank()) _ttsStatusFlow.tryEmit(msg)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse tts_status: ${e.message}")
+                    }
                 }
 
                 on("traducao_pronta") { args ->

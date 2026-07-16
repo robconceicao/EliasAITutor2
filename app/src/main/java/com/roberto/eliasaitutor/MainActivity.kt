@@ -91,16 +91,20 @@ fun EliasApp(
 
     val tabs = listOf(
         TabItem("Programa", Icons.Default.School),
-        TabItem("Immersion", Icons.Default.Hearing),
+        TabItem("Imersão", Icons.Default.Hearing),
         TabItem("Chat", Icons.AutoMirrored.Filled.Chat),
         TabItem("Echo", Icons.Default.GraphicEq),
-        TabItem("Progress", Icons.AutoMirrored.Filled.ShowChart),
-        TabItem("Store", Icons.Default.Store)
+        TabItem("Progresso", Icons.AutoMirrored.Filled.ShowChart),
+        TabItem("Loja", Icons.Default.Store)
     )
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = Surface, contentColor = Muted) {
+            NavigationBar(
+                containerColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Surface,
+                contentColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                tonalElevation = 0.dp,
+            ) {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = currentTab == index,
@@ -119,19 +123,19 @@ fun EliasApp(
                             if (index == 0) programSubScreen = "home"
                         },
                         icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title, fontSize = 9.sp) },
+                        label = { Text(tab.title, fontSize = 9.sp, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Accent,
-                            selectedTextColor = Accent,
-                            unselectedIconColor = Muted,
-                            unselectedTextColor = Muted,
-                            indicatorColor = Accent.copy(alpha = 0.1f)
+                            selectedIconColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent,
+                            selectedTextColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent,
+                            unselectedIconColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                            unselectedTextColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                            indicatorColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent.copy(alpha = 0.12f)
                         )
                     )
                 }
             }
         },
-        containerColor = Bg
+        containerColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Bg
     ) { innerPadding ->
         Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (currentTab) {
@@ -142,7 +146,7 @@ fun EliasApp(
                         ProgramHomeScreen(
                             programVm = programVm,
                             userId = profile.userId.ifBlank { "local_user" },
-                            onStartChat = { week, title, lexis, grammar, phase, sessionType, _ ->
+                            onStartChat = { week, title, lexis, grammar, phase, sessionType, _, level ->
                                 val uid = profile.userId.ifBlank { "local_user" }
                                 vm.beginProgramSession(
                                     week = week,
@@ -152,6 +156,7 @@ fun EliasApp(
                                     phase = phase,
                                     sessionType = sessionType,
                                     userId = uid,
+                                    level = level,
                                 )
                                 currentTab = 2
                             },
@@ -162,7 +167,7 @@ fun EliasApp(
                 1 -> ImmersionScreen(vm)
                 2 -> ChatScreen(vm)
                 3 -> ShadowingScreen(vm)
-                4 -> ProgressScreen(vm)
+                4 -> ProgressScreen(vm, programVm)
                 5 -> StoreScreen(vm)
             }
 

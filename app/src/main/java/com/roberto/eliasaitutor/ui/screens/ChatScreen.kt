@@ -60,6 +60,7 @@ fun ChatScreen(vm: EliasViewModel) {
     val profile       by vm.profile.collectAsState()
     val bubbles       by vm.chatBubbles.collectAsState()
     val isLoading     by vm.isLoading.collectAsState()
+    val loadError     by vm.loadError.collectAsState()
     val scenario      by vm.selectedScenario.collectAsState()
     val programChat   by vm.programChat.collectAsState()
     val quiz          by vm.quiz.collectAsState()
@@ -143,12 +144,27 @@ fun ChatScreen(vm: EliasViewModel) {
                         }
                     }
                     Text(pc.title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    // A.1: CEFR always from program_weeks.level — never free-chat picker
+                    if (pc.level.isNotBlank()) {
+                        Text(
+                            "Nível ${pc.level} (semana ${pc.week})",
+                            color = Accent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                     if (pc.lexis.isNotBlank()) {
                         Text("Tema: ${pc.lexis}", color = Muted, fontSize = 11.sp)
                     }
                     Text(
                         "Pronúncia Máxima: IPA · schwa · linking · elisão · entonação · shadowing",
                         color = Purple,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Text(
+                        "🇧🇷 Traduzir sob a mensagem · ou diga “não entendi / traduz pra mim”",
+                        color = Muted,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 4.dp)
                     )
@@ -209,6 +225,7 @@ fun ChatScreen(vm: EliasViewModel) {
         LazyColumn(state = listState, modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
+            // FREE only: level chips. PROGRAM never asks level (A.1).
             if (bubbles.isEmpty() && !inProgram) {
                 item {
                     LevelSelectionBox { level ->
@@ -218,12 +235,59 @@ fun ChatScreen(vm: EliasViewModel) {
             }
             if (bubbles.isEmpty() && inProgram && isLoading) {
                 item {
-                    Text(
-                        "Elias está preparando a abertura da semana…",
-                        color = Muted,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                "Elias está preparando a abertura…",
+                                color = Accent,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "Semana ${programChat?.week ?: "—"} · TTS streaming · 🇧🇷 Traduzir se precisar",
+                                color = Muted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            // A.5: timed-out wait — show error + retry, never infinite "Carregando…"
+            if (!loadError.isNullOrBlank()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(loadError!!, color = TextMain, fontSize = 13.sp)
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(onClick = {
+                                vm.clearLoadError()
+                                if (inProgram && bubbles.isEmpty()) {
+                                    val pc = programChat!!
+                                    vm.beginProgramSession(
+                                        week = pc.week ?: 1,
+                                        title = pc.title,
+                                        lexis = pc.lexis,
+                                        grammar = pc.grammar,
+                                        phase = pc.phase,
+                                        sessionType = pc.sessionType,
+                                        userId = profile.userId.ifBlank { "local_user" },
+                                        level = pc.level,
+                                    )
+                                }
+                            }) {
+                                Text("Tentar novamente", color = Accent)
+                            }
+                        }
+                    }
                 }
             }
             items(bubbles.size) { index ->
@@ -441,18 +505,43 @@ private fun EliasBubble(
                     val parsedMessage = parseMarkdownToAnnotatedString(bubble.message)
                     Text(parsedMessage, color = TextMain, fontSize = 16.sp, lineHeight = 24.sp)
 
-                    // Tradução contextual discreta
+                    // A.3 — tradução contextual discreta (PT sob o inglês; original intacto)
                     if (bubble.isTranslating) {
                         Spacer(Modifier.height(8.dp))
-                        Text("Traduzindo…", color = Muted, fontSize = 12.sp, fontStyle = FontStyle.Italic)
+                        HorizontalDivider(color = Border, thickness = 1.dp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Traduzindo… (máx. ~12s)",
+                            color = Muted,
+                            fontSize = 12.sp,
+                            fontStyle = FontStyle.Italic
+                        )
                     } else if (!bubble.translationPt.isNullOrBlank()) {
                         Spacer(Modifier.height(8.dp))
+                        HorizontalDivider(color = Border, thickness = 1.dp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Tradução",
+                            color = Purple.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             bubble.translationPt!!,
                             color = Muted,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                             fontStyle = FontStyle.Italic
+                        )
+                    } else if (!bubble.translationError.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider(color = Border, thickness = 1.dp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            bubble.translationError!!,
+                            color = Red.copy(alpha = 0.9f),
+                            fontSize = 12.sp
                         )
                     }
 
@@ -477,6 +566,7 @@ private fun EliasBubble(
                                 when {
                                     bubble.isTranslating -> "…"
                                     !bubble.translationPt.isNullOrBlank() -> "OK"
+                                    !bubble.translationError.isNullOrBlank() -> "Tentar de novo"
                                     else -> "Traduzir"
                                 },
                                 fontSize = 12.sp

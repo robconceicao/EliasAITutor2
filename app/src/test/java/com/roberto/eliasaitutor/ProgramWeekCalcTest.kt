@@ -47,4 +47,28 @@ class ProgramWeekCalcTest {
         assertEquals(1, ProgramRepository.computeAutoWeek(start, LocalDate.of(2026, 6, 7))) // +6
         assertEquals(2, ProgramRepository.computeAutoWeek(start, LocalDate.of(2026, 6, 8))) // +7
     }
+
+    /** B.3 / D7: paused days freeze calendar while in review. */
+    @Test
+    fun effectiveWeek_withPausedDays_doesNotAdvance() {
+        val start = "2026-07-01"
+        val today = LocalDate.of(2026, 7, 22) // 21 days → week 4 without pause
+        assertEquals(4, ProgramRepository.computeEffectiveWeek(start, today, 0))
+        // 14 paused → effective 7 → week 2
+        assertEquals(2, ProgramRepository.computeEffectiveWeek(start, today, 14))
+        // held_back equivalent: 21 calendar days all paused after week-2 start...
+        assertEquals(1, ProgramRepository.computeEffectiveWeek(start, today, 21))
+    }
+
+    @Test
+    fun resolveWeekLocally_appliesPausedDaysInAutoMode() {
+        val s = UserProgramState(
+            startDate = "2026-07-01",
+            weekMode = "auto",
+            totalPausedDays = 7,
+        )
+        // Without freeze date override: compute from LocalDate.now() — only check clamp
+        val resolved = ProgramRepository.resolveWeekLocally(s)
+        assertEquals(true, resolved.currentWeek in 1..26)
+    }
 }

@@ -258,6 +258,88 @@ export async function openTtsWebSocketWithFallback(preferredVoiceId) {
   return { socket: null, voiceId: null, textOnly: true, error: errMsg };
 }
 
+// ─── First audio byte timeout (D8 / Fase 1 A.2) ─────────────
+
+/**
+ * Max wait for the first audio payload after TTS text is sent.
+ * This is independent of WebSocket open handshake (which can succeed while
+ * generation hangs forever — root cause of infinite "Elias não fala" spinner).
+ * Override via TTS_FIRST_BYTE_TIMEOUT_MS.
+ */
+export const FIRST_AUDIO_BYTE_TIMEOUT_MS = Number(
+  process.env.TTS_FIRST_BYTE_TIMEOUT_MS || 8000
+);
+
+/**
+ * One-shot watchdog: arm() when first TTS text is sent; must see audio within timeout.
+ *
+ * @param {object} opts
+ * @param {number} [opts.timeoutMs]
+ * @param {() => void} [opts.onTimeout]
+ * @param {() => void} [opts.onFirstAudio]
+ * @param {string} [opts.label]
+ * @returns {{ arm: Function, noteMessage: Function, cancel: Function, hasAudio: boolean, isArmed: boolean }}
+ */
+export function createFirstAudioWatchdog({
+  timeoutMs = FIRST_AUDIO_BYTE_TIMEOUT_MS,
+  onTimeout,
+  onFirstAudio,
+  label = 'tts',
+} = {}) {
+  let timer = null;
+  let gotAudio = false;
+  let armed = false;
+  let cancelled = false;
+
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  return {
+    get hasAudio() {
+      return gotAudio;
+    },
+    get isArmed() {
+      return armed;
+    },
+    arm() {
+      if (cancelled || gotAudio || armed) return;
+      armed = true;
+      timer = setTimeout(() => {
+        if (cancelled || gotAudio) return;
+        console.warn(
+          `[elevenLabs] first-audio-byte timeout after ${timeoutMs}ms (${label})`
+        );
+        try {
+          onTimeout?.();
+        } catch (e) {
+          console.error('[elevenLabs] onTimeout error:', e?.message || e);
+        }
+      }, timeoutMs);
+    },
+    /** Call for each parsed ElevenLabs message object. */
+    noteMessage(msg) {
+      if (cancelled || gotAudio) return;
+      if (msg && (msg.audio || msg.audio_base64)) {
+        gotAudio = true;
+        clear();
+        try {
+          onFirstAudio?.();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    },
+    cancel() {
+      cancelled = true;
+      clear();
+    },
+  };
+}
+
 // ─── Chunk pre-generation (F7) ──────────────────────────────
 
 export function ensureCacheDir() {
