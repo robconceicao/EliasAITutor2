@@ -1,29 +1,40 @@
 /**
- * F8 — post-session correction report via shared LLM client (llmClient.js).
+ * F8 — post-session report: PT-BR, pronunciation + discourse (C1 path).
  */
 import { callLlm } from './llmClient.js';
 import { updateSessionFeedback, getSession } from './programStore.js';
 
-const FEEDBACK_PROMPT = `You are Elias, fluency coach. Analyze this English practice transcript for Roberto.
-Reply ONLY in Brazilian Portuguese with strict JSON (no markdown, no extra text):
+const FEEDBACK_PROMPT = `You are Elias, fluency coach for Roberto (program Fluência em Inglês em 6 Meses → functional C1).
+Analyze the practice transcript. Reply ONLY in Brazilian Portuguese with strict JSON (no markdown, no extra text):
 {
+  "strengths":["ponto forte 1","2"],
   "mistakes":[
     {"said":"...","correct":"...","note":"...","ipa":"/.../","mouth_tip":"instrução de boca/língua/ar","severity":"critical|minor"}
   ],
   "better_phrases":["forma mais natural 1","2","3"],
-  "pronunciation_focus":"feedback sobre redução vocálica (schwa), linked speech, elisão e entonação (↓↑↑↓↓↑)",
+  "pronunciation_focus":"schwa / linking / elisão / entonação — o que priorizar",
+  "discourse_focus":"organização, fluência, registro, interação, range — o que priorizar (ou vazio se A1 muito básico)",
   "cefr_estimate":"A1|A2|B1|B2|C1",
-  "next_focus":"foco da próxima sessão (Pronúncia Avançada Máxima: drill + técnica)",
-  "motivation":"motivação personalizada curta"
+  "week_alignment":"Semana N — objetivos cobertos / lacunas (se souber a semana no contexto)",
+  "recovery_plan":{
+    "priority":"pronunciation|discourse|grammar|fluency|vocabulary",
+    "daily_drills":["drill ou tarefa 1","2"],
+    "success_criteria":"como saber que melhorou"
+  },
+  "next_focus":"foco da próxima sessão (pode combinar pronúncia + discurso)",
+  "motivation":"motivação curta, profissional, sem bajulação vazia"
 }
 Rules:
-- mistakes max 5; prioritize advanced pronunciation (IPA, schwa, linking, elision, intonation) and serious grammar.
-- severity: "critical" = blocks meaning / serious grammar or pronunciation that would hold the student back; "minor" = small slips.
-- better_phrases max 3 — prefer natural connected-speech versions.
-- Always fill pronunciation_focus (mention which of: reduction, linking, elision, intonation).
+- Always fill strengths (1–3 items) — be honest and specific.
+- mistakes max 5; prioritize meaning-blocking and advanced pronunciation / serious grammar.
+- severity: "critical" = blocks meaning or holds progression; "minor" = slip.
+- better_phrases max 3 — natural connected speech when relevant.
+- pronunciation_focus always filled.
+- discourse_focus: for B1+ comment on argument/organization/register/fluency; for A1 can be short habit note.
+- recovery_plan always present; if session was strong, still give a light stretch plan.
+- cefr_estimate: productive speaking level (if uneven, choose the lower productive band).
 - No text outside the JSON.`;
 
-/** ~8k tokens ≈ 32k chars conservative (D3) */
 const MAX_TRANSCRIPT_CHARS = 32000;
 
 function truncateTranscript(text) {
@@ -38,7 +49,25 @@ function formatHistory(messages) {
     .join('\n');
 }
 
-function parseFeedbackJson(raw) {
+function normalizeRecovery(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      priority: 'fluency',
+      daily_drills: [],
+      success_criteria: '',
+    };
+  }
+  const drills = Array.isArray(raw.daily_drills)
+    ? raw.daily_drills.map(String).slice(0, 5)
+    : [];
+  return {
+    priority: String(raw.priority || 'fluency'),
+    daily_drills: drills,
+    success_criteria: String(raw.success_criteria || ''),
+  };
+}
+
+export function parseFeedbackJson(raw) {
   if (!raw) return null;
   let s = raw.trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -48,6 +77,8 @@ function parseFeedbackJson(raw) {
   if (start === -1 || end === -1) return null;
   try {
     const obj = JSON.parse(s.slice(start, end + 1));
+    if (!Array.isArray(obj.strengths)) obj.strengths = [];
+    obj.strengths = obj.strengths.map(String).filter(Boolean).slice(0, 5);
     if (!Array.isArray(obj.mistakes)) obj.mistakes = [];
     obj.mistakes = obj.mistakes.slice(0, 5).map((m) => {
       const sev = String(m?.severity || 'minor').toLowerCase();
@@ -61,11 +92,14 @@ function parseFeedbackJson(raw) {
       };
     });
     if (!Array.isArray(obj.better_phrases)) obj.better_phrases = [];
-    obj.better_phrases = obj.better_phrases.slice(0, 3);
+    obj.better_phrases = obj.better_phrases.slice(0, 3).map(String);
     if (!obj.cefr_estimate) obj.cefr_estimate = 'A2';
     if (!obj.next_focus) obj.next_focus = '';
     if (!obj.pronunciation_focus) obj.pronunciation_focus = '';
+    if (!obj.discourse_focus) obj.discourse_focus = '';
+    if (!obj.week_alignment) obj.week_alignment = '';
     if (!obj.motivation) obj.motivation = '';
+    obj.recovery_plan = normalizeRecovery(obj.recovery_plan);
     return obj;
   } catch {
     return null;
@@ -76,17 +110,18 @@ async function callFeedbackLlm(promptText) {
   return callLlm({
     system: FEEDBACK_PROMPT,
     user: promptText,
-    maxTokens: 800,
+    maxTokens: 1100,
     temperature: 0.2,
-    timeoutMs: 15_000,
+    timeoutMs: 18_000,
   });
 }
 
 /**
- * Generate feedback; never throws to caller for session end path.
- * Retries once on non-JSON. Sets feedback_status ready|failed.
+ * @param {string} sessionId
+ * @param {string|array} historyOrTranscript
+ * @param {{ week?: number, title?: string, level?: string }} [meta]
  */
-export async function generateSessionFeedback(sessionId, historyOrTranscript) {
+export async function generateSessionFeedback(sessionId, historyOrTranscript, meta = {}) {
   await updateSessionFeedback(sessionId, null, 'pending');
 
   let transcript;
@@ -104,11 +139,21 @@ export async function generateSessionFeedback(sessionId, historyOrTranscript) {
     return { feedback_status: 'failed', feedback_json: null };
   }
 
+  const weekLine =
+    meta.week != null
+      ? `Contexto do programa: Semana ${meta.week}${meta.title ? ` — ${meta.title}` : ''}${meta.level ? ` (nível currículo ${meta.level})` : ''}.\n`
+      : '';
+
+  const userPayload = `${weekLine}Transcrição da sessão:\n${transcript}`;
+
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const raw = await callFeedbackLlm(transcript);
+      const raw = await callFeedbackLlm(userPayload);
       const parsed = parseFeedbackJson(raw);
       if (parsed) {
+        if (!parsed.week_alignment && meta.week != null) {
+          parsed.week_alignment = `Semana ${meta.week}${meta.title ? ` — ${meta.title}` : ''}`;
+        }
         await updateSessionFeedback(sessionId, parsed, 'ready');
         return { feedback_status: 'ready', feedback_json: parsed };
       }

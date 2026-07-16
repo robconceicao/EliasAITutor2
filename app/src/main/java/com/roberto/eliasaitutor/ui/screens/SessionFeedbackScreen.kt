@@ -60,7 +60,24 @@ fun SessionFeedbackScreen(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             )
         }
+        if (feedback.weekAlignment.isNotBlank()) {
+            Text(
+                feedback.weekAlignment,
+                color = Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
         Spacer(Modifier.height(16.dp))
+
+        if (feedback.strengths.isNotEmpty()) {
+            Text("Pontos fortes", color = Green, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
+            feedback.strengths.forEach { s ->
+                Text("• $s", color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(bottom = 4.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
 
         if (feedback.mistakes.isNotEmpty()) {
             Text("Erros principais", color = TextMain, fontWeight = FontWeight.SemiBold)
@@ -119,7 +136,7 @@ fun SessionFeedbackScreen(
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Text(
-                        "Redução · linking · elisão · entonação",
+                        "Pronúncia (GA)",
                         color = Purple,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -129,6 +146,66 @@ fun SessionFeedbackScreen(
                         fontSize = 14.sp,
                         modifier = Modifier.padding(top = 6.dp)
                     )
+                }
+            }
+        }
+
+        if (feedback.discourseFocus.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        "Discurso · fluência · registro (C1)",
+                        color = Accent,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        feedback.discourseFocus,
+                        color = TextMain,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
+        }
+
+        val recovery = feedback.recoveryPlan
+        if (recovery != null && (recovery.priority.isNotBlank() || recovery.dailyDrills.isNotEmpty())) {
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1A0A)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        "Plano de recuperação",
+                        color = Color(0xFFFFB74D),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (recovery.priority.isNotBlank()) {
+                        Text(
+                            "Prioridade: ${recovery.priority}",
+                            color = TextMain,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                    recovery.dailyDrills.forEach { d ->
+                        Text("• $d", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    if (recovery.successCriteria.isNotBlank()) {
+                        Text(
+                            "Critério: ${recovery.successCriteria}",
+                            color = Muted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
                 }
             }
         }

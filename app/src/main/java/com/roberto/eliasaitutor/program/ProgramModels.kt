@@ -159,7 +159,19 @@ data class CheckpointResult(
 )
 
 @Serializable
+data class RecoveryPlan(
+    val priority: String = "",
+    @SerializedName("daily_drills")
+    @SerialName("daily_drills")
+    val dailyDrills: List<String> = emptyList(),
+    @SerializedName("success_criteria")
+    @SerialName("success_criteria")
+    val successCriteria: String = "",
+)
+
+@Serializable
 data class SessionFeedback(
+    val strengths: List<String> = emptyList(),
     val mistakes: List<FeedbackMistake> = emptyList(),
     @SerializedName("better_phrases")
     @SerialName("better_phrases")
@@ -168,9 +180,19 @@ data class SessionFeedback(
     @SerializedName("pronunciation_focus")
     @SerialName("pronunciation_focus")
     val pronunciationFocus: String = "",
+    /** Discourse / fluency / register notes for C1 path. */
+    @SerializedName("discourse_focus")
+    @SerialName("discourse_focus")
+    val discourseFocus: String = "",
     @SerializedName("cefr_estimate")
     @SerialName("cefr_estimate")
     val cefrEstimate: String = "",
+    @SerializedName("week_alignment")
+    @SerialName("week_alignment")
+    val weekAlignment: String = "",
+    @SerializedName("recovery_plan")
+    @SerialName("recovery_plan")
+    val recoveryPlan: RecoveryPlan? = null,
     @SerializedName("next_focus")
     @SerialName("next_focus")
     val nextFocus: String = "",

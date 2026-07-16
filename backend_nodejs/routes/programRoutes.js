@@ -176,7 +176,13 @@ router.patch('/sessions/:id/end', async (req, res) => {
       feedback_status = 'pending';
       // fire-and-forget; transcript from client if provided
       const history = typeof transcript === 'string' ? transcript : transcript || '';
-      generateSessionFeedback(id, history).catch((err) =>
+      const weekDoc = await getWeek(session.week).catch(() => null);
+      const weekMeta = {
+        week: session.week,
+        title: weekDoc?.title,
+        level: weekDoc?.level,
+      };
+      generateSessionFeedback(id, history, weekMeta).catch((err) =>
         console.error('[feedback]', err.message)
       );
     }
@@ -210,7 +216,12 @@ router.post('/sessions/:id/feedback/retry', async (req, res) => {
     const session = await getSession(req.params.id);
     if (!session) return sendError(res, 404, 'not_found', 'Session not found');
     const transcript = req.body?.transcript || '';
-    const result = await generateSessionFeedback(req.params.id, transcript);
+    const weekDoc = await getWeek(session.week).catch(() => null);
+    const result = await generateSessionFeedback(req.params.id, transcript, {
+      week: session.week,
+      title: weekDoc?.title,
+      level: weekDoc?.level,
+    });
     res.json(result);
   } catch (e) {
     sendError(res, 500, 'internal', e.message);
