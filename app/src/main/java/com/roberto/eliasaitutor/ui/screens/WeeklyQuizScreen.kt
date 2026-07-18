@@ -146,13 +146,19 @@ private fun QuizResultCard(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                if (result.passed || result.canAdvance) {
-                    "Nota atingida — quando quiser, rode o checkpoint semanal para avançar de semana."
-                } else {
-                    "Nota abaixo de ${result.passingScorePercent}%. Revise vocabulário e pronúncia da semana e refaça o quiz."
+                when {
+                    result.canAdvanceLesson() && result.advanced ->
+                        "Aula desbloqueada! Semana ${result.unlockedWeek}/26 liberada. (Dia ${result.programDay})"
+                    result.canAdvanceLesson() ->
+                        result.progressHint.ifBlank {
+                            "Quiz aprovado (≥${result.passingScorePercent}%). Próxima aula liberada."
+                        }
+                    else ->
+                        "Nota abaixo de ${result.passingScorePercent}%. Complete o Quiz com nota mínima para avançar. Refaça quando estiver pronto."
                 },
-                color = Muted,
-                fontSize = 13.sp
+                color = if (result.canAdvanceLesson()) Green else Muted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
             )
             Spacer(Modifier.height(16.dp))
             Button(onClick = onDone, colors = ButtonDefaults.buttonColors(containerColor = Accent)) {

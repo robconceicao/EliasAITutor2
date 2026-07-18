@@ -64,10 +64,27 @@ data class UserProgramState(
     @SerializedName("deficient_topics")
     @SerialName("deficient_topics")
     val deficientTopics: List<String>? = null,
-    /** Highest week cleared by checkpoint (mastery hard-gate). */
+    /** Highest week cleared by quiz/checkpoint (mastery hard-gate). */
     @SerializedName("mastery_cleared_week")
     @SerialName("mastery_cleared_week")
     val masteryClearedWeek: Int = 0,
+    /** Day 1 = start_date (inclusive). */
+    @SerializedName("program_day")
+    @SerialName("program_day")
+    val programDay: Int = 1,
+    /** Highest week the student may open (quiz-gated). */
+    @SerializedName("unlocked_week")
+    @SerialName("unlocked_week")
+    val unlockedWeek: Int = 1,
+    @SerializedName("current_week_quiz_passed")
+    @SerialName("current_week_quiz_passed")
+    val currentWeekQuizPassed: Boolean = false,
+    @SerializedName("next_week_locked")
+    @SerialName("next_week_locked")
+    val nextWeekLocked: Boolean = true,
+    @SerializedName("progress_hint")
+    @SerialName("progress_hint")
+    val progressHint: String = "",
 )
 
 @Serializable
@@ -144,6 +161,17 @@ data class QuizSubmitResult(
     @SerializedName("can_advance")
     @SerialName("can_advance")
     val canAdvance: Boolean = false,
+    /** True when this pass unlocked a new week. */
+    val advanced: Boolean = false,
+    @SerializedName("unlocked_week")
+    @SerialName("unlocked_week")
+    val unlockedWeek: Int = 1,
+    @SerializedName("program_day")
+    @SerialName("program_day")
+    val programDay: Int = 1,
+    @SerializedName("progress_hint")
+    @SerialName("progress_hint")
+    val progressHint: String = "",
     @SerializedName("passing_score_percent")
     @SerialName("passing_score_percent")
     val passingScorePercent: Int = 70,
@@ -163,7 +191,9 @@ data class QuizSubmitResult(
     @SerializedName("pronunciation_total")
     @SerialName("pronunciation_total")
     val pronunciationTotal: Int = 0,
-)
+) {
+    fun canAdvanceLesson(): Boolean = canAdvance || passed
+}
 
 @Serializable
 data class CheckpointResult(
@@ -237,6 +267,20 @@ object ProgramPhaseUi {
 
 /** Fluency target = start_date + 6 months (aligned with backend promptBuilder). */
 object ProgramDates {
+    /**
+     * Day 1 of the program = start_date (inclusive).
+     * Matches backend programDayNumber().
+     */
+    fun programDay(startDateYmd: String, today: java.time.LocalDate = java.time.LocalDate.now()): Int {
+        return try {
+            val start = java.time.LocalDate.parse(startDateYmd)
+            val diff = java.time.temporal.ChronoUnit.DAYS.between(start, today).toInt()
+            (diff + 1).coerceAtLeast(1)
+        } catch (_: Exception) {
+            1
+        }
+    }
+
     fun targetDateIso(startDateYmd: String, months: Long = 6): String {
         return try {
             val start = java.time.LocalDate.parse(startDateYmd)

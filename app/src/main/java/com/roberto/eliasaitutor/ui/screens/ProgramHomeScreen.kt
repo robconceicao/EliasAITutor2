@@ -221,10 +221,27 @@ fun ProgramHomeScreen(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
+                val programDay = when {
+                    ui.state.programDay > 0 -> ui.state.programDay
+                    ui.state.startDate.isNotBlank() -> ProgramDates.programDay(ui.state.startDate)
+                    else -> 1
+                }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Surface(
+                        color = EliasTokens.Teal.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            "Dia $programDay",
+                            color = EliasTokens.Teal,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
                     Surface(
                         color = Accent.copy(alpha = 0.18f),
                         shape = RoundedCornerShape(20.dp)
@@ -263,6 +280,17 @@ fun ProgramHomeScreen(
                             )
                         }
                     }
+                }
+                if (ui.state.progressHint.isNotBlank() || ui.state.nextWeekLocked) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        ui.state.progressHint.ifBlank {
+                            "Complete o Quiz da Semana ${ui.state.currentWeek} (≥70%) para desbloquear a próxima aula."
+                        },
+                        color = if (ui.state.nextWeekLocked) EliasTokens.Orange else Muted,
+                        fontSize = 12.sp,
+                        fontWeight = if (ui.state.nextWeekLocked) FontWeight.SemiBold else FontWeight.Normal
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 Text("Jornada A1 → C1", color = Muted, fontSize = 11.sp)
