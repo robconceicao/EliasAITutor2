@@ -317,16 +317,45 @@ export async function getQuiz(week) {
   return memoryQuizzes.get(n) || null;
 }
 
+/**
+ * Classify quiz item: vocabulary (grammar/lexis) vs pronunciation.
+ * Explicit q.section wins; otherwise heuristic from question text.
+ */
+export function questionSection(q) {
+  const explicit = String(q?.section || '').toLowerCase();
+  if (explicit === 'pronunciation' || explicit === 'pronuncia' || explicit === 'pronúncia') {
+    return 'pronunciation';
+  }
+  if (explicit === 'vocabulary' || explicit === 'vocab' || explicit === 'grammar') {
+    return 'vocabulary';
+  }
+  const t = String(q?.question || '').toLowerCase();
+  if (
+    /som\b|\/[a-zθðæəɪʊɔɑɚɹʃʒŋ]{1,6}\/|ipa|pronúncia|pronuncia|schwa|linking|elisão|elisao|entonação|entonacao|fonema|vogal|consoante|mouth|tongue|stress|sílaba|silaba/.test(
+      t
+    )
+  ) {
+    return 'pronunciation';
+  }
+  return 'vocabulary';
+}
+
 /** Public payload: strip correct answers until submit. */
 export function quizForClient(quizDoc) {
   if (!quizDoc) return null;
+  const questions = (quizDoc.questions || []).map((q) => ({
+    question: q.question,
+    options: q.options || [],
+    section: questionSection(q),
+  }));
   return {
     week: quizDoc.week,
     passing_score_percent: quizDoc.passing_score_percent ?? 70,
-    questions: (quizDoc.questions || []).map((q) => ({
-      question: q.question,
-      options: q.options || [],
-    })),
+    questions,
+    sections: {
+      vocabulary: questions.filter((q) => q.section === 'vocabulary').length,
+      pronunciation: questions.filter((q) => q.section === 'pronunciation').length,
+    },
   };
 }
 
@@ -340,25 +369,50 @@ export async function submitQuizAnswers(week, answers) {
   const questions = quiz.questions || [];
   const ans = Array.isArray(answers) ? answers : [];
   let correct = 0;
+  let vocabCorrect = 0;
+  let vocabTotal = 0;
+  let pronCorrect = 0;
+  let pronTotal = 0;
   const correct_answers = [];
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
+    const section = questionSection(q);
     const ci = Number(q.correct_index);
     const chosen = ans[i];
     const ok = chosen !== undefined && Number(chosen) === ci;
     if (ok) correct += 1;
+    if (section === 'pronunciation') {
+      pronTotal += 1;
+      if (ok) pronCorrect += 1;
+    } else {
+      vocabTotal += 1;
+      if (ok) vocabCorrect += 1;
+    }
     correct_answers.push({
       index: i,
       correct_index: ci,
       correct_answer: q.correct_answer ?? q.options?.[ci] ?? '',
       chosen_index: chosen === undefined ? null : Number(chosen),
       is_correct: ok,
+      section,
     });
   }
   const total = questions.length || 1;
   const score_percent = Math.round((correct / total) * 100);
+  const vocabulary_score =
+    vocabTotal > 0 ? Math.round((vocabCorrect / vocabTotal) * 100) : score_percent;
+  const pronunciation_score =
+    pronTotal > 0 ? Math.round((pronCorrect / pronTotal) * 100) : score_percent;
+  // Combined score: average of the two sections when both exist (task v3.1)
+  const sectionScores = [];
+  if (vocabTotal > 0) sectionScores.push(vocabulary_score);
+  if (pronTotal > 0) sectionScores.push(pronunciation_score);
+  const combined_score =
+    sectionScores.length > 0
+      ? Math.round(sectionScores.reduce((a, b) => a + b, 0) / sectionScores.length)
+      : score_percent;
   const passMark = Number(quiz.passing_score_percent) || 70;
-  const passed = score_percent >= passMark;
+  const passed = combined_score >= passMark;
   const wrong_hints = correct_answers
     .filter((c) => !c.is_correct)
     .map((c) => questions[c.index]?.question || `Questão ${c.index + 1}`)
@@ -368,7 +422,9 @@ export async function submitQuizAnswers(week, answers) {
   const state = await getProgramState();
   const scores = { ...(state.quiz_scores || {}) };
   scores[String(week)] = {
-    score_percent,
+    score_percent: combined_score,
+    vocabulary_score,
+    pronunciation_score,
     passed,
     submitted_at: new Date().toISOString(),
     wrong_hints,
@@ -376,11 +432,18 @@ export async function submitQuizAnswers(week, answers) {
   await updateProgramState({ quiz_scores: scores });
 
   return {
-    score_percent,
+    score_percent: combined_score,
+    vocabulary_score,
+    pronunciation_score,
     passed,
+    can_advance: passed,
     passing_score_percent: passMark,
     correct_count: correct,
     total,
+    vocabulary_correct: vocabCorrect,
+    vocabulary_total: vocabTotal,
+    pronunciation_correct: pronCorrect,
+    pronunciation_total: pronTotal,
     correct_answers,
   };
 }

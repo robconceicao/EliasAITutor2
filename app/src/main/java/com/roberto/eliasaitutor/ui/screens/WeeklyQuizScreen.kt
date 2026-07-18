@@ -119,21 +119,37 @@ private fun QuizResultCard(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "${result.scorePercent}% · ${result.correctCount}/${result.total} acertos",
+                "Total: ${result.scorePercent}% · ${result.correctCount}/${result.total} acertos",
                 color = TextMain,
-                fontSize = 16.sp
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
             )
+            Spacer(Modifier.height(8.dp))
+            // Dual section scores (task v3.1)
+            if (result.vocabularyTotal > 0 || result.pronunciationTotal > 0) {
+                Text(
+                    "📚 Vocabulário: ${result.vocabularyScore}%",
+                    color = TextMain,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "🗣️ Pronúncia: ${result.pronunciationScore}%",
+                    color = TextMain,
+                    fontSize = 14.sp
+                )
+            }
             Text(
-                "Mínimo: ${result.passingScorePercent}% (semana ${quiz.week})",
+                "Mínimo para liberar próxima aula: ${result.passingScorePercent}%",
                 color = Muted,
-                fontSize = 13.sp
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 6.dp)
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                if (result.passed) {
-                    "Quando quiser, rode o checkpoint semanal para avaliar se pode avançar."
+                if (result.passed || result.canAdvance) {
+                    "Nota atingida — quando quiser, rode o checkpoint semanal para avançar de semana."
                 } else {
-                    "Revise os tópicos da semana e pratique de novo antes do próximo checkpoint."
+                    "Nota abaixo de ${result.passingScorePercent}%. Revise vocabulário e pronúncia da semana e refaça o quiz."
                 },
                 color = Muted,
                 fontSize = 13.sp
@@ -158,10 +174,20 @@ private fun QuizQuestionsForm(
     val scroll = rememberScrollState()
 
     Column(Modifier.fillMaxSize()) {
+        val vocabCount = quiz.questions.count {
+            it.section.equals("vocabulary", true) || it.section.isBlank()
+        }
+        val pronCount = quiz.questions.count { it.section.equals("pronunciation", true) }
         Text(
-            "Semana ${quiz.week} · ${quiz.questions.size} questões · mínimo ${quiz.passingScorePercent}%",
+            "Semana ${quiz.week} · ${quiz.questions.size} questões · mín. ${quiz.passingScorePercent}%",
             color = Muted,
             fontSize = 13.sp
+        )
+        Text(
+            "📚 Vocabulário: $vocabCount  ·  🗣️ Pronúncia: $pronCount",
+            color = Accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
         )
         Spacer(Modifier.height(12.dp))
 
@@ -171,7 +197,23 @@ private fun QuizQuestionsForm(
                 .verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            var lastSection = ""
             quiz.questions.forEachIndexed { qi, q ->
+                val section = when {
+                    q.section.equals("pronunciation", true) -> "pronunciation"
+                    else -> "vocabulary"
+                }
+                if (section != lastSection) {
+                    lastSection = section
+                    Text(
+                        if (section == "pronunciation") "🗣️ Pronúncia"
+                        else "📚 Vocabulário / gramática",
+                        color = Accent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Surface),
                     shape = RoundedCornerShape(12.dp),

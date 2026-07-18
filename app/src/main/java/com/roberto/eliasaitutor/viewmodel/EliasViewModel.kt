@@ -413,6 +413,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                         durationMs = durationMs,
                         focus = focus,
                         requestId = reqId,
+                        passThreshold = echoPassThreshold,
                     )
 
                     val remote = withTimeoutOrNull(45_000) {
@@ -422,6 +423,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     if (remote != null && remote.ok) {
                         _shadowTranscript.value = remote.transcript
+                        val sc = remote.score.coerceIn(1, 100)
+                        val canAdv = remote.canAdvance || sc >= echoPassThreshold
                         val fb = buildString {
                             append(remote.feedback.ifBlank { "Continue praticando!" })
                             if (remote.transcript.isNotBlank() &&
@@ -429,12 +432,16 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                             ) {
                                 append("\nVocê disse: “${remote.transcript}”")
                             }
+                            if (!canAdv) {
+                                append(
+                                    "\nAcerto $sc% — mínimo ${echoPassThreshold}% para a próxima frase. Tente de novo."
+                                )
+                            } else {
+                                append("\nAcerto $sc% — pode avançar!")
+                            }
                         }
-                        applyShadowScore(
-                            remote.score.coerceIn(1, 100),
-                            fb,
-                            awardRewards = true,
-                        )
+                        applyShadowScore(sc, fb, awardRewards = true)
+                        _echoCanAdvance.value = canAdv
                         return@launch
                     }
                     // Fall through to local if backend timed out / failed
@@ -514,6 +521,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         val sc = score.coerceIn(0, 100)
         _shadowScore.value = sc
         _shadowFeedback.value = feedback
+        _echoCanAdvance.value = sc >= echoPassThreshold
         if (!awardRewards) return
         val cur = profile.first()
         ds.save(
@@ -1140,45 +1148,77 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // SHADOWING
+    // SHADOWING / ECHO
     // ─────────────────────────────────────────────────────────────────────────
     private val _shadowIpa = MutableStateFlow("")
     val shadowIpa: StateFlow<String> = _shadowIpa
 
+    /** Minimum score (0–100) to unlock "Next Phrase" in Echo Mode (task v3.1). */
+    val echoPassThreshold: Int = 70
+
+    private val _echoCanAdvance = MutableStateFlow(false)
+    val echoCanAdvance: StateFlow<Boolean> = _echoCanAdvance
+
+    private val localEchoBank = listOf(
+        "I want to go to America next summer." to "/aɪ ˈwɑnə ɡoʊ tə əˈmɛɹɪkə nɛkst ˈsʌmɚ/",
+        "Think about the weather before you leave the house." to "/θɪŋk əˈbaʊt ðə ˈwɛðɚ bɪˈfɔɹ ju liv ðə haʊs/",
+        "Could you put it on the table over there?" to "/kʊd ju pʊt ɪt ɑn ðə ˈteɪbəl ˈoʊvɚ ðɛɹ/",
+        "I have to get up early tomorrow morning." to "/aɪ hæf tə ɡɛt ʌp ˈɝli təˈmɑɹoʊ ˈmɔɹnɪŋ/",
+        "Please call me when you get a chance today." to "/pliz kɔl mi wɛn ju ɡɛt ə tʃæns təˈdeɪ/",
+        "I need a little bit of water right now." to "/aɪ nid ə ˈlɪɾəl bɪt əv ˈwɔtɚ raɪt naʊ/",
+        "That was a really good idea for the project." to "/ðæt wəz ə ˈɹɪli ɡʊd aɪˈdiə fɚ ðə ˈpɹɑdʒɛkt/",
+        "What do you think about living in the city?" to "/wʌd ju θɪŋk əˈbaʊt ˈlɪvɪŋ ɪn ðə ˈsɪti/",
+    )
+
+    private fun pickLocalEchoPhrase(): Pair<String, String> =
+        localEchoBank.random()
+
+    /**
+     * New Echo phrase via **backend** LLM failover (Groq/Gemini/DeepSeek).
+     * Never calls Anthropic from the device (avoids credit balance 400).
+     */
     fun generateShadowPhrase() {
         viewModelScope.launch {
             _isLoading.value = true
+            _shadowScore.value = null
+            _shadowFeedback.value = ""
+            _shadowTranscript.value = ""
+            _echoCanAdvance.value = false
             try {
-                val resp = AnthropicClient.api.generateMessage(ClaudeRequest(
-                    messages = listOf(ClaudeMessage("user",
-                        "Generate ONE natural General American English sentence (10-18 words) for pronunciation shadowing. " +
-                        "Include schwa/linking where natural. Reply ONLY with JSON: " +
-                        "{\"phrase\":\"...\",\"ipa\":\"/.../\"}"))
-                ))
-                val raw = resp.content.firstOrNull()?.text?.trim().orEmpty()
-                    .removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                try {
-                    val obj = JSONObject(raw)
-                    _shadowPhrase.value = obj.optString("phrase").ifBlank {
-                        "I want to go to America next summer."
+                if (SocketClient.connectionStatus.value) {
+                    val reqId = "echo_ph_${System.currentTimeMillis()}"
+                    SocketClient.requestEchoPhrase(reqId)
+                    val remote = withTimeoutOrNull(20_000) {
+                        SocketClient.echoPhraseFlow.first {
+                            it.requestId == null || it.requestId == reqId || it.requestId.isNullOrBlank()
+                        }
                     }
-                    _shadowIpa.value = obj.optString("ipa")
-                } catch (_: Exception) {
-                    _shadowPhrase.value = raw.trim('"').ifBlank {
-                        "I want to go to America next summer."
+                    if (remote != null && remote.phrase.isNotBlank()) {
+                        _shadowPhrase.value = remote.phrase
+                        _shadowIpa.value = remote.ipa.ifBlank {
+                            pickLocalEchoPhrase().second
+                        }
+                        return@launch
                     }
-                    _shadowIpa.value = "/aɪ ˈwɑnə ɡoʊ tə əˈmɛɹɪkə nɛkst ˈsʌmɚ/"
                 }
-                _shadowScore.value = null
-                _shadowFeedback.value = ""
+                val local = pickLocalEchoPhrase()
+                _shadowPhrase.value = local.first
+                _shadowIpa.value = local.second
+                if (!SocketClient.connectionStatus.value) {
+                    _toastMessage.value = "Offline — frase local. Conecte para frases novas da IA."
+                }
             } catch (e: Exception) {
-                _shadowPhrase.value = "I want to go to America next summer."
-                _shadowIpa.value = "/aɪ ˈwɑnə ɡoʊ tə əˈmɛɹɪkə nɛkst ˈsʌmɚ/"
-            } finally { _isLoading.value = false }
+                val local = pickLocalEchoPhrase()
+                _shadowPhrase.value = local.first
+                _shadowIpa.value = local.second
+                android.util.Log.e("EliasViewModel", "generateShadowPhrase: ${e.message}")
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
-    /** Score from known transcript (no audio file) — LLM or word-overlap. */
+    /** Score from known transcript (no audio file) — backend or word-overlap (no Anthropic on device). */
     fun scoreShadowing(reference: String, transcribed: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -1186,40 +1226,39 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val focus = PronunciationFocus.focusOfDay()
                 val localOverlap = estimateWordOverlap(reference, transcribed)
-                try {
-                    val resp = AnthropicClient.api.generateMessage(
-                        ClaudeRequest(
-                            max_tokens = 80,
-                            messages = listOf(
-                                ClaudeMessage(
-                                    "user",
-                                    "Reference: \"$reference\"\nStudent said: \"$transcribed\"\n" +
-                                        "Focus: $focus\n" +
-                                        "Score pronunciation 0-100. Reply ONLY with JSON: " +
-                                        "{\"score\":<int>,\"feedback\":\"<sentence in PT-BR>\"}"
-                                )
-                            )
+                if (SocketClient.connectionStatus.value) {
+                    val reqId = "echo_tx_${System.currentTimeMillis()}"
+                    SocketClient.requestEchoScore(
+                        reference = reference,
+                        transcript = transcribed,
+                        focus = focus,
+                        requestId = reqId,
+                        passThreshold = echoPassThreshold,
+                    )
+                    val remote = withTimeoutOrNull(20_000) {
+                        SocketClient.echoScoreFlow.first {
+                            it.requestId == null || it.requestId == reqId || it.requestId.isNullOrBlank()
+                        }
+                    }
+                    if (remote != null && remote.ok) {
+                        val sc = remote.score.coerceIn(0, 100)
+                        applyShadowScore(
+                            sc,
+                            remote.feedback.ifBlank { "Continue praticando!" } +
+                                if (sc >= echoPassThreshold) "\nAcerto $sc% — pode avançar!"
+                                else "\nAcerto $sc% — mínimo ${echoPassThreshold}% para avançar.",
+                            awardRewards = true,
                         )
-                    )
-                    val raw = resp.content.firstOrNull()?.text?.trim()
-                        ?: "{\"score\":$localOverlap,\"feedback\":\"Continue praticando!\"}"
-                    val obj = JSONObject(
-                        raw.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-                    )
-                    val sc = obj.optInt("score", localOverlap).coerceIn(0, 100)
-                    val blended = ((sc * 0.75) + (localOverlap * 0.25)).toInt().coerceIn(0, 100)
-                    applyShadowScore(
-                        blended,
-                        obj.optString("feedback", "Continue praticando!"),
-                        awardRewards = true,
-                    )
-                } catch (_: Exception) {
-                    applyShadowScore(
-                        localOverlap,
-                        "Você disse: “$transcribed”. ${PronunciationFocus.coachingTip(focus)}",
-                        awardRewards = true,
-                    )
+                        return@launch
+                    }
                 }
+                applyShadowScore(
+                    localOverlap,
+                    "Você disse: “$transcribed”. ${PronunciationFocus.coachingTip(focus)}" +
+                        if (localOverlap >= echoPassThreshold) "\nAcerto $localOverlap% — pode avançar!"
+                        else "\nAcerto $localOverlap% — mínimo ${echoPassThreshold}% para avançar.",
+                    awardRewards = true,
+                )
             } catch (e: Exception) {
                 applyShadowScore(60, "Continue praticando!", awardRewards = false)
             } finally {

@@ -46,6 +46,13 @@ import {
 import programRoutes from './routes/programRoutes.js';
 import { translateToPtBr } from './services/translationService.js';
 import { scoreEchoAttempt } from './services/echoScoreService.js';
+import {
+  preferredChatModelOrder,
+  isLlmBillingOrAuthError,
+  markClaudeUnavailable,
+  shouldSkipClaude,
+  generateEchoPhrase,
+} from './services/llmClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -452,8 +459,12 @@ io.on('connection', (socket) => {
         focus: payload.focus || '',
         transcript: payload.transcript || '',
       });
+      const passThreshold = Number(payload.passThreshold) || 70;
+      const score = Number(result.score) || 0;
       socket.emit('echo_score_pronto', {
         ...result,
+        passThreshold,
+        canAdvance: score >= passThreshold,
         requestId: payload.requestId || null,
       });
     } catch (e) {
@@ -465,6 +476,32 @@ io.on('connection', (socket) => {
         feedback: '',
         transcript: '',
         method: 'error',
+        canAdvance: false,
+        passThreshold: 70,
+        requestId: payload?.requestId || null,
+      });
+    }
+  });
+
+  // 3d. Echo Mode phrase generation (backend LLM failover — never hit Anthropic from the app)
+  socket.on('echo_frase_nova', async (payload = {}) => {
+    try {
+      const gen = await generateEchoPhrase();
+      socket.emit('echo_frase_pronta', {
+        ok: true,
+        phrase: gen.phrase,
+        ipa: gen.ipa || '',
+        source: gen.source || 'llm',
+        requestId: payload.requestId || null,
+      });
+    } catch (e) {
+      console.error('[echo_frase_nova]', e.message);
+      socket.emit('echo_frase_pronta', {
+        ok: false,
+        error: e.message,
+        phrase: 'I want to go to America next summer.',
+        ipa: '/aɪ ˈwɑnə ɡoʊ tə əˈmɛɹɪkə nɛkst ˈsʌmɚ/',
+        source: 'fallback',
         requestId: payload?.requestId || null,
       });
     }
@@ -736,18 +773,17 @@ io.on('connection', (socket) => {
 
       // We should check llmAbort.signal.aborted during generation loop
 
-      let modelToUse = modelOverride || process.env.DEFAULT_LLM || 'claude';
-      
-      let modelsToTry = [];
-      if (modelToUse === 'claude') {
-        modelsToTry = ['groq', 'gemini', 'deepseek', 'claude'];
-      } else if (modelToUse === 'gemini') {
-        modelsToTry = ['groq', 'claude', 'deepseek', 'gemini'];
-      } else if (modelToUse === 'groq') {
-        modelsToTry = ['groq', 'claude', 'gemini', 'deepseek'];
-      } else {
-        modelsToTry = ['groq', 'claude', 'gemini', 'deepseek'];
+      // Failover chain: Groq → Gemini → DeepSeek → Claude (Claude last; skip if billing)
+      let modelsToTry = preferredChatModelOrder(modelOverride);
+      if (shouldSkipClaude()) {
+        modelsToTry = modelsToTry.filter((m) => m !== 'claude');
+        console.warn('[llm] Claude omitted from chat chain (credit/billing cooldown)');
       }
+      socket.emit('llm_status', {
+        phase: 'trying',
+        models: modelsToTry,
+        message: `Usando ${modelsToTry[0] || 'fallback'}…`,
+      });
 
       let respostaCompletaIA = "";
       let sentLength = 0;
@@ -813,8 +849,31 @@ io.on('connection', (socket) => {
 
       for (const model of modelsToTry) {
         if (!estadoGeracao.ativo) break;
+        if (model === 'claude' && shouldSkipClaude()) {
+          console.warn('🤖 Claude skipped (billing cooldown)');
+          continue;
+        }
         try {
           console.log(`🤖 Tentando inteligência: ${model.toUpperCase()}`);
+          socket.emit('llm_status', {
+            phase: 'trying',
+            model,
+            message: `Tentando ${model}…`,
+          });
+          // Reset partial response if previous model failed mid-stream
+          if (respostaCompletaIA.length > 0 && !success) {
+            console.warn(
+              `[llm] Discarding partial text from failed provider (${respostaCompletaIA.length} chars)`
+            );
+            respostaCompletaIA = '';
+            estadoGeracao.textoParcialIA = '';
+            sentLength = 0;
+            ttsFlushBuf = '';
+            // Keep ttsTextSent only if audio already started — otherwise reset
+            if (!audioEmitted) {
+              ttsTextSent = '';
+            }
+          }
           if (model === 'claude') {
             if (!process.env.ANTHROPIC_API_KEY || !anthropic) {
               throw new Error("Anthropic API key is not configured or client is null");
@@ -977,12 +1036,31 @@ io.on('connection', (socket) => {
         } catch (err) {
           console.warn(`⚠️ Modelo ${model.toUpperCase()} falhou: ${err.message}. Tentando próximo...`);
           lastError = err;
+          if (model === 'claude' && isLlmBillingOrAuthError(err)) {
+            markClaudeUnavailable(err.message);
+            socket.emit('llm_status', {
+              phase: 'fallback',
+              message: 'Claude sem crédito — usando outro modelo…',
+              reason: 'anthropic_credit',
+            });
+          } else {
+            socket.emit('llm_status', {
+              phase: 'fallback',
+              message: `${model} falhou — tentando outro…`,
+              model,
+            });
+          }
         }
       }
 
       if (!success) {
-        throw lastError || new Error("Todos os modelos de linguagem falharam na geração");
+        const friendly =
+          lastError && isLlmBillingOrAuthError(lastError)
+            ? 'Crédito/API de IA indisponível. Configure GROQ_API_KEY ou GEMINI_API_KEY no Render.'
+            : lastError?.message || 'Todos os modelos de linguagem falharam na geração';
+        throw new Error(friendly);
       }
+      socket.emit('llm_status', { phase: 'ok', message: 'Resposta gerada' });
 
       if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
         // Flush any remaining TTS buffer so the last phrase is fully spoken
