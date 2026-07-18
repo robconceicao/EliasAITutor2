@@ -15,6 +15,9 @@ import {
   computeAutoWeek,
   computeEffectiveWeek,
   resolveWeek,
+  programDayNumber,
+  unlockedWeek,
+  enrichProgramProgress,
 } from './services/programStore.js';
 
 // CEFR ordinal
@@ -193,5 +196,37 @@ assert.strictEqual(
   }),
   2
 );
+
+// Day 1 of program = start_date
+assert.strictEqual(programDayNumber('2026-07-18', '2026-07-18'), 1);
+assert.strictEqual(programDayNumber('2026-07-01', '2026-07-15'), 15);
+assert.strictEqual(unlockedWeek({ mastery_cleared_week: 0 }), 1);
+assert.strictEqual(unlockedWeek({ mastery_cleared_week: 3 }), 4);
+
+// Without quiz pass, cannot open week 2 even if calendar is far ahead
+assert.strictEqual(
+  resolveWeek({
+    week_mode: 'auto',
+    start_date: '2026-01-01',
+    total_paused_days: 0,
+    mastery_cleared_week: 0,
+    held_back: false,
+  }),
+  1
+);
+
+const enriched = enrichProgramProgress({
+  start_date: '2026-07-18',
+  mastery_cleared_week: 0,
+  week_mode: 'auto',
+  quiz_scores: {},
+  total_paused_days: 0,
+  held_back: false,
+  current_week: 1,
+});
+assert.strictEqual(enriched.program_day >= 1, true);
+assert.strictEqual(enriched.unlocked_week, 1);
+assert.strictEqual(enriched.next_week_locked, true);
+assert.ok(String(enriched.progress_hint).includes('Quiz'));
 
 console.log('✅ evaluateReadiness + pause calendar + mastery gate tests passed');

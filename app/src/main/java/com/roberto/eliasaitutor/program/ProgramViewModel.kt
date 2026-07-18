@@ -233,6 +233,14 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value = _ui.value.copy(
                     error = "Falha ao enviar o quiz. Verifique a conexão e tente de novo."
                 )
+            } else {
+                // Refresh state so unlocked_week / program_day update after pass
+                refresh()
+                if (result.canAdvanceLesson()) {
+                    _checkpointMsg.value = result.progressHint.ifBlank {
+                        "Quiz aprovado! Semana ${result.unlockedWeek} desbloqueada."
+                    }
+                }
             }
         }
     }

@@ -81,13 +81,35 @@ function defaultState() {
  * - auto: calendar week capped at mastery_cleared_week + 1 (cannot skip without ready)
  * - manual: honor stored current_week (admin override)
  */
+/**
+ * Program day number: Day 1 = start_date (inclusive).
+ * @param {string} startDate YYYY-MM-DD
+ * @param {string} [todayStr]
+ * @returns {number}
+ */
+export function programDayNumber(startDate, todayStr = todayISO()) {
+  if (!startDate) return 1;
+  const start = new Date(String(startDate).slice(0, 10) + 'T00:00:00');
+  const today = new Date(String(todayStr).slice(0, 10) + 'T00:00:00');
+  if (Number.isNaN(start.getTime()) || Number.isNaN(today.getTime())) return 1;
+  const diff = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+  return Math.max(1, diff + 1);
+}
+
+/** Highest week the student may open (quiz-gated). */
+export function unlockedWeek(state) {
+  if (!state) return 1;
+  const cleared = Math.max(0, Math.min(26, Number(state.mastery_cleared_week) || 0));
+  return Math.min(26, Math.max(1, cleared + 1));
+}
+
+/**
+ * Current lesson week — NEVER ahead of quiz unlock.
+ * Calendar only paces within unlocked window (task v3.1 daily progression).
+ */
 export function resolveWeek(state) {
   if (!state) return 1;
-  const cleared = Math.max(
-    0,
-    Math.min(26, Number(state.mastery_cleared_week) || 0)
-  );
-  const masteryCap = Math.min(26, Math.max(1, cleared + 1));
+  const masteryCap = unlockedWeek(state);
 
   if (state.held_back) {
     // Stay on the week under review (never jump while held back)
@@ -96,16 +118,46 @@ export function resolveWeek(state) {
   }
 
   if (state.week_mode === 'manual') {
-    return Math.min(26, Math.max(1, Number(state.current_week) || 1));
+    // Manual pick still cannot skip locked future weeks
+    const want = Math.min(26, Math.max(1, Number(state.current_week) || 1));
+    return Math.min(want, masteryCap);
   }
 
-  // auto: calendar can lag or lead, but never open a week without clearing prior
+  // auto: calendar can lag or lead, but never open a week without quiz pass
   const calendar = computeEffectiveWeek(
     state.start_date,
     todayISO(),
     state.total_paused_days || 0
   );
   return Math.min(calendar, masteryCap);
+}
+
+/**
+ * Enrich state for API/UI: program day, locks, quiz gate messaging.
+ */
+export function enrichProgramProgress(state) {
+  const s = state || defaultState();
+  const week = resolveWeek(s);
+  const unlocked = unlockedWeek(s);
+  const day = programDayNumber(s.start_date);
+  const quizEntry = s.quiz_scores?.[String(week)] || null;
+  const currentWeekQuizPassed = !!(quizEntry && quizEntry.passed);
+  const nextWeekLocked = unlocked <= week && week < 26 && !currentWeekQuizPassed;
+  return {
+    ...s,
+    current_week: week,
+    program_day: day,
+    unlocked_week: unlocked,
+    current_week_quiz_passed: currentWeekQuizPassed,
+    next_week_locked: nextWeekLocked,
+    progress_hint: nextWeekLocked
+      ? `Complete o Quiz da Semana ${week} com nota ≥70% para desbloquear a próxima aula.`
+      : week >= 26
+        ? 'Você está na última semana do programa.'
+        : currentWeekQuizPassed
+          ? `Quiz da Semana ${week} aprovado — Semana ${Math.min(26, week + 1)} liberada.`
+          : `Dia ${day} do programa · Semana ${week}/26`,
+  };
 }
 
 /** While held_back, add 1 paused day per calendar day (once). */
@@ -221,11 +273,7 @@ export async function getProgramState() {
     memoryState = { ...next };
   }
 
-  const current_week = resolveWeek(next);
-  return {
-    ...next,
-    current_week,
-  };
+  return enrichProgramProgress(next);
 }
 
 export async function updateProgramState(patch) {
@@ -282,7 +330,7 @@ export async function updateProgramState(patch) {
       new: true,
     });
   }
-  return { ...next, current_week: resolveWeek(next) };
+  return enrichProgramProgress(next);
 }
 
 // ─── Quizzes (B.5 / B.6) ────────────────────────────────────
@@ -429,7 +477,34 @@ export async function submitQuizAnswers(week, answers) {
     submitted_at: new Date().toISOString(),
     wrong_hints,
   };
-  await updateProgramState({ quiz_scores: scores });
+
+  /**
+   * Daily / lesson progression (task v3.1):
+   * only unlock next week after passing the quiz for the current week.
+   * mastery_cleared_week = W means weeks 1..W are cleared → unlocked = W+1.
+   */
+  const patch = { quiz_scores: scores };
+  let unlockedAfter = unlockedWeek(state);
+  let advanced = false;
+  if (passed) {
+    const prevCleared = Math.max(0, Number(state.mastery_cleared_week) || 0);
+    const newCleared = Math.max(prevCleared, Number(week) || 0);
+    if (newCleared > prevCleared) {
+      patch.mastery_cleared_week = newCleared;
+      advanced = true;
+    } else {
+      patch.mastery_cleared_week = newCleared;
+    }
+    // Passing the week under review clears soft hold
+    if (state.held_back && Number(state.current_week) === Number(week)) {
+      patch.held_back = false;
+      patch.review_since = null;
+      patch.deficient_topics = null;
+    }
+  }
+
+  const updated = await updateProgramState(patch);
+  unlockedAfter = unlockedWeek(updated);
 
   return {
     score_percent: combined_score,
@@ -437,6 +512,12 @@ export async function submitQuizAnswers(week, answers) {
     pronunciation_score,
     passed,
     can_advance: passed,
+    advanced,
+    unlocked_week: unlockedAfter,
+    program_day: programDayNumber(updated.start_date),
+    progress_hint: passed
+      ? `Aula desbloqueada: Semana ${unlockedAfter}/26. Continue no Dia ${programDayNumber(updated.start_date)}.`
+      : `Complete o Quiz com nota ≥${passMark}% para avançar. (Dia ${programDayNumber(updated.start_date)})`,
     passing_score_percent: passMark,
     correct_count: correct,
     total,
