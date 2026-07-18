@@ -21,14 +21,20 @@ const CACHE_DIR = path.resolve(__dirname, '../cache/chunks');
 
 // ─── Voice IDs (code defaults — never Adam) ─────────────────
 
-/** Liam — clear male (D5 option A). Used when MAIN_CHAT_VOICE_ID is unset. */
-export const DEFAULT_MAIN_CHAT_VOICE_ID = 'TX3LPaxmHKxFdv7VOQHJ';
+/**
+ * Brian — deep, clear American male narrator (best default for pronunciation tutoring).
+ * Override with MAIN_CHAT_VOICE_ID. Liam remains available as env choice.
+ */
+export const DEFAULT_MAIN_CHAT_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
 
-/** Chris — charming male; reserve if primary fails (§8). */
-export const DEFAULT_FALLBACK_VOICE_ID = 'iP95p4xoKVk53GoZ742B';
+/** Liam — clear young male American; reserve if primary fails. */
+export const DEFAULT_FALLBACK_VOICE_ID = 'TX3LPaxmHKxFdv7VOQHJ';
 
-/** Chunk drill default (F7 / D4) — same family as chat but independent env. */
-export const DEFAULT_CHUNK_VOICE_ID = 'TX3LPaxmHKxFdv7VOQHJ';
+/** Legacy Chris id kept for env overrides. */
+export const CHRIS_VOICE_ID = 'iP95p4xoKVk53GoZ742B';
+
+/** Chunk drill default (F7 / D4) — clear American male, independent of chat env. */
+export const DEFAULT_CHUNK_VOICE_ID = 'nPczCjzI2devNBz1zQrb';
 
 /** @deprecated Legacy — do not use. Expires 2026-12-31. */
 export const LEGACY_ADAM_VOICE_ID = 'pNInz6obpgDQGcFmaJcg';
@@ -38,7 +44,7 @@ export function resolveMainChatVoiceId() {
   if (fromEnv && fromEnv !== LEGACY_ADAM_VOICE_ID) return fromEnv;
   if (fromEnv === LEGACY_ADAM_VOICE_ID) {
     console.warn(
-      '[elevenLabs] MAIN_CHAT_VOICE_ID is set to Adam (legacy). Ignoring — using Liam default.'
+      '[elevenLabs] MAIN_CHAT_VOICE_ID is set to Adam (legacy). Ignoring — using Brian default.'
     );
   }
   return DEFAULT_MAIN_CHAT_VOICE_ID;
@@ -68,8 +74,13 @@ export const CHUNK_VOICE_SETTINGS = {
 
 export const CHUNK_MODEL_ID = process.env.CHUNK_TTS_MODEL || 'eleven_flash_v2_5';
 
-/** Streaming model — do not change without a dedicated latency spec. */
-export const STREAM_MODEL_ID = process.env.ELEVENLABS_STREAM_MODEL || 'eleven_flash_v2_5';
+/**
+ * Streaming model — turbo has clearer English pronunciation than flash
+ * while remaining low-latency. Override via ELEVENLABS_STREAM_MODEL.
+ * flash is still OK if cost/latency is critical.
+ */
+export const STREAM_MODEL_ID =
+  process.env.ELEVENLABS_STREAM_MODEL || 'eleven_turbo_v2_5';
 
 /**
  * PCM Int16 LE for Opus pipeline (NOT mp3 — default without this is mp3_44100_128,
@@ -79,9 +90,15 @@ export const STREAM_MODEL_ID = process.env.ELEVENLABS_STREAM_MODEL || 'eleven_fl
 export const STREAM_OUTPUT_FORMAT =
   process.env.ELEVENLABS_OUTPUT_FORMAT || 'pcm_24000';
 
+/**
+ * Clear GA teaching voice: higher stability = less drift/weird prosody;
+ * higher similarity = more consistent timbre. style low keeps pronunciation clean.
+ */
 export const CHAT_VOICE_SETTINGS = {
-  stability: 0.5,
-  similarity_boost: 0.8,
+  stability: 0.72,
+  similarity_boost: 0.85,
+  style: 0.05,
+  use_speaker_boost: true,
 };
 
 /**
@@ -135,13 +152,13 @@ export function ensureElevenLabsKeyEnv() {
 }
 
 /**
- * Streaming WS URL — low latency defaults (Task Final v1.0):
- * - model: eleven_flash_v2_5
- * - optimize_streaming_latency=3 (max speed, slight quality tradeoff)
+ * Streaming WS URL — quality-first defaults for tutoring:
+ * - model: eleven_turbo_v2_5 (clearer than flash)
+ * - optimize_streaming_latency=2 (1=best quality, 3=fastest/choppy)
  * - output_format=pcm_* (Int16 LE) for encodePCM→Opus pipeline
  */
 export function streamInputUrl(voiceId) {
-  const latency = process.env.ELEVENLABS_STREAM_LATENCY || '3';
+  const latency = process.env.ELEVENLABS_STREAM_LATENCY || '2';
   const params = new URLSearchParams({
     model_id: STREAM_MODEL_ID,
     optimize_streaming_latency: String(latency),
@@ -159,9 +176,9 @@ export function sendTtsInit(elevenSocket) {
       text: ' ',
       voice_settings: CHAT_VOICE_SETTINGS,
       xi_api_key: apiKey(),
-      // generation_config can nudge faster first byte on stream-input
+      // Larger chunks → fuller prosody, less word-chop / engasgo
       generation_config: {
-        chunk_length_schedule: [50, 90, 120, 150],
+        chunk_length_schedule: [120, 160, 250, 290],
       },
     })
   );

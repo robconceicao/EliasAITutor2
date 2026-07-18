@@ -93,8 +93,21 @@ function resolveFrameEncoderFactory() {
     }
     resolvedBackend = 'opusscript';
     console.warn('[audioEncoder] Using opusscript (pure JS) Opus backend');
+    // OPUS_SET_BITRATE = 4002; prefer speech quality on pure-JS path
+    const OPUS_SET_BITRATE = 4002;
+    const OPUS_SET_COMPLEXITY = 4010;
     frameEncoderFactory = () => {
       const enc = new OpusScript(SAMPLE_RATE, CHANNELS, Application);
+      try {
+        enc.encoderCTL(OPUS_SET_BITRATE, 64000);
+      } catch (_) {
+        /* optional */
+      }
+      try {
+        enc.encoderCTL(OPUS_SET_COMPLEXITY, 8);
+      } catch (_) {
+        /* optional */
+      }
       return {
         backend: 'opusscript',
         encodeFrame(pcmFrameBuf) {

@@ -751,6 +751,45 @@ io.on('connection', (socket) => {
 
       let respostaCompletaIA = "";
       let sentLength = 0;
+      /** Buffer TTS text until sentence boundary — tiny deltas cause engasgo / bad prosody. */
+      let ttsFlushBuf = "";
+
+      const flushTtsToEleven = (force = false) => {
+        if (!ttsFlushBuf) return;
+        const ready =
+          force ||
+          /[.!?…]\s*$/.test(ttsFlushBuf) ||
+          /[.!?…]\s+\S/.test(ttsFlushBuf) ||
+          ttsFlushBuf.length >= 90;
+        if (!ready) return;
+
+        // Prefer flush on complete sentences when buffer is long
+        let toSend = ttsFlushBuf;
+        if (!force && ttsFlushBuf.length >= 90) {
+          const m = ttsFlushBuf.match(/^([\s\S]*[.!?…])(\s+[\s\S]*)?$/);
+          if (m && m[1] && m[1].trim().length >= 12) {
+            toSend = m[1];
+            ttsFlushBuf = (m[2] || "").replace(/^\s+/, "");
+          } else {
+            toSend = ttsFlushBuf;
+            ttsFlushBuf = "";
+          }
+        } else {
+          ttsFlushBuf = "";
+        }
+        if (!toSend.trim()) return;
+
+        // Always track full spoken text (REST fallback needs it even without WS)
+        ttsTextSent += toSend;
+        if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
+          if (ttsTextSent.length === toSend.length) {
+            firstByteWatchdog?.arm();
+          }
+          elevenSocket.send(
+            JSON.stringify({ text: toSend, try_trigger_generation: true })
+          );
+        }
+      };
 
       const handleChunk = (chunkText) => {
         if (!estadoGeracao.ativo || llmAbort.signal.aborted) return;
@@ -760,17 +799,12 @@ io.on('connection', (socket) => {
         // Stream only the text inside <RESPONSE> tags to ElevenLabs and user app
         const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
         if (newResponseText.length > 0) {
-          // Always accumulate for REST complete TTS / first-byte re-send
-          ttsTextSent += newResponseText;
-          if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
-            // Arm first-audio-byte watchdog on the first TTS text flush (D8)
-            if (ttsTextSent.length === newResponseText.length) {
-              firstByteWatchdog?.arm();
-            }
-            elevenSocket.send(JSON.stringify({ "text": newResponseText, "try_trigger_generation": true }));
-          }
+          // Always accumulate for REST complete TTS / first-byte re-send tracking
+          ttsFlushBuf += newResponseText;
+          // UI gets text immediately; TTS waits for phrase/sentence batches
           socket.emit("texto_chunk", newResponseText);
           sentLength = newLength;
+          flushTtsToEleven(false);
         }
       };
 
@@ -951,6 +985,17 @@ io.on('connection', (socket) => {
       }
 
       if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
+        // Flush any remaining TTS buffer so the last phrase is fully spoken
+        flushTtsToEleven(true);
+        if (ttsFlushBuf) {
+          // leftover without sentence end
+          if (ttsTextSent.length === 0) firstByteWatchdog?.arm();
+          ttsTextSent += ttsFlushBuf;
+          elevenSocket.send(
+            JSON.stringify({ text: ttsFlushBuf, try_trigger_generation: true })
+          );
+          ttsFlushBuf = "";
+        }
         elevenSocket.send(JSON.stringify({ "text": "" })); // send empty string to close generation
       }
 

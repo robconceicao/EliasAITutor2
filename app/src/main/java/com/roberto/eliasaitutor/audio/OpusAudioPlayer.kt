@@ -44,7 +44,10 @@ class OpusAudioPlayer {
     private val playerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var playJob: Job? = null
     @Volatile private var isPlaying = false
-    
+    /** Backend finished sending frames — keep playing until jitter buffer drains. */
+    @Volatile private var streamEnded = false
+    private var consecutiveEmptyFrames = 0
+
     var audioSessionId: Int = 0
         private set
 
@@ -57,14 +60,16 @@ class OpusAudioPlayer {
         try {
             val channelConfig = AudioFormat.CHANNEL_OUT_MONO
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            val bufferSize = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+            val minBuf = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelConfig, audioFormat)
+            // Larger buffer reduces underruns that sound like choking / cut phrases
+            val bufferSize = maxOf(minBuf * 4, FRAME_SIZE * 2 * 24) // ~480ms
             
             audioTrack = AudioTrack(
                 AudioManager.STREAM_MUSIC,
                 SAMPLE_RATE,
                 channelConfig,
                 audioFormat,
-                maxOf(bufferSize, FRAME_SIZE * 2 * 4), // 4 frames min buffer
+                bufferSize,
                 AudioTrack.MODE_STREAM
             )
             
@@ -120,8 +125,14 @@ class OpusAudioPlayer {
     }
 
     fun startPlayout() {
-        if (isPlaying) return
+        if (isPlaying) {
+            streamEnded = false
+            consecutiveEmptyFrames = 0
+            return
+        }
         isPlaying = true
+        streamEnded = false
+        consecutiveEmptyFrames = 0
         jitterBuffer.clear()
         plcGenerator.clear()
 
@@ -129,8 +140,21 @@ class OpusAudioPlayer {
         Log.d(TAG, "Playout coroutine iniciada")
     }
 
+    /**
+     * Backend finished the TTS stream (estado_ia=ociosa).
+     * Do NOT flush immediately — play remaining jitter-buffer frames so the
+     * last words of the phrase are not cut off.
+     */
+    fun markStreamEnded() {
+        streamEnded = true
+        Log.d(TAG, "Stream ended — draining jitter buffer (size=${jitterBuffer.getBufferSize()})")
+    }
+
+    /** Hard stop (barge-in / error / voice switch). Drops buffered audio. */
     fun stopPlayout() {
         isPlaying = false
+        streamEnded = false
+        consecutiveEmptyFrames = 0
         playJob?.cancel()
         playJob = null
         jitterBuffer.clear()
@@ -145,6 +169,9 @@ class OpusAudioPlayer {
     }
 
     fun handleIncomingOpusFrame(data: ByteArray, seq: Int, timestampMs: Long) {
+        streamEnded = false
+        consecutiveEmptyFrames = 0
+        if (!isPlaying) startPlayout()
         jitterBuffer.addPacket(data, seq, timestampMs)
     }
 
@@ -159,6 +186,7 @@ class OpusAudioPlayer {
             val opusFrame = jitterBuffer.getNextFrame(startTime)
             
             if (opusFrame != null) {
+                consecutiveEmptyFrames = 0
                 // Dequeue input buffer, feed it to decoder
                 val decoderInstance = decoder
                 if (decoderInstance != null) {
@@ -177,11 +205,22 @@ class OpusAudioPlayer {
                     }
                 }
             } else {
-                // If the jitter buffer was playing but returns null, we have an underflow / loss
-                // Trigger PLC only if we're actively expecting voice (i.e. playout started)
-                if (jitterBuffer.getBufferSize() > 0 || jitterBuffer.packetLossCount > 0) {
+                consecutiveEmptyFrames++
+                // Mid-stream underflow: light PLC only while still expecting packets
+                if (!streamEnded &&
+                    (jitterBuffer.getBufferSize() > 0 || jitterBuffer.packetLossCount > 0)
+                ) {
                     val plcFrame = plcGenerator.generateConcealmentFrame()
                     writePcmToTrack(plcFrame)
+                }
+                // After backend ends: stop once buffer is drained (~300ms empty)
+                if (streamEnded &&
+                    jitterBuffer.getBufferSize() == 0 &&
+                    consecutiveEmptyFrames >= 15
+                ) {
+                    Log.d(TAG, "Drain complete — stopping playout")
+                    isPlaying = false
+                    break
                 }
             }
 
@@ -225,12 +264,14 @@ class OpusAudioPlayer {
                 delay(sleepTime) // coroutine delay: suspensível, não bloqueia thread, sem drift
             }
         }
+        playJob = null
     }
 
     private fun writePcmToTrack(pcmData: ShortArray) {
         val track = audioTrack ?: return
         try {
-            track.write(pcmData, 0, pcmData.size, AudioTrack.WRITE_NON_BLOCKING)
+            // BLOCKING avoids silent drops that sound like choking / cut words
+            track.write(pcmData, 0, pcmData.size, AudioTrack.WRITE_BLOCKING)
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao escrever no AudioTrack: ${e.message}")
         }

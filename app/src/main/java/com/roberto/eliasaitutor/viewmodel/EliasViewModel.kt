@@ -631,10 +631,27 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             SocketClient.iaStateFlow.collect { state ->
                 val speaking = (state == "falando")
-                _isIaSpeaking.value = speaking
-                if (!speaking) {
-                    opusAudioPlayer.stopPlayout()
-                    _jitterStats.value = null
+                if (speaking) {
+                    _isIaSpeaking.value = true
+                } else {
+                    // CRITICAL: do not stopPlayout() here — that cut the last words.
+                    // Drain remaining Opus frames already in the jitter buffer.
+                    opusAudioPlayer.markStreamEnded()
+                    // Keep "speaking" UI briefly while drain finishes
+                    viewModelScope.launch {
+                        delay(400)
+                        // Poll until player drained or timeout (~4s max tail)
+                        var waited = 0
+                        while (waited < 4000 && opusAudioPlayer.getJitterStats().bufferSize > 0) {
+                            delay(100)
+                            waited += 100
+                        }
+                        delay(350)
+                        if (SocketClient.iaStateFlow.value != "falando") {
+                            _isIaSpeaking.value = false
+                            _jitterStats.value = null
+                        }
+                    }
                 }
             }
         }
@@ -690,8 +707,11 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             SocketClient.ttsStatusFlow.collect { msg ->
                 if (msg.isNotBlank()) {
                     _toastMessage.value = msg
-                    // Clear any primary audio still buffered while switching voices
-                    opusAudioPlayer.stopPlayout()
+                    // Only hard-stop when actually switching voice (fallback), not for rest_tts
+                    val lower = msg.lowercase()
+                    if (lower.contains("alternativa") || lower.contains("fallback_voice")) {
+                        opusAudioPlayer.stopPlayout()
+                    }
                 }
             }
         }
