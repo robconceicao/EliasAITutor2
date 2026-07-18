@@ -77,6 +77,8 @@ function resolveFrameEncoderFactory() {
   }
 
   // 2) Pure JS fallback (works on Render without native build tools)
+  // opusscript API: encode(pcmBuffer, frameSizeSamples) — 2nd arg is REQUIRED
+  // (omitting it throws: Cannot convert "undefined" to int)
   try {
     const OpusScript = require('opusscript');
     const Application =
@@ -85,7 +87,7 @@ function resolveFrameEncoderFactory() {
       2049; // OPUS_APPLICATION_AUDIO
     const probeEnc = new OpusScript(SAMPLE_RATE, CHANNELS, Application);
     const silence = Buffer.alloc(FRAME_SIZE * 2);
-    const probe = probeEnc.encode(silence);
+    const probe = probeEnc.encode(silence, FRAME_SIZE);
     if (!probe || (probe.length !== undefined && probe.length < 1)) {
       throw new Error('opusscript encode returned empty');
     }
@@ -96,7 +98,8 @@ function resolveFrameEncoderFactory() {
       return {
         backend: 'opusscript',
         encodeFrame(pcmFrameBuf) {
-          const out = enc.encode(pcmFrameBuf);
+          // frameSize = samples per channel (960 = 20ms @ 48kHz mono)
+          const out = enc.encode(pcmFrameBuf, FRAME_SIZE);
           return Buffer.isBuffer(out) ? out : Buffer.from(out);
         },
       };
