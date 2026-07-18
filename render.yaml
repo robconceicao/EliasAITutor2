@@ -15,7 +15,8 @@ services:
     # so TTS REST fallback + health key source ship to production.
     branch: main
     rootDir: backend_nodejs
-    buildCommand: npm install
+    # opusscript is pure-JS fallback if @discordjs/opus native .node fails on Render
+    buildCommand: npm install --omit=dev
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
