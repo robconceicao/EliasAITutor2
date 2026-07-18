@@ -17,7 +17,6 @@
     "test:unit": "node test_voice_config.js && node test_audio_encoder.js && node test_echo_score.js",
     "test": "node test_program_api.js"
   },
-
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -31,6 +30,7 @@
     "express": "^4.21.2",
     "groq-sdk": "^1.2.1",
     "mongoose": "^8.9.3",
+    "opusscript": "^0.0.8",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.3",
     "ws": "^8.21.0"

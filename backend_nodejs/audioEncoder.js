@@ -1,5 +1,14 @@
-import pkg from '@discordjs/opus';
-const { OpusEncoder } = pkg;
+/**
+ * PCM → Opus encoder for Android OpusAudioPlayer.
+ *
+ * Prefer native @discordjs/opus; fall back to pure-JS opusscript when the
+ * native binary is missing (common on Render free / missing build toolchain).
+ * Top-level import of @discordjs/opus MUST NOT crash the process — that was
+ * crashing `npm start` with MODULE_NOT_FOUND on the .node binding.
+ */
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 /** Opus / Android pipeline (must match OpusAudioPlayer.kt). */
 export const SAMPLE_RATE = 48000;
@@ -12,6 +21,102 @@ export const FRAME_SIZE = 960; // 20ms @ 48kHz mono
  * Override via ELEVENLABS_OUTPUT_FORMAT (e.g. pcm_48000).
  */
 export const DEFAULT_ELEVENLABS_PCM_RATE = 24000;
+
+/** @type {'native'|'opusscript'|null} */
+let resolvedBackend = null;
+
+/** @type {null | (() => { encodeFrame: (pcmFrameBuf: Buffer) => Buffer, backend: string })} */
+let frameEncoderFactory = null;
+
+/**
+ * Which Opus implementation is active (for /health + logs).
+ * @returns {'native'|'opusscript'|'unresolved'}
+ */
+export function getOpusBackend() {
+  if (resolvedBackend) return resolvedBackend;
+  try {
+    resolveFrameEncoderFactory();
+  } catch (_) {
+    /* leave unresolved */
+  }
+  return resolvedBackend || 'unresolved';
+}
+
+/**
+ * Resolve once: native @discordjs/opus or pure-JS opusscript.
+ * @returns {() => { encodeFrame: (pcmFrameBuf: Buffer) => Buffer, backend: string }}
+ */
+function resolveFrameEncoderFactory() {
+  if (frameEncoderFactory) return frameEncoderFactory;
+
+  // 1) Native (@discordjs/opus) — best performance
+  try {
+    const mod = require('@discordjs/opus');
+    const OpusEncoder = mod.OpusEncoder || mod.default?.OpusEncoder || mod.default;
+    if (!OpusEncoder) throw new Error('OpusEncoder export missing');
+    // Prove the .node binding actually loads (this is where Render often fails)
+    const probeEnc = new OpusEncoder(SAMPLE_RATE, CHANNELS);
+    const silence = Buffer.alloc(FRAME_SIZE * 2);
+    const probe = probeEnc.encode(silence, FRAME_SIZE);
+    if (!probe || probe.length < 1) throw new Error('native encode returned empty');
+    resolvedBackend = 'native';
+    frameEncoderFactory = () => {
+      const enc = new OpusEncoder(SAMPLE_RATE, CHANNELS);
+      return {
+        backend: 'native',
+        encodeFrame(pcmFrameBuf) {
+          return enc.encode(pcmFrameBuf, FRAME_SIZE);
+        },
+      };
+    };
+    return frameEncoderFactory;
+  } catch (e) {
+    console.warn(
+      `[audioEncoder] @discordjs/opus unavailable (${e.message}) — trying opusscript`
+    );
+  }
+
+  // 2) Pure JS fallback (works on Render without native build tools)
+  try {
+    const OpusScript = require('opusscript');
+    const Application =
+      OpusScript.Application?.AUDIO ??
+      OpusScript.Application?.VOIP ??
+      2049; // OPUS_APPLICATION_AUDIO
+    const probeEnc = new OpusScript(SAMPLE_RATE, CHANNELS, Application);
+    const silence = Buffer.alloc(FRAME_SIZE * 2);
+    const probe = probeEnc.encode(silence);
+    if (!probe || (probe.length !== undefined && probe.length < 1)) {
+      throw new Error('opusscript encode returned empty');
+    }
+    resolvedBackend = 'opusscript';
+    console.warn('[audioEncoder] Using opusscript (pure JS) Opus backend');
+    frameEncoderFactory = () => {
+      const enc = new OpusScript(SAMPLE_RATE, CHANNELS, Application);
+      return {
+        backend: 'opusscript',
+        encodeFrame(pcmFrameBuf) {
+          const out = enc.encode(pcmFrameBuf);
+          return Buffer.isBuffer(out) ? out : Buffer.from(out);
+        },
+      };
+    };
+    return frameEncoderFactory;
+  } catch (e) {
+    console.error('[audioEncoder] No Opus backend available:', e.message);
+    throw new Error(
+      `No Opus encoder available (native + opusscript failed): ${e.message}`
+    );
+  }
+}
+
+/**
+ * Create a one-frame encoder adapter (new instance per stream).
+ * @returns {{ encodeFrame: (pcmFrameBuf: Buffer) => Buffer, backend: string }}
+ */
+function createFrameEncoder() {
+  return resolveFrameEncoderFactory()();
+}
 
 /**
  * Parse sample rate from an ElevenLabs output_format string (e.g. "pcm_24000").
@@ -70,10 +175,10 @@ function bufferToInt16LE(buf) {
  * - Keeps residual samples so partial frames are not dropped (avoids clicks)
  *
  * @param {{ inputSampleRate?: number }} [opts]
- * @returns {{ encode: (pcmInt16Buffer: Buffer) => Buffer[], flush: () => Buffer[], reset: () => void, inputSampleRate: number }}
+ * @returns {{ encode: (pcmInt16Buffer: Buffer) => Buffer[], flush: () => Buffer[], reset: () => void, inputSampleRate: number, backend: string }}
  */
 export function createPcmInt16OpusEncoder({ inputSampleRate = DEFAULT_ELEVENLABS_PCM_RATE } = {}) {
-  const encoder = new OpusEncoder(SAMPLE_RATE, CHANNELS);
+  const frameEnc = createFrameEncoder();
   /** @type {Buffer} residual Int16 LE at 48 kHz */
   let residual = Buffer.alloc(0);
   const bytesPerFrame = FRAME_SIZE * 2;
@@ -84,9 +189,9 @@ export function createPcmInt16OpusEncoder({ inputSampleRate = DEFAULT_ELEVENLABS
       const chunk = residual.subarray(0, bytesPerFrame);
       residual = residual.subarray(bytesPerFrame);
       try {
-        // Copy: OpusEncoder may hold reference; residual is sliced from growing buffer
+        // Copy: encoder may hold reference; residual is sliced from growing buffer
         const frameBuf = Buffer.from(chunk);
-        opusFrames.push(encoder.encode(frameBuf, FRAME_SIZE));
+        opusFrames.push(frameEnc.encodeFrame(frameBuf));
       } catch (err) {
         console.error('[OpusEncoder] Frame encoding error:', err.message);
       }
@@ -133,6 +238,7 @@ export function createPcmInt16OpusEncoder({ inputSampleRate = DEFAULT_ELEVENLABS
     flush,
     reset,
     inputSampleRate,
+    backend: frameEnc.backend,
   };
 }
 

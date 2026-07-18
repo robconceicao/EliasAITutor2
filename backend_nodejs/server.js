@@ -6,6 +6,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   createPcmInt16OpusEncoder,
   sampleRateFromOutputFormat,
+  getOpusBackend,
 } from './audioEncoder.js';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -1216,6 +1217,12 @@ app.get('/', (req, res) => {
 /** Lightweight health — no secrets. Used to verify deploy + TTS env. */
 app.get('/health', (req, res) => {
   ensureElevenLabsKeyEnv();
+  let opusBackend = 'unknown';
+  try {
+    opusBackend = getOpusBackend();
+  } catch (e) {
+    opusBackend = `error:${e.message}`;
+  }
   res.json({
     ok: true,
     elevenLabsKey: hasElevenLabsKey(),
@@ -1224,6 +1231,7 @@ app.get('/health', (req, res) => {
     fallbackVoiceId: resolveFallbackVoiceId(),
     streamOutputFormat: STREAM_OUTPUT_FORMAT,
     streamModel: STREAM_MODEL_ID,
+    opusBackend,
     mongo: useMongo,
     hint: hasElevenLabsKey()
       ? undefined
@@ -1233,9 +1241,16 @@ app.get('/health', (req, res) => {
 
 server.listen(PORT, () => {
   ensureElevenLabsKeyEnv();
+  let opusBackend = 'unresolved';
+  try {
+    opusBackend = getOpusBackend();
+  } catch (e) {
+    opusBackend = `error:${e.message}`;
+    console.error('[boot] Opus encoder failed to load:', e.message);
+  }
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(
-    `[boot] TTS main=${resolveMainChatVoiceId()} format=${STREAM_OUTPUT_FORMAT} model=${STREAM_MODEL_ID} elevenLabsKey=${hasElevenLabsKey()} source=${resolveApiKeySource()}`
+    `[boot] TTS main=${resolveMainChatVoiceId()} format=${STREAM_OUTPUT_FORMAT} model=${STREAM_MODEL_ID} elevenLabsKey=${hasElevenLabsKey()} source=${resolveApiKeySource()} opus=${opusBackend}`
   );
   if (!hasElevenLabsKey()) {
     console.error(
