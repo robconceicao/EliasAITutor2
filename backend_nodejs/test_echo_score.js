@@ -7,12 +7,17 @@ import {
   wordOverlapScore,
   durationHeuristicScore,
   scoreEchoAttempt,
+  pronunciationHints,
 } from './services/echoScoreService.js';
 
 // Word overlap
 assert.ok(wordOverlapScore('I want to go', 'I want to go') >= 90);
 assert.ok(wordOverlapScore('I want to go', 'I want go') >= 50);
 assert.ok(wordOverlapScore('hello world', '') < 30);
+
+// Pronunciation hints for missing words with /th/
+const thHint = pronunciationHints('I think about it', 'I sink about it');
+assert.ok(thHint.length > 0, 'should hint on missing/mismatched words');
 
 // Duration
 assert.ok(durationHeuristicScore('one two three four five', 200) < 50);

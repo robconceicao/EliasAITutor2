@@ -86,14 +86,52 @@ export const CHAT_VOICE_SETTINGS = {
 
 /**
  * Resolve ElevenLabs API key.
- * Supports ELEVENLABS_API_KEY and project alias My-English-Coach-Key.
+ * Supports ELEVENLABS_API_KEY and project aliases (My-English-Coach-Key, etc.).
+ * Never log the raw key — use resolveApiKeySource() for diagnostics.
  */
-function apiKey() {
-  return (
-    process.env.ELEVENLABS_API_KEY ||
-    process.env['My-English-Coach-Key'] ||
-    ''
-  );
+export function apiKey() {
+  const candidates = [
+    process.env.ELEVENLABS_API_KEY,
+    process.env['My-English-Coach-Key'],
+    process.env.MY_ENGLISH_COACH_KEY,
+    process.env.ELEVEN_LABS_API_KEY,
+    process.env.ELEVENLABS_KEY,
+  ];
+  for (const c of candidates) {
+    const v = (c || '').trim();
+    if (v) return v;
+  }
+  return '';
+}
+
+/** True when any known ElevenLabs key env is present. */
+export function hasElevenLabsKey() {
+  return Boolean(apiKey());
+}
+
+/**
+ * Which env name supplied the key (for /health — no secret values).
+ * @returns {'ELEVENLABS_API_KEY'|'My-English-Coach-Key'|'MY_ENGLISH_COACH_KEY'|'ELEVEN_LABS_API_KEY'|'ELEVENLABS_KEY'|'none'}
+ */
+export function resolveApiKeySource() {
+  if ((process.env.ELEVENLABS_API_KEY || '').trim()) return 'ELEVENLABS_API_KEY';
+  if ((process.env['My-English-Coach-Key'] || '').trim()) return 'My-English-Coach-Key';
+  if ((process.env.MY_ENGLISH_COACH_KEY || '').trim()) return 'MY_ENGLISH_COACH_KEY';
+  if ((process.env.ELEVEN_LABS_API_KEY || '').trim()) return 'ELEVEN_LABS_API_KEY';
+  if ((process.env.ELEVENLABS_KEY || '').trim()) return 'ELEVENLABS_KEY';
+  return 'none';
+}
+
+/**
+ * Normalize env: copy alias into ELEVENLABS_API_KEY so all code paths see it.
+ * Call once at boot (server.js also does this for local.properties).
+ */
+export function ensureElevenLabsKeyEnv() {
+  if (!(process.env.ELEVENLABS_API_KEY || '').trim()) {
+    const k = apiKey();
+    if (k) process.env.ELEVENLABS_API_KEY = k;
+  }
+  return hasElevenLabsKey();
 }
 
 /**
@@ -228,10 +266,19 @@ export async function openTtsWebSocketWithFallback(preferredVoiceId) {
     (v, i, arr) => v && arr.indexOf(v) === i
   );
 
+  ensureElevenLabsKeyEnv();
   if (!apiKey()) {
-    const msg = 'ELEVENLABS_API_KEY missing';
-    console.error(`[elevenLabs] ${msg} — text-only mode`);
-    return { socket: null, voiceId: null, textOnly: true, error: msg };
+    const msg = 'elevenlabs_api_key_missing';
+    console.error(
+      `[elevenLabs] ${msg} — set ELEVENLABS_API_KEY or My-English-Coach-Key on the host (Render env). text-only until fixed.`
+    );
+    return {
+      socket: null,
+      voiceId: null,
+      textOnly: true,
+      restOk: false,
+      error: msg,
+    };
   }
 
   let lastErr = null;
@@ -244,18 +291,89 @@ export async function openTtsWebSocketWithFallback(preferredVoiceId) {
         );
       }
       // init already sent during handshake validation
-      return { socket, voiceId: vid, textOnly: false, error: null };
+      return {
+        socket,
+        voiceId: vid,
+        textOnly: false,
+        restOk: true,
+        error: null,
+      };
     } catch (e) {
       lastErr = e;
       console.warn(`[elevenLabs] voice open failed (${vid}): ${e.message}`);
     }
   }
 
-  const errMsg = lastErr?.message || 'unknown';
-  console.error(
-    `[elevenLabs] All chat voices failed — text-only mode. last=${errMsg}`
+  const errMsg = lastErr?.message || 'voice_open_failed';
+  // Key present but WS failed — REST complete generation can still work.
+  console.warn(
+    `[elevenLabs] All stream-input voices failed — will try REST TTS. last=${errMsg}`
   );
-  return { socket: null, voiceId: null, textOnly: true, error: errMsg };
+  return {
+    socket: null,
+    voiceId: primary,
+    textOnly: false,
+    restOk: true,
+    error: errMsg,
+  };
+}
+
+/**
+ * Complete (non-streaming) TTS via REST — PCM Int16 LE.
+ * Used when WebSocket stream-input fails but the API key is valid.
+ *
+ * @param {string} text
+ * @param {string} [voiceId]
+ * @returns {Promise<{ pcm: Buffer, voiceId: string, sampleRate: number }>}
+ */
+export async function synthesizePcmRest(text, voiceId) {
+  ensureElevenLabsKeyEnv();
+  const key = apiKey();
+  if (!key) throw new Error('elevenlabs_api_key_missing');
+  const trimmed = String(text || '').trim();
+  if (!trimmed) throw new Error('empty_tts_text');
+
+  const vid = voiceId || resolveMainChatVoiceId();
+  const format = STREAM_OUTPUT_FORMAT; // e.g. pcm_24000
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=${encodeURIComponent(format)}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'xi-api-key': key,
+      Accept: 'application/octet-stream',
+    },
+    body: JSON.stringify({
+      text: trimmed.slice(0, 2500),
+      model_id: STREAM_MODEL_ID,
+      voice_settings: CHAT_VOICE_SETTINGS,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    // Try fallback voice once on 4xx voice errors
+    if (
+      res.status >= 400 &&
+      res.status < 500 &&
+      vid !== resolveFallbackVoiceId()
+    ) {
+      console.warn(
+        `[elevenLabs] REST TTS ${res.status} for ${vid}, retrying fallback voice`
+      );
+      return synthesizePcmRest(text, resolveFallbackVoiceId());
+    }
+    throw new Error(`ElevenLabs REST TTS ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const pcm = Buffer.from(await res.arrayBuffer());
+  if (pcm.length < 100) throw new Error('ElevenLabs REST returned empty audio');
+  const sampleRate = Number(String(format).match(/pcm_(\d+)/i)?.[1] || 24000);
+  console.log(
+    `[elevenLabs] REST TTS ok voice=${vid} bytes=${pcm.length} format=${format}`
+  );
+  return { pcm, voiceId: vid, sampleRate };
 }
 
 // ─── First audio byte timeout (D8 / Fase 1 A.2) ─────────────

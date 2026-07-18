@@ -56,14 +56,41 @@ export function durationHeuristicScore(reference, durationMs) {
 function coachingLine(focus) {
   const f = focus || 'Shadowing';
   const tips = {
-    IPA: 'Check each IPA target sound carefully.',
-    Shadowing: 'Match Elias’s pace and melody more closely.',
-    Schwa: 'Weaken unstressed syllables toward /ə/.',
-    Linking: 'Connect final consonants to following vowels.',
-    Elisão: 'Allow natural reductions (wanna, gonna) where appropriate.',
-    Entonação: 'Use falling statement intonation and stress content words.',
+    IPA: 'Confira cada som-alvo no IPA (ex.: /θ/ think, /ð/ this, /æ/ cat).',
+    Shadowing: 'Fale junto com Elias, no mesmo ritmo — não espere ele terminar.',
+    Schwa: 'Enfraqueça sílabas átonas para /ə/ (about /əˈbaʊt/, today /təˈdeɪ/).',
+    Linking: 'Ligue consoante final + vogal (go_out, pick_it_up, an_apple).',
+    Elisão: 'Use reduções naturais (want to → wanna, going to → gonna) com clareza.',
+    Entonação: 'Cai em afirmações; sobe em yes/no; destaque content words.',
   };
-  return tips[f] || 'Imitate rhythm, stress, and connected speech.';
+  return tips[f] || 'Imite ritmo, stress e fala conectada (GA).';
+}
+
+/**
+ * Extra tip when transcript differs from reference (local overlap path).
+ */
+export function pronunciationHints(reference, hypothesis) {
+  const ref = normalizeWords(reference);
+  const hyp = normalizeWords(hypothesis);
+  const hypSet = new Set(hyp);
+  const missing = ref.filter((w) => !hypSet.has(w)).slice(0, 3);
+  const hints = [];
+  for (const w of missing) {
+    const low = w.toLowerCase();
+    if (/th/.test(low)) {
+      hints.push(`O som /θ/ ou /ð/ em “${w}” pode ter saído fraco — língua entre os dentes.`);
+    } else if (/ing$/.test(low)) {
+      hints.push(`Em “${w}”, mantenha /ɪŋ/ no final (não /in/).`);
+    } else if (/^(a|the|to|of|for)$/.test(low)) {
+      hints.push(`Functors como “${w}” pedem forma fraca / schwa.`);
+    } else {
+      hints.push(`A palavra “${w}” não apareceu clara — repita devagar com o modelo.`);
+    }
+  }
+  if (!hints.length && ref.length >= 3) {
+    hints.push('Trabalhe o linking entre as palavras (consoante final → vogal seguinte).');
+  }
+  return hints.slice(0, 2).join(' ');
 }
 
 async function transcribeWithGroq(audioBase64, mimeType = 'audio/mp4') {
@@ -110,13 +137,19 @@ async function transcribeWithGroq(audioBase64, mimeType = 'audio/mp4') {
 
 async function scoreWithLlm(reference, transcript, focus) {
   const system = `You are an English pronunciation coach for Brazilian learners (General American).
-Score how well the student echoed the reference phrase (content + likely pronunciation proxies from wording).
-Reply ONLY with JSON: {"score":0-100,"feedback":"one short sentence in Portuguese with a tip"}`;
+Score how well the student echoed the reference phrase (content + pronunciation proxies from wording).
+Reply ONLY with JSON:
+{"score":0-100,"feedback":"2-3 short PT-BR sentences: (1) what was good (2) ONE specific error with IPA when useful e.g. /θ/ de think, linking go_out, schwa /ə/ (3) one drill tip"}
+Examples of good feedback:
+- "Bom ritmo. O /θ/ de 'think' ficou como /t/ — coloque a língua entre os dentes. Repita: think /θɪŋk/."
+- "Quase nativo. Melhore o linking em 'pick it up' (pi-ki-tup). Foco: consoante final + vogal."
+- "Você trocou 'about' por 'a bout' — use schwa /əˈbaʊt/ na 1ª sílaba."
+Be fair: minor ASR errors shouldn't destroy a good attempt. Prefer concrete IPA over vague praise.`;
 
   const user = `Reference: "${reference}"
 Student said: "${transcript}"
 Today's focus: ${focus || 'Shadowing'}
-Be fair: minor ASR errors shouldn't destroy a good attempt.`;
+Point out the most likely pronunciation gap vs the reference (sounds, linking, stress, reductions).`;
 
   if (process.env.GROQ_API_KEY) {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -241,10 +274,11 @@ export async function scoreEchoAttempt(opts = {}) {
     } catch (e) {
       console.warn('[echoScore] LLM score failed:', e.message);
       const score = wordOverlapScore(reference, transcript);
+      const extra = pronunciationHints(reference, transcript);
       return {
         ok: true,
         score,
-        feedback: `Você disse: “${transcript}”. ${coachingLine(focus)}`,
+        feedback: `Você disse: “${transcript}”. ${extra} ${coachingLine(focus)}`.trim(),
         transcript,
         method: 'overlap',
       };
@@ -263,7 +297,8 @@ export async function scoreEchoAttempt(opts = {}) {
   return {
     ok: true,
     score,
-    feedback: `Sem transcrição automática — score por ritmo. Ouça o Echo e compare. ${coachingLine(focus)}`,
+    feedback:
+      `Sem transcrição automática — score por ritmo. Ouça o Echo, compare sílaba a sílaba e foque: ${coachingLine(focus)}`,
     transcript: '',
     method: 'heuristic',
   };

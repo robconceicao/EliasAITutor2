@@ -129,6 +129,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     private val fallbackPcmPlayer = PcmFloatPlayer()
+    private val audioHelper = com.roberto.eliasaitutor.audio.AudioHelper(app)
     private var speechRecognizer: android.speech.SpeechRecognizer? = null
 
     private val _userVoiceRms = MutableStateFlow(0f)
@@ -145,6 +146,14 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     val isIaSpeaking: StateFlow<Boolean> = _isIaSpeaking
 
     private var streamingBubbleIndex = -1
+
+    /**
+     * When backend TTS fails (missing Render key / voice_open_failed), speak the
+     * last Elias text via client ElevenLabs REST (mp3 → MediaPlayer).
+     */
+    @Volatile private var pendingClientTtsText: String? = null
+    @Volatile private var backendTtsFailed = false
+    private var clientTtsJob: Job? = null
 
     private fun initSpeechRecognizer() {
         try {
@@ -253,34 +262,102 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
 
     /**
-     * Immersion / Echo / replay: TTS via backend ElevenLabs stream (same Opus path as chat).
-     * [onCompletion] fires when [iaStateFlow] returns to "ociosa" after speaking
-     * (not immediately — that left play indicators stuck off).
+     * Immersion / Echo / replay: backend ElevenLabs stream first (Opus path).
+     * Falls back to client REST TTS when offline or backend reports voice failure.
+     * [onCompletion] fires when playback ends (or after failure).
      */
     fun speakText(text: String, onCompletion: () -> Unit = {}) {
         if (text.isBlank()) {
             onCompletion()
             return
         }
+        val cleaned = text.trim()
         if (!SocketClient.connectionStatus.value) {
-            _toastMessage.value = "Offline — conecte-se para ouvir o áudio"
-            onCompletion()
+            viewModelScope.launch {
+                val ok = playClientTts(cleaned)
+                if (!ok) {
+                    _toastMessage.value = "Offline — conecte-se para ouvir o áudio"
+                }
+                onCompletion()
+            }
             return
         }
-        SocketClient.sendShadowSpeak(text)
+        backendTtsFailed = false
+        SocketClient.sendShadowSpeak(cleaned)
         viewModelScope.launch {
             val started = withTimeoutOrNull(10_000) {
                 SocketClient.iaStateFlow.first { it == "falando" }
             }
-            if (started == null) {
-                delay(400)
+            if (started == null || backendTtsFailed) {
+                val ok = playClientTts(cleaned)
+                if (!ok && !backendTtsFailed) {
+                    _toastMessage.value = "Voz indisponível — tente de novo"
+                }
                 onCompletion()
                 return@launch
             }
             withTimeoutOrNull(60_000) {
                 SocketClient.iaStateFlow.first { it == "ociosa" }
             }
+            if (backendTtsFailed) {
+                playClientTts(cleaned)
+            }
             onCompletion()
+        }
+    }
+
+    /**
+     * Emergency client-side TTS (ElevenLabs REST → mp3). Returns true if audio started.
+     */
+    private suspend fun playClientTts(text: String): Boolean {
+        if (text.isBlank()) return false
+        if (!ElevenLabsClient.hasApiKey) {
+            android.util.Log.w(
+                "EliasViewModel",
+                "Client TTS skipped — no ELEVENLABS_API_KEY / My-English-Coach-Key in BuildConfig"
+            )
+            return false
+        }
+        return withContext(Dispatchers.IO) {
+            try {
+                clientTtsJob?.cancel()
+                val body = ElevenLabsClient.textToSpeech(text)
+                val bytes = body.bytes()
+                if (bytes.size < 200) {
+                    android.util.Log.e("EliasViewModel", "Client TTS empty body size=${bytes.size}")
+                    return@withContext false
+                }
+                withContext(Dispatchers.Main) {
+                    _isIaSpeaking.value = true
+                    audioHelper.playAudio(bytes) {
+                        _isIaSpeaking.value = false
+                    }
+                }
+                android.util.Log.i("EliasViewModel", "Client TTS playing ${bytes.size} bytes")
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("EliasViewModel", "Client TTS failed: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    _isIaSpeaking.value = false
+                }
+                false
+            }
+        }
+    }
+
+    /** Speak last Elias bubble via client when backend stream failed. */
+    private fun maybeClientSpeakPending() {
+        val text = pendingClientTtsText?.trim().orEmpty()
+        if (text.isEmpty() || !backendTtsFailed) return
+        pendingClientTtsText = null
+        clientTtsJob?.cancel()
+        clientTtsJob = viewModelScope.launch {
+            delay(200) // let any late opus frames settle
+            if (_isIaSpeaking.value) return@launch
+            val ok = playClientTts(text)
+            if (ok) {
+                _toastMessage.value = "Voz (fallback local)"
+            }
         }
     }
 
@@ -418,9 +495,17 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             durationMs > 0 && ratio > 1.85 -> " Fale um pouco mais fluido, sem alongar demais."
             else -> ""
         }
+        val ipaHint = when (focus) {
+            "IPA" -> " Confira /θ/ /ð/ /æ/ e vogais longas no cartão IPA."
+            "Schwa" -> " Enfraqueça sílabas átonas para /ə/."
+            "Linking" -> " Ligue consoante final + vogal (ex.: pick_it_up)."
+            "Elisão" -> " Use reduções naturais (wanna / gonna) sem perder clareza."
+            "Entonação" -> " Caia em afirmações; marque content words."
+            else -> " Compare sílaba a sílaba com o modelo de Elias."
+        }
         applyShadowScore(
             score = score,
-            feedback = "$headline$timingNote Foco de hoje ($focus): $tip",
+            feedback = "$headline$timingNote$ipaHint Foco de hoje ($focus): $tip",
             awardRewards = true,
         )
     }
@@ -534,6 +619,9 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             SocketClient.opusFrameFlow.collect { frame ->
+                backendTtsFailed = false
+                pendingClientTtsText = null
+                clientTtsJob?.cancel()
                 opusAudioPlayer.startPlayout()
                 opusAudioPlayer.handleIncomingOpusFrame(frame.data, frame.seq, frame.ts)
                 _jitterStats.value = opusAudioPlayer.getJitterStats()
@@ -565,14 +653,34 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                 // Drop any late primary frames that may still be in the jitter buffer
                 opusAudioPlayer.stopPlayout()
                 _isIaSpeaking.value = false
+                backendTtsFailed = true
                 // Backend already falls back to text-only; surface once, never hang spinner
                 clearResponseTimeout()
+                val friendly = when {
+                    reason.contains("api_key_missing", ignoreCase = true) ||
+                        reason.contains("ELEVENLABS_API_KEY", ignoreCase = true) ->
+                        "Voz: chave ElevenLabs ausente no servidor — tentando fallback local"
+                    reason.contains("voice_open_failed", ignoreCase = true) ->
+                        "Voz indisponível no servidor — tentando fallback local"
+                    reason.contains("first_audio", ignoreCase = true) ||
+                        reason.contains("timeout", ignoreCase = true) ->
+                        "Voz demorou demais — tentando fallback local"
+                    else ->
+                        "Voz indisponível (${reason.ifBlank { "erro" }}) — texto mantido"
+                }
                 if (_isLoading.value && _chatBubbles.value.none { !it.isUser }) {
                     // Still waiting for text — keep loading until texto_chunk or response timeout
-                    _toastMessage.value = "Voz indisponível — modo texto"
+                    _toastMessage.value = friendly
                 } else {
                     _isLoading.value = false
-                    _toastMessage.value = "Voz indisponível (${reason.ifBlank { "timeout" }}) — texto mantido"
+                    _toastMessage.value = friendly
+                    // Prefer pending text; else last Elias bubble
+                    if (pendingClientTtsText.isNullOrBlank()) {
+                        pendingClientTtsText = _chatBubbles.value
+                            .lastOrNull { !it.isUser && it.message.isNotBlank() }
+                            ?.message
+                    }
+                    maybeClientSpeakPending()
                 }
             }
         }
@@ -627,10 +735,12 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                 if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
                     val prev = bubbles[streamingBubbleIndex]
                     bubbles[streamingBubbleIndex] = prev.copy(message = prev.message + chunk)
+                    pendingClientTtsText = bubbles[streamingBubbleIndex].message
                 } else {
                     val newBubble = UiChatBubble(message = chunk, isUser = false)
                     bubbles.add(newBubble)
                     streamingBubbleIndex = bubbles.size - 1
+                    pendingClientTtsText = chunk
                 }
                 _chatBubbles.value = bubbles
             }
@@ -646,6 +756,10 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                     bubbles[streamingBubbleIndex] = finalBubble
                 } else {
                     bubbles.add(finalBubble)
+                }
+                pendingClientTtsText = finalBubble.message
+                if (backendTtsFailed) {
+                    maybeClientSpeakPending()
                 }
                 _chatBubbles.value = bubbles
                 streamingBubbleIndex = -1 // Reset for next response
@@ -1000,6 +1114,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         _isLoading.value = true
         isInterrupted = false
         streamingBubbleIndex = -1
+        backendTtsFailed = false
+        pendingClientTtsText = null
         armResponseTimeout()
     }
 
@@ -1418,11 +1534,16 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        clientTtsJob?.cancel()
         try {
             localMediaPlayer?.release()
         } catch (_: Exception) {
         }
         localMediaPlayer = null
+        try {
+            audioHelper.stopPlaying()
+        } catch (_: Exception) {
+        }
         try {
             opusAudioPlayer.release()
         } catch (e: Exception) {

@@ -22,6 +22,13 @@ fun prop(name: String, default: String = ""): String =
 // Liam — never Adam (legacy Default voices expire 2026-12-31)
 val defaultElevenLabsVoiceId = "TX3LPaxmHKxFdv7VOQHJ"
 
+/** ElevenLabs key: official name or project alias My-English-Coach-Key. */
+fun elevenLabsApiKey(): String =
+    prop("ELEVENLABS_API_KEY")
+        .ifBlank { prop("My-English-Coach-Key") }
+        .ifBlank { prop("MY_ENGLISH_COACH_KEY") }
+        .ifBlank { System.getenv("ELEVENLABS_API_KEY") ?: "" }
+
 android {
     signingConfigs {
         // Only configured when a keystore file is present (local or CI-decoded).
@@ -51,7 +58,8 @@ android {
         buildConfigField("String", "CLAUDE_API_KEY", "\"${prop("CLAUDE_API_KEY")}\"")
         buildConfigField("String", "DEEPSEEK_API_KEY", "\"${prop("DEEPSEEK_API_KEY")}\"")
         buildConfigField("String", "OPENAI_API_KEY", "\"${prop("OPENAI_API_KEY")}\"")
-        buildConfigField("String", "ELEVENLABS_API_KEY", "\"${prop("ELEVENLABS_API_KEY")}\"")
+        // Main chat TTS is backend-first; client key is emergency fallback when Render has no key.
+        buildConfigField("String", "ELEVENLABS_API_KEY", "\"${elevenLabsApiKey()}\"")
         // Optional client-side TTS; main chat TTS uses backend MAIN_CHAT_VOICE_ID.
         buildConfigField(
             "String",
