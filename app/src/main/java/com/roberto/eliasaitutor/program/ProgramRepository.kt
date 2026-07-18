@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
@@ -37,17 +38,30 @@ class ProgramRepository(private val context: Context) {
         val TODAY_MINUTES = intPreferencesKey("today_minutes")
         val TODAY_DATE = stringPreferencesKey("today_date")
         val STREAK = intPreferencesKey("streak")
+        val HELD_BACK = booleanPreferencesKey("held_back")
+        val REVIEW_SINCE = stringPreferencesKey("review_since")
+        val TOTAL_PAUSED = intPreferencesKey("total_paused_days")
+        val DEFICIENT_JSON = stringPreferencesKey("deficient_topics_json")
+        val MASTERY_CLEARED = intPreferencesKey("mastery_cleared_week")
     }
 
     val cachedState: Flow<UserProgramState> = context.programDataStore.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
         .map { p ->
+            val deficient = p[Keys.DEFICIENT_JSON]?.let { raw ->
+                runCatching { json.decodeFromString<List<String>>(raw) }.getOrNull()
+            }
             UserProgramState(
                 startDate = p[Keys.START_DATE] ?: LocalDate.now().toString(),
                 currentWeek = p[Keys.CURRENT_WEEK] ?: 1,
                 weekMode = p[Keys.WEEK_MODE] ?: "auto",
                 reminderTime = p[Keys.REMINDER],
                 dailyGoalMinutes = p[Keys.GOAL] ?: 30,
+                heldBack = p[Keys.HELD_BACK] ?: false,
+                reviewSince = p[Keys.REVIEW_SINCE],
+                totalPausedDays = p[Keys.TOTAL_PAUSED] ?: 0,
+                deficientTopics = deficient,
+                masteryClearedWeek = p[Keys.MASTERY_CLEARED] ?: 0,
             ).let { resolveWeekLocally(it) }
         }
 
@@ -86,6 +100,7 @@ class ProgramRepository(private val context: Context) {
         }.recoverCatching {
             // Offline fallback: apply patch locally
             val current = cachedState.first()
+            @Suppress("UNCHECKED_CAST")
             val next = current.copy(
                 startDate = (patch["start_date"] as? String) ?: current.startDate,
                 currentWeek = (patch["current_week"] as? Number)?.toInt() ?: current.currentWeek,
@@ -93,6 +108,13 @@ class ProgramRepository(private val context: Context) {
                 reminderTime = if (patch.containsKey("reminder_time")) patch["reminder_time"] as? String else current.reminderTime,
                 dailyGoalMinutes = (patch["daily_goal_minutes"] as? Number)?.toInt()
                     ?: current.dailyGoalMinutes,
+                heldBack = (patch["held_back"] as? Boolean) ?: current.heldBack,
+                reviewSince = if (patch.containsKey("review_since")) patch["review_since"] as? String else current.reviewSince,
+                totalPausedDays = (patch["total_paused_days"] as? Number)?.toInt()
+                    ?: current.totalPausedDays,
+                deficientTopics = if (patch.containsKey("deficient_topics")) {
+                    patch["deficient_topics"] as? List<String>
+                } else current.deficientTopics,
             )
             val resolved = resolveWeekLocally(next)
             persistState(resolved)
@@ -173,6 +195,28 @@ class ProgramRepository(private val context: Context) {
         return summary.todayMinutes >= state.dailyGoalMinutes
     }
 
+    suspend fun getQuiz(week: Int): ProgramQuizPayload? {
+        return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
+            runCatching { api.getQuiz(week) }.getOrNull()
+        }
+    }
+
+    suspend fun submitQuiz(week: Int, answers: List<Int>): QuizSubmitResult? {
+        return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
+            runCatching {
+                api.submitQuiz(week, mapOf("answers" to answers))
+            }.getOrNull()
+        }
+    }
+
+    suspend fun runCheckpoint(): CheckpointResult? {
+        return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
+            runCatching { api.runCheckpoint() }.getOrNull()
+        }?.also { result ->
+            result.state?.let { persistState(it) }
+        }
+    }
+
     private suspend fun persistState(state: UserProgramState) {
         context.programDataStore.edit {
             it[Keys.START_DATE] = state.startDate
@@ -181,24 +225,59 @@ class ProgramRepository(private val context: Context) {
             if (state.reminderTime != null) it[Keys.REMINDER] = state.reminderTime
             else it.remove(Keys.REMINDER)
             it[Keys.GOAL] = state.dailyGoalMinutes
+            it[Keys.HELD_BACK] = state.heldBack
+            if (state.reviewSince != null) it[Keys.REVIEW_SINCE] = state.reviewSince
+            else it.remove(Keys.REVIEW_SINCE)
+            it[Keys.TOTAL_PAUSED] = state.totalPausedDays
+            it[Keys.MASTERY_CLEARED] = state.masteryClearedWeek.coerceIn(0, 26)
+            val topics = state.deficientTopics
+            if (topics != null) it[Keys.DEFICIENT_JSON] = json.encodeToString(topics)
+            else it.remove(Keys.DEFICIENT_JSON)
         }
     }
 
     companion object {
-        /** Local device date for auto week (F2 / timezone risk mitigation). */
+        private const val PROGRAM_NET_TIMEOUT_MS = 10_000L
+
+        /** Local device date for auto week (F2). */
         fun computeAutoWeek(startDate: String, today: LocalDate = LocalDate.now()): Int {
+            return computeEffectiveWeek(startDate, today, 0)
+        }
+
+        /** B.3: discount paused review days. */
+        fun computeEffectiveWeek(
+            startDate: String,
+            today: LocalDate = LocalDate.now(),
+            totalPausedDays: Int = 0,
+        ): Int {
             return try {
                 val start = LocalDate.parse(startDate)
                 val days = ChronoUnit.DAYS.between(start, today).toInt()
-                (1 + days / 7).coerceIn(1, 26)
+                val effective = (days - totalPausedDays.coerceAtLeast(0)).coerceAtLeast(0)
+                (1 + effective / 7).coerceIn(1, 26)
             } catch (_: Exception) {
                 1
             }
         }
 
+        /**
+         * Mastery hard-gate (aligned with backend resolveWeek):
+         * auto week never exceeds masteryClearedWeek + 1.
+         */
         fun resolveWeekLocally(state: UserProgramState): UserProgramState {
+            val cleared = state.masteryClearedWeek.coerceIn(0, 26)
+            val masteryCap = (cleared + 1).coerceIn(1, 26)
+            if (state.heldBack) {
+                return state.copy(
+                    currentWeek = state.currentWeek.coerceIn(1, masteryCap)
+                )
+            }
             return if (state.weekMode == "auto") {
-                state.copy(currentWeek = computeAutoWeek(state.startDate))
+                val calendar = computeEffectiveWeek(
+                    state.startDate,
+                    totalPausedDays = state.totalPausedDays,
+                )
+                state.copy(currentWeek = minOf(calendar, masteryCap))
             } else {
                 state.copy(currentWeek = state.currentWeek.coerceIn(1, 26))
             }

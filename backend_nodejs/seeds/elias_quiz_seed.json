@@ -1,0 +1,2735 @@
+{
+  "version": 1,
+  "passing_score_percent": 70,
+  "weeks": [
+    {
+      "week": 1,
+      "questions": [
+        {
+          "question": "Qual a forma correta? \"___ a teacher.\" (I)",
+          "options": [
+            "I is",
+            "I am",
+            "I are"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I am"
+        },
+        {
+          "question": "Pronome para \"chuva/clima\":",
+          "options": [
+            "he",
+            "it",
+            "they"
+          ],
+          "correct_index": 1,
+          "correct_answer": "it"
+        },
+        {
+          "question": "Contração de \"They are\":",
+          "options": [
+            "They're",
+            "Theyr",
+            "Their"
+          ],
+          "correct_index": 0,
+          "correct_answer": "They're"
+        },
+        {
+          "question": "Negativa de \"She is happy\":",
+          "options": [
+            "She not is happy",
+            "She isn't happy",
+            "She don't happy"
+          ],
+          "correct_index": 1,
+          "correct_answer": "She isn't happy"
+        },
+        {
+          "question": "Pergunta de \"You are ready\":",
+          "options": [
+            "You are ready?",
+            "Are you ready?",
+            "Do you ready?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Are you ready?"
+        },
+        {
+          "question": "\"Eu sou do Brasil\":",
+          "options": [
+            "I from Brazil",
+            "I'm from Brazil",
+            "I am Brazil"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I'm from Brazil"
+        },
+        {
+          "question": "Letra com som /ái/:",
+          "options": [
+            "E",
+            "I",
+            "A"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I"
+        },
+        {
+          "question": "Pronome que serve singular e plural:",
+          "options": [
+            "he",
+            "we",
+            "you"
+          ],
+          "correct_index": 2,
+          "correct_answer": "you"
+        },
+        {
+          "question": "Complete: \"___ he your brother?\"",
+          "options": [
+            "Is",
+            "Are",
+            "Am"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Is"
+        },
+        {
+          "question": "\"Prazer em conhecê-lo\":",
+          "options": [
+            "See you later",
+            "Nice to meet you",
+            "Take care"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Nice to meet you"
+        }
+      ]
+    },
+    {
+      "week": 2,
+      "questions": [
+        {
+          "question": "13 em inglês:",
+          "options": [
+            "thirty",
+            "thirteen",
+            "threeteen"
+          ],
+          "correct_index": 1,
+          "correct_answer": "thirteen"
+        },
+        {
+          "question": "Artigo antes de \"apple\":",
+          "options": [
+            "a",
+            "an",
+            "the"
+          ],
+          "correct_index": 1,
+          "correct_answer": "an"
+        },
+        {
+          "question": "Plural de \"box\":",
+          "options": [
+            "boxs",
+            "boxes",
+            "boxies"
+          ],
+          "correct_index": 1,
+          "correct_answer": "boxes"
+        },
+        {
+          "question": "7:30 (direto):",
+          "options": [
+            "seven thirty",
+            "thirty seven",
+            "half seven"
+          ],
+          "correct_index": 0,
+          "correct_answer": "seven thirty"
+        },
+        {
+          "question": "\"Quantos anos você tem?\":",
+          "options": [
+            "How many years you have?",
+            "How old are you?",
+            "What age you have?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "How old are you?"
+        },
+        {
+          "question": "Plural de \"city\":",
+          "options": [
+            "citys",
+            "cityes",
+            "cities"
+          ],
+          "correct_index": 2,
+          "correct_answer": "cities"
+        },
+        {
+          "question": "Artigo antes de \"hour\":",
+          "options": [
+            "a",
+            "an",
+            "the"
+          ],
+          "correct_index": 1,
+          "correct_answer": "an"
+        },
+        {
+          "question": "40 em inglês:",
+          "options": [
+            "fourty",
+            "forty",
+            "fourteen"
+          ],
+          "correct_index": 1,
+          "correct_answer": "forty"
+        },
+        {
+          "question": "\"Quanto custa?\":",
+          "options": [
+            "How much is it?",
+            "How many is it?",
+            "What cost it?"
+          ],
+          "correct_index": 0,
+          "correct_answer": "How much is it?"
+        },
+        {
+          "question": "Plural de \"man\":",
+          "options": [
+            "mans",
+            "mens",
+            "men"
+          ],
+          "correct_index": 2,
+          "correct_answer": "men"
+        }
+      ]
+    },
+    {
+      "week": 3,
+      "questions": [
+        {
+          "question": "He ___ (go) to work early.",
+          "options": [
+            "go",
+            "goes",
+            "going"
+          ],
+          "correct_index": 1,
+          "correct_answer": "goes"
+        },
+        {
+          "question": "She ___ (study) at night.",
+          "options": [
+            "studys",
+            "studies",
+            "study"
+          ],
+          "correct_index": 1,
+          "correct_answer": "studies"
+        },
+        {
+          "question": "Posição correta de \"always\":",
+          "options": [
+            "I work always",
+            "I always work",
+            "Always I work"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I always work"
+        },
+        {
+          "question": "\"It ___ (rain) a lot here.\"",
+          "options": [
+            "rain",
+            "rains",
+            "raines"
+          ],
+          "correct_index": 1,
+          "correct_answer": "rains"
+        },
+        {
+          "question": "Frequência de \"never\":",
+          "options": [
+            "100%",
+            "50%",
+            "0%"
+          ],
+          "correct_index": 2,
+          "correct_answer": "0%"
+        },
+        {
+          "question": "\"Ela tem almoço ao meio-dia\":",
+          "options": [
+            "She have lunch",
+            "She has lunch",
+            "She haves lunch"
+          ],
+          "correct_index": 1,
+          "correct_answer": "She has lunch"
+        },
+        {
+          "question": "He ___ (watch) TV.",
+          "options": [
+            "watchs",
+            "watches",
+            "watch"
+          ],
+          "correct_index": 1,
+          "correct_answer": "watches"
+        },
+        {
+          "question": "Advérbio para 90%:",
+          "options": [
+            "usually",
+            "rarely",
+            "sometimes"
+          ],
+          "correct_index": 0,
+          "correct_answer": "usually"
+        },
+        {
+          "question": "Com TO BE: \"He ___ always busy.\"",
+          "options": [
+            "is always",
+            "always is",
+            "be always"
+          ],
+          "correct_index": 0,
+          "correct_answer": "is always"
+        },
+        {
+          "question": "\"O que você faz da vida?\":",
+          "options": [
+            "What you do?",
+            "What do you do for a living?",
+            "What is your work?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "What do you do for a living?"
+        }
+      ]
+    },
+    {
+      "week": 4,
+      "questions": [
+        {
+          "question": "Negativa de \"She works\":",
+          "options": [
+            "She don't work",
+            "She doesn't work",
+            "She doesn't works"
+          ],
+          "correct_index": 1,
+          "correct_answer": "She doesn't work"
+        },
+        {
+          "question": "Pergunta de \"He lives here\":",
+          "options": [
+            "Does he live here?",
+            "Does he lives here?",
+            "Do he live here?"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Does he live here?"
+        },
+        {
+          "question": "Possessivo de \"we\":",
+          "options": [
+            "our",
+            "ours",
+            "us"
+          ],
+          "correct_index": 0,
+          "correct_answer": "our"
+        },
+        {
+          "question": "\"O carro do Roberto\":",
+          "options": [
+            "the car of Roberto",
+            "Roberto car",
+            "Roberto's car"
+          ],
+          "correct_index": 2,
+          "correct_answer": "Roberto's car"
+        },
+        {
+          "question": "its ou it's: \"The dog wags ___ tail.\"",
+          "options": [
+            "it's",
+            "its",
+            "his"
+          ],
+          "correct_index": 1,
+          "correct_answer": "its"
+        },
+        {
+          "question": "Resposta curta (não): \"Does she sing?\"",
+          "options": [
+            "No, she don't",
+            "No, she doesn't",
+            "No, she not"
+          ],
+          "correct_index": 1,
+          "correct_answer": "No, she doesn't"
+        },
+        {
+          "question": "Adjetivo possessivo dela:",
+          "options": [
+            "she",
+            "her",
+            "hers"
+          ],
+          "correct_index": 1,
+          "correct_answer": "her"
+        },
+        {
+          "question": "\"Você tem irmãos?\":",
+          "options": [
+            "Do you have siblings?",
+            "Have you siblings?",
+            "You have siblings?"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Do you have siblings?"
+        },
+        {
+          "question": "Pronome possessivo: \"This book is ___.\" (eu)",
+          "options": [
+            "my",
+            "mine",
+            "me"
+          ],
+          "correct_index": 1,
+          "correct_answer": "mine"
+        },
+        {
+          "question": "Plural possessivo: \"the books of the students\":",
+          "options": [
+            "students's books",
+            "students' books",
+            "student's books"
+          ],
+          "correct_index": 1,
+          "correct_answer": "students' books"
+        }
+      ]
+    },
+    {
+      "week": 5,
+      "questions": [
+        {
+          "question": "\"___ a book on the table.\"",
+          "options": [
+            "There are",
+            "There is",
+            "Have"
+          ],
+          "correct_index": 1,
+          "correct_answer": "There is"
+        },
+        {
+          "question": "\"___ three chairs here.\"",
+          "options": [
+            "There is",
+            "There are",
+            "It has"
+          ],
+          "correct_index": 1,
+          "correct_answer": "There are"
+        },
+        {
+          "question": "Negativa: \"There aren't ___ apples.\"",
+          "options": [
+            "some",
+            "any",
+            "a"
+          ],
+          "correct_index": 1,
+          "correct_answer": "any"
+        },
+        {
+          "question": "\"O gato está embaixo da cama\":",
+          "options": [
+            "on the bed",
+            "under the bed",
+            "in the bed"
+          ],
+          "correct_index": 1,
+          "correct_answer": "under the bed"
+        },
+        {
+          "question": "\"Tem um banco perto?\":",
+          "options": [
+            "Is there a bank near?",
+            "Have a bank near?",
+            "There a bank near?"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Is there a bank near?"
+        },
+        {
+          "question": "Preposição \"entre dois\":",
+          "options": [
+            "among",
+            "between",
+            "behind"
+          ],
+          "correct_index": 1,
+          "correct_answer": "between"
+        },
+        {
+          "question": "Pedido educado: \"Would you like ___ coffee?\"",
+          "options": [
+            "any",
+            "some",
+            "a"
+          ],
+          "correct_index": 1,
+          "correct_answer": "some"
+        },
+        {
+          "question": "\"sobre a mesa (em contato)\":",
+          "options": [
+            "in the table",
+            "at the table",
+            "on the table"
+          ],
+          "correct_index": 2,
+          "correct_answer": "on the table"
+        },
+        {
+          "question": "\"Ela está em casa\":",
+          "options": [
+            "She is in home",
+            "She is at home",
+            "She is on home"
+          ],
+          "correct_index": 1,
+          "correct_answer": "She is at home"
+        },
+        {
+          "question": "\"logo ali na esquina\":",
+          "options": [
+            "around the corner",
+            "in the corner",
+            "on the corner"
+          ],
+          "correct_index": 0,
+          "correct_answer": "around the corner"
+        }
+      ]
+    },
+    {
+      "week": 6,
+      "questions": [
+        {
+          "question": "-ing de \"run\":",
+          "options": [
+            "runing",
+            "running",
+            "runnning"
+          ],
+          "correct_index": 1,
+          "correct_answer": "running"
+        },
+        {
+          "question": "-ing de \"write\":",
+          "options": [
+            "writeing",
+            "writting",
+            "writing"
+          ],
+          "correct_index": 2,
+          "correct_answer": "writing"
+        },
+        {
+          "question": "\"Look! She ___ (dance).\"",
+          "options": [
+            "dances",
+            "is dancing",
+            "dancing"
+          ],
+          "correct_index": 1,
+          "correct_answer": "is dancing"
+        },
+        {
+          "question": "Rotina: \"I ___ to work every day.\"",
+          "options": [
+            "am going",
+            "go",
+            "going"
+          ],
+          "correct_index": 1,
+          "correct_answer": "go"
+        },
+        {
+          "question": "Verbo que NÃO usa -ing:",
+          "options": [
+            "work",
+            "want",
+            "play"
+          ],
+          "correct_index": 1,
+          "correct_answer": "want"
+        },
+        {
+          "question": "\"Está chovendo agora\":",
+          "options": [
+            "It rains now",
+            "It is raining now",
+            "It raining now"
+          ],
+          "correct_index": 1,
+          "correct_answer": "It is raining now"
+        },
+        {
+          "question": "Pergunta: \"___ you studying?\"",
+          "options": [
+            "Do",
+            "Are",
+            "Is"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Are"
+        },
+        {
+          "question": "Marcador do Present Continuous:",
+          "options": [
+            "every day",
+            "usually",
+            "right now"
+          ],
+          "correct_index": 2,
+          "correct_answer": "right now"
+        },
+        {
+          "question": "Negativa: \"They ___ playing.\"",
+          "options": [
+            "don't",
+            "aren't",
+            "isn't"
+          ],
+          "correct_index": 1,
+          "correct_answer": "aren't"
+        },
+        {
+          "question": "\"O que você está fazendo?\":",
+          "options": [
+            "What you do?",
+            "What are you doing?",
+            "What do you doing?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "What are you doing?"
+        }
+      ]
+    },
+    {
+      "week": 7,
+      "questions": [
+        {
+          "question": "\"I ___ tired.\" (passado)",
+          "options": [
+            "was",
+            "were",
+            "is"
+          ],
+          "correct_index": 0,
+          "correct_answer": "was"
+        },
+        {
+          "question": "\"They ___ at home.\"",
+          "options": [
+            "was",
+            "were",
+            "are"
+          ],
+          "correct_index": 1,
+          "correct_answer": "were"
+        },
+        {
+          "question": "Passado de \"study\":",
+          "options": [
+            "studyed",
+            "studied",
+            "studed"
+          ],
+          "correct_index": 1,
+          "correct_answer": "studied"
+        },
+        {
+          "question": "Passado de \"stop\":",
+          "options": [
+            "stoped",
+            "stopped",
+            "stopt"
+          ],
+          "correct_index": 1,
+          "correct_answer": "stopped"
+        },
+        {
+          "question": "Pronúncia -ed de \"needed\":",
+          "options": [
+            "/t/",
+            "/d/",
+            "/ɪd/"
+          ],
+          "correct_index": 2,
+          "correct_answer": "/ɪd/"
+        },
+        {
+          "question": "Negativa: \"She ___ happy.\"",
+          "options": [
+            "wasn't",
+            "weren't",
+            "didn't"
+          ],
+          "correct_index": 0,
+          "correct_answer": "wasn't"
+        },
+        {
+          "question": "\"dois dias atrás\":",
+          "options": [
+            "two days before",
+            "two days ago",
+            "ago two days"
+          ],
+          "correct_index": 1,
+          "correct_answer": "two days ago"
+        },
+        {
+          "question": "\"Você estava lá?\":",
+          "options": [
+            "Was you there?",
+            "Were you there?",
+            "Did you there?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Were you there?"
+        },
+        {
+          "question": "Passado de \"play\":",
+          "options": [
+            "plaid",
+            "played",
+            "plaied"
+          ],
+          "correct_index": 1,
+          "correct_answer": "played"
+        },
+        {
+          "question": "\"Como foi seu dia?\":",
+          "options": [
+            "How is your day?",
+            "How was your day?",
+            "How were your day?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "How was your day?"
+        }
+      ]
+    },
+    {
+      "week": 8,
+      "questions": [
+        {
+          "question": "Passado de \"go\":",
+          "options": [
+            "goed",
+            "went",
+            "gone"
+          ],
+          "correct_index": 1,
+          "correct_answer": "went"
+        },
+        {
+          "question": "Passado de \"buy\":",
+          "options": [
+            "buyed",
+            "bought",
+            "boughted"
+          ],
+          "correct_index": 1,
+          "correct_answer": "bought"
+        },
+        {
+          "question": "Negativa: \"I ___ go.\"",
+          "options": [
+            "didn't",
+            "don't",
+            "wasn't"
+          ],
+          "correct_index": 0,
+          "correct_answer": "didn't"
+        },
+        {
+          "question": "Pergunta: \"___ you see it?\"",
+          "options": [
+            "Do",
+            "Did",
+            "Were"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Did"
+        },
+        {
+          "question": "Correto:",
+          "options": [
+            "Did you went?",
+            "Did you go?",
+            "Did you goes?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Did you go?"
+        },
+        {
+          "question": "Passado de \"have\":",
+          "options": [
+            "haved",
+            "had",
+            "has"
+          ],
+          "correct_index": 1,
+          "correct_answer": "had"
+        },
+        {
+          "question": "Passado de \"think\":",
+          "options": [
+            "thinked",
+            "thought",
+            "thinked"
+          ],
+          "correct_index": 1,
+          "correct_answer": "thought"
+        },
+        {
+          "question": "\"Eu não vi\":",
+          "options": [
+            "I didn't saw",
+            "I didn't see",
+            "I don't see"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I didn't see"
+        },
+        {
+          "question": "Conector de sequência:",
+          "options": [
+            "because",
+            "after that",
+            "but"
+          ],
+          "correct_index": 1,
+          "correct_answer": "after that"
+        },
+        {
+          "question": "Passado de \"eat\":",
+          "options": [
+            "eated",
+            "ate",
+            "eaten"
+          ],
+          "correct_index": 1,
+          "correct_answer": "ate"
+        }
+      ]
+    },
+    {
+      "week": 9,
+      "questions": [
+        {
+          "question": "Plano já decidido:",
+          "options": [
+            "I will study (decido agora)",
+            "I'm going to study",
+            "I study"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I'm going to study"
+        },
+        {
+          "question": "Decisão instantânea:",
+          "options": [
+            "I'm going to get it",
+            "I'll get it",
+            "I get it"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I'll get it"
+        },
+        {
+          "question": "Negativa de \"will\":",
+          "options": [
+            "willn't",
+            "won't",
+            "doesn't"
+          ],
+          "correct_index": 1,
+          "correct_answer": "won't"
+        },
+        {
+          "question": "\"gonna\" é a forma falada de:",
+          "options": [
+            "going to",
+            "want to",
+            "got to"
+          ],
+          "correct_index": 0,
+          "correct_answer": "going to"
+        },
+        {
+          "question": "\"Vou te ligar mais tarde\":",
+          "options": [
+            "I going to call",
+            "I'll call you later",
+            "I call you later"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I'll call you later"
+        },
+        {
+          "question": "Pergunta: \"___ you going to come?\"",
+          "options": [
+            "Do",
+            "Are",
+            "Will be"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Are"
+        },
+        {
+          "question": "Previsão com evidência:",
+          "options": [
+            "It will rain (acho)",
+            "Look at the clouds, it's going to rain",
+            "It rains"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Look at the clouds, it's going to rain"
+        },
+        {
+          "question": "Contração de \"she will\":",
+          "options": [
+            "she'll",
+            "shell",
+            "she'd"
+          ],
+          "correct_index": 0,
+          "correct_answer": "she'll"
+        },
+        {
+          "question": "Promessa:",
+          "options": [
+            "I'm going to always be here",
+            "I'll always be here",
+            "I always be here"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I'll always be here"
+        },
+        {
+          "question": "\"a longo prazo\":",
+          "options": [
+            "in the long run",
+            "at the long run",
+            "on long run"
+          ],
+          "correct_index": 0,
+          "correct_answer": "in the long run"
+        }
+      ]
+    },
+    {
+      "week": 10,
+      "questions": [
+        {
+          "question": "Comparativo de \"tall\":",
+          "options": [
+            "more tall",
+            "taller",
+            "tallest"
+          ],
+          "correct_index": 1,
+          "correct_answer": "taller"
+        },
+        {
+          "question": "Comparativo de \"expensive\":",
+          "options": [
+            "expensiver",
+            "more expensive",
+            "most expensive"
+          ],
+          "correct_index": 1,
+          "correct_answer": "more expensive"
+        },
+        {
+          "question": "Comparativo de \"good\":",
+          "options": ["gooder",
+            "better",
+            "best"
+          ],
+          "correct_index": 1,
+          "correct_answer": "better"
+        },
+        {
+          "question": "Superlativo de \"big\":",
+          "options": [
+            "the bigest",
+            "the biggest",
+            "the most big"
+          ],
+          "correct_index": 1,
+          "correct_answer": "the biggest"
+        },
+        {
+          "question": "Superlativo de \"beautiful\":",
+          "options": [
+            "the beautifulest",
+            "the most beautiful",
+            "the more beautiful"
+          ],
+          "correct_index": 1,
+          "correct_answer": "the most beautiful"
+        },
+        {
+          "question": "Comparativo de \"bad\":",
+          "options": [
+            "badder",
+            "worse",
+            "worst"
+          ],
+          "correct_index": 1,
+          "correct_answer": "worse"
+        },
+        {
+          "question": "\"tão alto quanto\":",
+          "options": [
+            "as tall as",
+            "so tall as",
+            "as tall than"
+          ],
+          "correct_index": 0,
+          "correct_answer": "as tall as"
+        },
+        {
+          "question": "Superlativo de \"good\":",
+          "options": [
+            "the goodest",
+            "the best",
+            "the better"
+          ],
+          "correct_index": 1,
+          "correct_answer": "the best"
+        },
+        {
+          "question": "Comparativo de \"happy\":",
+          "options": [
+            "happyer",
+            "happier",
+            "more happy"
+          ],
+          "correct_index": 1,
+          "correct_answer": "happier"
+        },
+        {
+          "question": "\"Antes tarde do que nunca\":",
+          "options": [
+            "Late better than never",
+            "Better late than never",
+            "Best late than never"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Better late than never"
+        }
+      ]
+    },
+    {
+      "week": 11,
+      "questions": [
+        {
+          "question": "Correto:",
+          "options": [
+            "He cans swim",
+            "He can swim",
+            "He can swims"
+          ],
+          "correct_index": 1,
+          "correct_answer": "He can swim"
+        },
+        {
+          "question": "Correto:",
+          "options": [
+            "I can to drive",
+            "I can drive",
+            "I can driving"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I can drive"
+        },
+        {
+          "question": "Passado de \"can\":",
+          "options": [
+            "canned",
+            "could",
+            "caned"
+          ],
+          "correct_index": 1,
+          "correct_answer": "could"
+        },
+        {
+          "question": "Pedido mais educado:",
+          "options": [
+            "Open the window",
+            "Can you open?",
+            "Could you open the window, please?"
+          ],
+          "correct_index": 2,
+          "correct_answer": "Could you open the window, please?"
+        },
+        {
+          "question": "Permissão formal:",
+          "options": [
+            "Can I?",
+            "May I?",
+            "Do I?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "May I?"
+        },
+        {
+          "question": "Negativa de \"can\":",
+          "options": [
+            "cann't",
+            "can't",
+            "doesn't can"
+          ],
+          "correct_index": 1,
+          "correct_answer": "can't"
+        },
+        {
+          "question": "\"Você pode me dar uma ajuda?\":",
+          "options": [
+            "Can you give me a hand?",
+            "You can help?",
+            "Do you can help?"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Can you give me a hand?"
+        },
+        {
+          "question": "Habilidade passada:",
+          "options": [
+            "I can run fast then",
+            "I could run fast then",
+            "I will run fast"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I could run fast then"
+        },
+        {
+          "question": "\"Não vou conseguir ir\":",
+          "options": [
+            "I can't make it",
+            "I don't can go",
+            "I can't to go"
+          ],
+          "correct_index": 0,
+          "correct_answer": "I can't make it"
+        },
+        {
+          "question": "Modais NÃO levam:",
+          "options": [
+            "verbo base",
+            "-s na 3a pessoa",
+            "sujeito"
+          ],
+          "correct_index": 1,
+          "correct_answer": "-s na 3a pessoa"
+        }
+      ]
+    },
+    {
+      "week": 12,
+      "questions": [
+        {
+          "question": "Obrigação externa:",
+          "options": [
+            "I should work",
+            "I have to work",
+            "I could work"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I have to work"
+        },
+        {
+          "question": "Conselho:",
+          "options": [
+            "You must see a doctor",
+            "You should see a doctor",
+            "You have to see a doctor"
+          ],
+          "correct_index": 1,
+          "correct_answer": "You should see a doctor"
+        },
+        {
+          "question": "Proibição:",
+          "options": [
+            "You don't have to smoke",
+            "You mustn't smoke",
+            "You shouldn't smoke"
+          ],
+          "correct_index": 1,
+          "correct_answer": "You mustn't smoke"
+        },
+        {
+          "question": "Não é necessário:",
+          "options": [
+            "You mustn't pay",
+            "You don't have to pay",
+            "You can't pay"
+          ],
+          "correct_index": 1,
+          "correct_answer": "You don't have to pay"
+        },
+        {
+          "question": "3a pessoa de \"have to\":",
+          "options": [
+            "have to",
+            "has to",
+            "haves to"
+          ],
+          "correct_index": 1,
+          "correct_answer": "has to"
+        },
+        {
+          "question": "Negativo de \"should\":",
+          "options": [
+            "shouldn't",
+            "don't should",
+            "musn't"
+          ],
+          "correct_index": 0,
+          "correct_answer": "shouldn't"
+        },
+        {
+          "question": "\"Se eu fosse você\":",
+          "options": [
+            "If I was you",
+            "If I were you",
+            "If I am you"
+          ],
+          "correct_index": 1,
+          "correct_answer": "If I were you"
+        },
+        {
+          "question": "\"A decisão é sua\":",
+          "options": [
+            "It's on you",
+            "It's up to you",
+            "It's for you"
+          ],
+          "correct_index": 1,
+          "correct_answer": "It's up to you"
+        },
+        {
+          "question": "\"É melhor se apressar\":",
+          "options": [
+            "You better hurry",
+            "You'd better hurry",
+            "You should hurry better"
+          ],
+          "correct_index": 1,
+          "correct_answer": "You'd better hurry"
+        },
+        {
+          "question": "Conselho negativo:",
+          "options": [
+            "You shouldn't worry",
+            "You mustn't worry",
+            "You don't worry"
+          ],
+          "correct_index": 0,
+          "correct_answer": "You shouldn't worry"
+        }
+      ]
+    },
+    {
+      "week": 13,
+      "questions": [
+        {
+          "question": "\"I rested ___ I was tired.\"",
+          "options": [
+            "so",
+            "because",
+            "but"
+          ],
+          "correct_index": 1,
+          "correct_answer": "because"
+        },
+        {
+          "question": "\"I was tired, ___ I rested.\"",
+          "options": [
+            "so",
+            "because",
+            "although"
+          ],
+          "correct_index": 0,
+          "correct_answer": "so"
+        },
+        {
+          "question": "Conector de contraste:",
+          "options": [
+            "and",
+            "but",
+            "so"
+          ],
+          "correct_index": 1,
+          "correct_answer": "but"
+        },
+        {
+          "question": "Concessão (mesmo que):",
+          "options": [
+            "because",
+            "although",
+            "so"
+          ],
+          "correct_index": 1,
+          "correct_answer": "although"
+        },
+        {
+          "question": "\"É por isso que...\":",
+          "options": [
+            "That's because",
+            "That's why",
+            "That's so"
+          ],
+          "correct_index": 1,
+          "correct_answer": "That's why"
+        },
+        {
+          "question": "\"Por outro lado\":",
+          "options": [
+            "In other hand",
+            "On the other hand",
+            "At other hand"
+          ],
+          "correct_index": 1,
+          "correct_answer": "On the other hand"
+        },
+        {
+          "question": "\"Por exemplo\":",
+          "options": [
+            "For instance",
+            "By instance",
+            "In instance"
+          ],
+          "correct_index": 0,
+          "correct_answer": "For instance"
+        },
+        {
+          "question": "\"No geral\":",
+          "options": [
+            "All in all",
+            "In all",
+            "All of all"
+          ],
+          "correct_index": 0,
+          "correct_answer": "All in all"
+        },
+        {
+          "question": "Conector de adição:",
+          "options": [
+            "or",
+            "and",
+            "but"
+          ],
+          "correct_index": 1,
+          "correct_answer": "and"
+        },
+        {
+          "question": "Estrutura de resposta desenvolvida:",
+          "options": [
+            "opinião + motivo + exemplo",
+            "só opinião",
+            "só exemplo"
+          ],
+          "correct_index": 0,
+          "correct_answer": "opinião + motivo + exemplo"
+        }
+      ]
+    },
+    {
+      "week": 14,
+      "questions": [
+        {
+          "question": "Particípio de \"go\":",
+          "options": [
+            "went",
+            "gone",
+            "goed"
+          ],
+          "correct_index": 1,
+          "correct_answer": "gone"
+        },
+        {
+          "question": "\"I ___ visited Paris.\"",
+          "options": [
+            "have",
+            "has",
+            "am"
+          ],
+          "correct_index": 0,
+          "correct_answer": "have"
+        },
+        {
+          "question": "\"She ___ finished.\"",
+          "options": [
+            "have",
+            "has",
+            "is"
+          ],
+          "correct_index": 1,
+          "correct_answer": "has"
+        },
+        {
+          "question": "\"Have you ___ been to the US?\"",
+          "options": [
+            "yet",
+            "already",
+            "ever"
+          ],
+          "correct_index": 2,
+          "correct_answer": "ever"
+        },
+        {
+          "question": "\"She hasn't arrived ___.\"",
+          "options": [
+            "yet",
+            "ever",
+            "just"
+          ],
+          "correct_index": 0,
+          "correct_answer": "yet"
+        },
+        {
+          "question": "Tempo definido (2019) usa:",
+          "options": [
+            "Present Perfect",
+            "Past Simple",
+            "Present"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Past Simple"
+        },
+        {
+          "question": "Particípio de \"see\":",
+          "options": [
+            "saw",
+            "seen",
+            "seed"
+          ],
+          "correct_index": 1,
+          "correct_answer": "seen"
+        },
+        {
+          "question": "\"acabou de sair\":",
+          "options": [
+            "has just left",
+            "just left",
+            "has left just"
+          ],
+          "correct_index": 0,
+          "correct_answer": "has just left"
+        },
+        {
+          "question": "\"Eu nunca quebrei um osso\":",
+          "options": [
+            "I never broke",
+            "I have never broken",
+            "I don't break"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I have never broken"
+        },
+        {
+          "question": "\"Faz tempo\":",
+          "options": [
+            "It's been a while",
+            "It has a while",
+            "It makes a while"
+          ],
+          "correct_index": 0,
+          "correct_answer": "It's been a while"
+        }
+      ]
+    },
+    {
+      "week": 15,
+      "questions": [
+        {
+          "question": "\"I have been ___ for 3 hours.\"",
+          "options": [
+            "study",
+            "studying",
+            "studied"
+          ],
+          "correct_index": 1,
+          "correct_answer": "studying"
+        },
+        {
+          "question": "Past Continuous: \"At 8 I ___ TV.\"",
+          "options": [
+            "watched",
+            "was watching",
+            "watch"
+          ],
+          "correct_index": 1,
+          "correct_answer": "was watching"
+        },
+        {
+          "question": "Ação longa usa:",
+          "options": [
+            "when",
+            "while",
+            "then"
+          ],
+          "correct_index": 1,
+          "correct_answer": "while"
+        },
+        {
+          "question": "Ação curta (interrupção) usa:",
+          "options": [
+            "while",
+            "when",
+            "during"
+          ],
+          "correct_index": 1,
+          "correct_answer": "when"
+        },
+        {
+          "question": "Ênfase na duração:",
+          "options": [
+            "I've read 3 books",
+            "I've been reading all day",
+            "I read a book"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I've been reading all day"
+        },
+        {
+          "question": "\"O que você tem feito?\":",
+          "options": [
+            "What you did?",
+            "What have you been up to?",
+            "What do you do?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "What have you been up to?"
+        },
+        {
+          "question": "\"Veio do nada\":",
+          "options": [
+            "Out of the blue",
+            "In the blue",
+            "By the blue"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Out of the blue"
+        },
+        {
+          "question": "\"They ___ soccer at 4 p.m.\"",
+          "options": [
+            "played",
+            "were playing",
+            "play"
+          ],
+          "correct_index": 1,
+          "correct_answer": "were playing"
+        },
+        {
+          "question": "\"Perdi a noção do tempo\":",
+          "options": [
+            "I lost track of time",
+            "I lost the time",
+            "I missed the time"
+          ],
+          "correct_index": 0,
+          "correct_answer": "I lost track of time"
+        },
+        {
+          "question": "\"Por falar nisso\":",
+          "options": [
+            "Speaking of which",
+            "Talking which",
+            "By speaking"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Speaking of which"
+        }
+      ]
+    },
+    {
+      "week": 16,
+      "questions": [
+        {
+          "question": "\"When I arrived, she ___ left.\"",
+          "options": [
+            "has",
+            "had",
+            "was"
+          ],
+          "correct_index": 1,
+          "correct_answer": "had"
+        },
+        {
+          "question": "Past Perfect marca o evento:",
+          "options": [
+            "mais recente",
+            "mais antigo",
+            "futuro"
+          ],
+          "correct_index": 1,
+          "correct_answer": "mais antigo"
+        },
+        {
+          "question": "Negativa: \"I ___ seen him before.\"",
+          "options": [
+            "hadn't",
+            "haven't",
+            "didn't"
+          ],
+          "correct_index": 0,
+          "correct_answer": "hadn't"
+        },
+        {
+          "question": "Particípio de \"forget\":",
+          "options": [
+            "forgot",
+            "forgotten",
+            "forgetted"
+          ],
+          "correct_index": 1,
+          "correct_answer": "forgotten"
+        },
+        {
+          "question": "\"Mal sabia eu\":",
+          "options": [
+            "Little did I know",
+            "Few I knew",
+            "Small I knew"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Little did I know"
+        },
+        {
+          "question": "\"Em retrospecto\":",
+          "options": [
+            "In hindsight",
+            "In backsight",
+            "On hindsight"
+          ],
+          "correct_index": 0,
+          "correct_answer": "In hindsight"
+        },
+        {
+          "question": "\"By the time we arrived, it ___ ended.\"",
+          "options": [
+            "has",
+            "had",
+            "was"
+          ],
+          "correct_index": 1,
+          "correct_answer": "had"
+        },
+        {
+          "question": "\"Eu não fazia ideia\":",
+          "options": [
+            "I had no idea",
+            "I have no idea (passado)",
+            "I don't had idea"
+          ],
+          "correct_index": 0,
+          "correct_answer": "I had no idea"
+        },
+        {
+          "question": "Pergunta Past Perfect:",
+          "options": [
+            "Did you had met?",
+            "Had you met?",
+            "Have you met (passado)?"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Had you met?"
+        },
+        {
+          "question": "\"Olhando para trás\":",
+          "options": [
+            "Looking back",
+            "Seeing back",
+            "Watching back"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Looking back"
+        }
+      ]
+    },
+    {
+      "week": 17,
+      "questions": [
+        {
+          "question": "Zero: \"If you heat ice, it ___.\"",
+          "options": [
+            "will melt",
+            "melts",
+            "melted"
+          ],
+          "correct_index": 1,
+          "correct_answer": "melts"
+        },
+        {
+          "question": "First: \"If it ___, I'll stay home.\"",
+          "options": [
+            "will rain",
+            "rains",
+            "rained"
+          ],
+          "correct_index": 1,
+          "correct_answer": "rains"
+        },
+        {
+          "question": "Erro comum após \"if\":",
+          "options": [
+            "presente",
+            "will",
+            "passado"
+          ],
+          "correct_index": 1,
+          "correct_answer": "will"
+        },
+        {
+          "question": "Second: \"If I ___ the lottery, I'd travel.\"",
+          "options": [
+            "win",
+            "won",
+            "will win"
+          ],
+          "correct_index": 1,
+          "correct_answer": "won"
+        },
+        {
+          "question": "Second com \"be\":",
+          "options": [
+            "If I was you",
+            "If I were you",
+            "If I am you"
+          ],
+          "correct_index": 1,
+          "correct_answer": "If I were you"
+        },
+        {
+          "question": "\"a menos que\":",
+          "options": [
+            "if",
+            "unless",
+            "while"
+          ],
+          "correct_index": 1,
+          "correct_answer": "unless"
+        },
+        {
+          "question": "First: \"If you study, you ___ pass.\"",
+          "options": [
+            "will",
+            "would",
+            "are"
+          ],
+          "correct_index": 0,
+          "correct_answer": "will"
+        },
+        {
+          "question": "\"E se...?\":",
+          "options": [
+            "What if?",
+            "If what?",
+            "And if?"
+          ],
+          "correct_index": 0,
+          "correct_answer": "What if?"
+        },
+        {
+          "question": "\"Na pior das hipóteses\":",
+          "options": [
+            "If worst",
+            "If worse comes to worst",
+            "On the worst"
+          ],
+          "correct_index": 1,
+          "correct_answer": "If worse comes to worst"
+        },
+        {
+          "question": "Hipótese irreal usa:",
+          "options": [
+            "First Conditional",
+            "Second Conditional",
+            "Zero Conditional"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Second Conditional"
+        }
+      ]
+    },
+    {
+      "week": 18,
+      "questions": [
+        {
+          "question": "Third: \"If I ___ studied, I would have passed.\"",
+          "options": [
+            "have",
+            "had",
+            "would"
+          ],
+          "correct_index": 1,
+          "correct_answer": "had"
+        },
+        {
+          "question": "Segunda parte da third:",
+          "options": [
+            "would + verbo",
+            "would have + particípio",
+            "will have"
+          ],
+          "correct_index": 1,
+          "correct_answer": "would have + particípio"
+        },
+        {
+          "question": "Wish presente: \"I wish I ___ more time.\"",
+          "options": [
+            "have",
+            "had",
+            "would have"
+          ],
+          "correct_index": 1,
+          "correct_answer": "had"
+        },
+        {
+          "question": "Wish passado: \"I wish I ___ harder.\"",
+          "options": [
+            "studied",
+            "had studied",
+            "study"
+          ],
+          "correct_index": 1,
+          "correct_answer": "had studied"
+        },
+        {
+          "question": "\"Se ao menos\":",
+          "options": [
+            "If only",
+            "Only if",
+            "If just"
+          ],
+          "correct_index": 0,
+          "correct_answer": "If only"
+        },
+        {
+          "question": "\"O que está feito, está feito\":",
+          "options": [
+            "What done is done",
+            "What's done is done",
+            "What is did is did"
+          ],
+          "correct_index": 1,
+          "correct_answer": "What's done is done"
+        },
+        {
+          "question": "Wish + would (irritação):",
+          "options": [
+            "I wish it stops",
+            "I wish it would stop",
+            "I wish it stopped"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I wish it would stop"
+        },
+        {
+          "question": "\"Quem dera eu pudesse\":",
+          "options": [
+            "I wish I can",
+            "I wish I could",
+            "I wished I can"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I wish I could"
+        },
+        {
+          "question": "\"Eu deveria saber\":",
+          "options": [
+            "I should know better",
+            "I should have known better",
+            "I must known"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I should have known better"
+        },
+        {
+          "question": "\"Vivendo e aprendendo\":",
+          "options": [
+            "Live and learn",
+            "Living and learning",
+            "Life and learn"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Live and learn"
+        }
+      ]
+    },
+    {
+      "week": 19,
+      "questions": [
+        {
+          "question": "Passiva de \"They speak English\":",
+          "options": [
+            "English speaks",
+            "English is spoken",
+            "English spoke"
+          ],
+          "correct_index": 1,
+          "correct_answer": "English is spoken"
+        },
+        {
+          "question": "Estrutura da passiva:",
+          "options": [
+            "TO BE + particípio",
+            "TO HAVE + verbo",
+            "TO DO + verbo"
+          ],
+          "correct_index": 0,
+          "correct_answer": "TO BE + particípio"
+        },
+        {
+          "question": "Passiva passado: \"The house ___ in 1990.\"",
+          "options": [
+            "is built",
+            "was built",
+            "built"
+          ],
+          "correct_index": 1,
+          "correct_answer": "was built"
+        },
+        {
+          "question": "Agente na passiva usa:",
+          "options": [
+            "for",
+            "by",
+            "with"
+          ],
+          "correct_index": 1,
+          "correct_answer": "by"
+        },
+        {
+          "question": "Present Perfect passiva:",
+          "options": [
+            "has done",
+            "has been done",
+            "is done"
+          ],
+          "correct_index": 1,
+          "correct_answer": "has been done"
+        },
+        {
+          "question": "Modal passiva: \"It ___ today.\"",
+          "options": [
+            "must finish",
+            "must be finished",
+            "must finished"
+          ],
+          "correct_index": 1,
+          "correct_answer": "must be finished"
+        },
+        {
+          "question": "\"Dizem que...\":",
+          "options": [
+            "It is said that",
+            "They say that (passiva)",
+            "It says that"
+          ],
+          "correct_index": 0,
+          "correct_answer": "It is said that"
+        },
+        {
+          "question": "Quando usar passiva:",
+          "options": [
+            "agente desconhecido/irrelevante",
+            "sempre",
+            "nunca em notícias"
+          ],
+          "correct_index": 0,
+          "correct_answer": "agente desconhecido/irrelevante"
+        },
+        {
+          "question": "\"Para ser sincero\":",
+          "options": [
+            "To be honest",
+            "For honest",
+            "By honest"
+          ],
+          "correct_index": 0,
+          "correct_answer": "To be honest"
+        },
+        {
+          "question": "Particípio de \"write\":",
+          "options": [
+            "wrote",
+            "written",
+            "writed"
+          ],
+          "correct_index": 1,
+          "correct_answer": "written"
+        }
+      ]
+    },
+    {
+      "week": 20,
+      "questions": [
+        {
+          "question": "Indireto: \"I am tired\" (He said):",
+          "options": [
+            "He said he is tired",
+            "He said he was tired",
+            "He says he tired"
+          ],
+          "correct_index": 1,
+          "correct_answer": "He said he was tired"
+        },
+        {
+          "question": "Backshift de \"will\":",
+          "options": [
+            "will",
+            "would",
+            "would have"
+          ],
+          "correct_index": 1,
+          "correct_answer": "would"
+        },
+        {
+          "question": "say ou tell: \"He ___ me\":",
+          "options": [
+            "said",
+            "told",
+            "say"
+          ],
+          "correct_index": 1,
+          "correct_answer": "told"
+        },
+        {
+          "question": "say ou tell: \"She ___ that...\":",
+          "options": [
+            "told",
+            "said",
+            "tell"
+          ],
+          "correct_index": 1,
+          "correct_answer": "said"
+        },
+        {
+          "question": "Pergunta sim/não indireta usa:",
+          "options": [
+            "that",
+            "if",
+            "what"
+          ],
+          "correct_index": 1,
+          "correct_answer": "if"
+        },
+        {
+          "question": "Pedido indireto: \"Please help\" →",
+          "options": [
+            "asked to help",
+            "asked me to help",
+            "said help"
+          ],
+          "correct_index": 1,
+          "correct_answer": "asked me to help"
+        },
+        {
+          "question": "Backshift de present:",
+          "options": [
+            "past",
+            "future",
+            "present perfect"
+          ],
+          "correct_index": 0,
+          "correct_answer": "past"
+        },
+        {
+          "question": "\"now\" no indireto vira:",
+          "options": [
+            "then",
+            "today",
+            "soon"
+          ],
+          "correct_index": 0,
+          "correct_answer": "then"
+        },
+        {
+          "question": "\"Pelo que ouvi\":",
+          "options": [
+            "From what I heard",
+            "By what I heard",
+            "Of what I heard"
+          ],
+          "correct_index": 0,
+          "correct_answer": "From what I heard"
+        },
+        {
+          "question": "Backshift de \"can\":",
+          "options": [
+            "could",
+            "can",
+            "would"
+          ],
+          "correct_index": 0,
+          "correct_answer": "could"
+        }
+      ]
+    },
+    {
+      "week": 21,
+      "questions": [
+        {
+          "question": "\"give up\" significa:",
+          "options": [
+            "dar para cima",
+            "desistir",
+            "entregar"
+          ],
+          "correct_index": 1,
+          "correct_answer": "desistir"
+        },
+        {
+          "question": "Com pronome:",
+          "options": [
+            "Turn off it",
+            "Turn it off",
+            "Turn off them"
+          ],
+          "correct_index": 1,
+          "correct_answer": "Turn it off"
+        },
+        {
+          "question": "\"procurar\":",
+          "options": [
+            "look for",
+            "look after",
+            "look up"
+          ],
+          "correct_index": 0,
+          "correct_answer": "look for"
+        },
+        {
+          "question": "\"cuidar de\":",
+          "options": [
+            "look for",
+            "look after",
+            "look out"
+          ],
+          "correct_index": 1,
+          "correct_answer": "look after"
+        },
+        {
+          "question": "\"ficar sem\":",
+          "options": [
+            "run out of",
+            "run into",
+            "run over"
+          ],
+          "correct_index": 0,
+          "correct_answer": "run out of"
+        },
+        {
+          "question": "\"descobrir\":",
+          "options": [
+            "find out",
+            "find for",
+            "look into"
+          ],
+          "correct_index": 0,
+          "correct_answer": "find out"
+        },
+        {
+          "question": "\"adiar\":",
+          "options": [
+            "put on",
+            "put off",
+            "put up"
+          ],
+          "correct_index": 1,
+          "correct_answer": "put off"
+        },
+        {
+          "question": "\"dar-se bem com\":",
+          "options": [
+            "get along with",
+            "get up with",
+            "get over"
+          ],
+          "correct_index": 0,
+          "correct_answer": "get along with"
+        },
+        {
+          "question": "\"Surgiu um imprevisto\":",
+          "options": [
+            "Something came up",
+            "Something went up",
+            "Something got up"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Something came up"
+        },
+        {
+          "question": "\"Vou dar um jeito\":",
+          "options": [
+            "I'll figure it out",
+            "I'll figure out it",
+            "I figure it"
+          ],
+          "correct_index": 0,
+          "correct_answer": "I'll figure it out"
+        }
+      ]
+    },
+    {
+      "week": 22,
+      "questions": [
+        {
+          "question": "Para pessoas:",
+          "options": [
+            "which",
+            "who",
+            "where"
+          ],
+          "correct_index": 1,
+          "correct_answer": "who"
+        },
+        {
+          "question": "Para coisas:",
+          "options": [
+            "who",
+            "which",
+            "whose"
+          ],
+          "correct_index": 1,
+          "correct_answer": "which"
+        },
+        {
+          "question": "Para lugares:",
+          "options": [
+            "when",
+            "where",
+            "which"
+          ],
+          "correct_index": 1,
+          "correct_answer": "where"
+        },
+        {
+          "question": "Para posse:",
+          "options": [
+            "who's",
+            "whose",
+            "which"
+          ],
+          "correct_index": 1,
+          "correct_answer": "whose"
+        },
+        {
+          "question": "Non-defining usa:",
+          "options": [
+            "sem vírgulas",
+            "com vírgulas",
+            "com that"
+          ],
+          "correct_index": 1,
+          "correct_answer": "com vírgulas"
+        },
+        {
+          "question": "Em non-defining NÃO se usa:",
+          "options": [
+            "who",
+            "which",
+            "that"
+          ],
+          "correct_index": 2,
+          "correct_answer": "that"
+        },
+        {
+          "question": "Cleft de ênfase em pessoa:",
+          "options": [
+            "It was John who...",
+            "John it was...",
+            "Was John who..."
+          ],
+          "correct_index": 0,
+          "correct_answer": "It was John who..."
+        },
+        {
+          "question": "\"O que eu preciso é...\":",
+          "options": [
+            "What I need is",
+            "That I need is",
+            "Which I need is"
+          ],
+          "correct_index": 0,
+          "correct_answer": "What I need is"
+        },
+        {
+          "question": "Pronome omitível (objeto):",
+          "options": [
+            "who sujeito",
+            "that objeto",
+            "whose"
+          ],
+          "correct_index": 1,
+          "correct_answer": "that objeto"
+        },
+        {
+          "question": "\"Alguém que admiro\":",
+          "options": [
+            "Someone I look up to",
+            "Someone who I look up",
+            "Someone look up to"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Someone I look up to"
+        }
+      ]
+    },
+    {
+      "week": 23,
+      "questions": [
+        {
+          "question": "\"___ a decision\":",
+          "options": [
+            "do",
+            "make",
+            "take"
+          ],
+          "correct_index": 1,
+          "correct_answer": "make"
+        },
+        {
+          "question": "\"___ homework\":",
+          "options": [
+            "make",
+            "do",
+            "have"
+          ],
+          "correct_index": 1,
+          "correct_answer": "do"
+        },
+        {
+          "question": "\"___ a break\":",
+          "options": [
+            "make",
+            "do",
+            "take"
+          ],
+          "correct_index": 2,
+          "correct_answer": "take"
+        },
+        {
+          "question": "\"___ ready\":",
+          "options": [
+            "get",
+            "do",
+            "make"
+          ],
+          "correct_index": 0,
+          "correct_answer": "get"
+        },
+        {
+          "question": "\"a piece of cake\" =",
+          "options": [
+            "um bolo",
+            "muito fácil",
+            "muito caro"
+          ],
+          "correct_index": 1,
+          "correct_answer": "muito fácil"
+        },
+        {
+          "question": "\"under the weather\" =",
+          "options": [
+            "debaixo de chuva",
+            "indisposto",
+            "ao ar livre"
+          ],
+          "correct_index": 1,
+          "correct_answer": "indisposto"
+        },
+        {
+          "question": "\"cost an arm and a leg\" =",
+          "options": [
+            "muito barato",
+            "muito caro",
+            "grátis"
+          ],
+          "correct_index": 1,
+          "correct_answer": "muito caro"
+        },
+        {
+          "question": "\"Vamos encerrar por hoje\":",
+          "options": [
+            "Call it a day",
+            "Call the day",
+            "Make a day"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Call it a day"
+        },
+        {
+          "question": "\"___ sense\":",
+          "options": [
+            "do",
+            "make",
+            "take"
+          ],
+          "correct_index": 1,
+          "correct_answer": "make"
+        },
+        {
+          "question": "\"não é difícil\":",
+          "options": [
+            "It's not rocket science",
+            "It's rocket science",
+            "It's a rocket"
+          ],
+          "correct_index": 0,
+          "correct_answer": "It's not rocket science"
+        }
+      ]
+    },
+    {
+      "week": 24,
+      "questions": [
+        {
+          "question": "Contraste formal:",
+          "options": [
+            "but",
+            "however",
+            "so"
+          ],
+          "correct_index": 1,
+          "correct_answer": "however"
+        },
+        {
+          "question": "Adição formal:",
+          "options": [
+            "and",
+            "furthermore",
+            "also"
+          ],
+          "correct_index": 1,
+          "correct_answer": "furthermore"
+        },
+        {
+          "question": "Conclusão formal:",
+          "options": [
+            "so",
+            "therefore",
+            "but"
+          ],
+          "correct_index": 1,
+          "correct_answer": "therefore"
+        },
+        {
+          "question": "Formal de \"kids\":",
+          "options": [
+            "babies",
+            "children",
+            "youngsters"
+          ],
+          "correct_index": 1,
+          "correct_answer": "children"
+        },
+        {
+          "question": "Discordar formalmente:",
+          "options": [
+            "No way",
+            "I beg to differ",
+            "You're wrong"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I beg to differ"
+        },
+        {
+          "question": "Concordar fortemente:",
+          "options": [
+            "I couldn't agree more",
+            "Maybe",
+            "I guess"
+          ],
+          "correct_index": 0,
+          "correct_answer": "I couldn't agree more"
+        },
+        {
+          "question": "\"Com o devido respeito\":",
+          "options": [
+            "With all due respect",
+            "With all respect due",
+            "By due respect"
+          ],
+          "correct_index": 0,
+          "correct_answer": "With all due respect"
+        },
+        {
+          "question": "Registro de \"What's up?\":",
+          "options": [
+            "formal",
+            "informal",
+            "acadêmico"
+          ],
+          "correct_index": 1,
+          "correct_answer": "informal"
+        },
+        {
+          "question": "C1 significa saber:",
+          "options": [
+            "só falar formal",
+            "alternar registros",
+            "só falar informal"
+          ],
+          "correct_index": 1,
+          "correct_answer": "alternar registros"
+        },
+        {
+          "question": "\"Para ser justo\":",
+          "options": [
+            "To be fair",
+            "For fair",
+            "By fair"
+          ],
+          "correct_index": 0,
+          "correct_answer": "To be fair"
+        }
+      ]
+    },
+    {
+      "week": 25,
+      "questions": [
+        {
+          "question": "Estado passado:",
+          "options": [
+            "I would live in Rio",
+            "I used to live in Rio",
+            "I live in Rio"
+          ],
+          "correct_index": 1,
+          "correct_answer": "I used to live in Rio"
+        },
+        {
+          "question": "Ação repetida passada:",
+          "options": [
+            "We would travel every summer",
+            "We used travel",
+            "We will travel"
+          ],
+          "correct_index": 0,
+          "correct_answer": "We would travel every summer"
+        },
+        {
+          "question": "\"quase não\":",
+          "options": [
+            "hard",
+            "hardly",
+            "hardy"
+          ],
+          "correct_index": 1,
+          "correct_answer": "hardly"
+        },
+        {
+          "question": "\"engraçado\":",
+          "options": [
+            "fun",
+            "funny",
+            "funky"
+          ],
+          "correct_index": 1,
+          "correct_answer": "funny"
+        },
+        {
+          "question": "\"lembrar alguém\":",
+          "options": [
+            "remember",
+            "remind",
+            "memorize"
+          ],
+          "correct_index": 1,
+          "correct_answer": "remind"
+        },
+        {
+          "question": "Negativo de \"possible\":",
+          "options": [
+            "unpossible",
+            "impossible",
+            "dispossible"
+          ],
+          "correct_index": 1,
+          "correct_answer": "impossible"
+        },
+        {
+          "question": "Substantivo de \"happy\":",
+          "options": [
+            "happyness",
+            "happiness",
+            "happyment"
+          ],
+          "correct_index": 1,
+          "correct_answer": "happiness"
+        },
+        {
+          "question": "Americano de \"lift\":",
+          "options": [
+            "elevator",
+            "stairs",
+            "escalator"
+          ],
+          "correct_index": 0,
+          "correct_answer": "elevator"
+        },
+        {
+          "question": "\"Pensando bem\":",
+          "options": [
+            "Come to think of it",
+            "Coming to think",
+            "Think of it"
+          ],
+          "correct_index": 0,
+          "correct_answer": "Come to think of it"
+        },
+        {
+          "question": "Sotaque padrão dos EUA:",
+          "options": [
+            "Southern",
+            "General American",
+            "Cockney"
+          ],
+          "correct_index": 1,
+          "correct_answer": "General American"
+        }
+      ]
+    },
+    {
+      "week": 26,
+      "questions": [
+        {
+          "question": "Abertura de opinião C1:",
+          "options": [
+            "I think maybe",
+            "In my view",
+            "I dunno but"
+          ],
+          "correct_index": 1,
+          "correct_answer": "In my view"
+        },
+        {
+          "question": "Introduzir exemplo:",
+          "options": [
+            "For instance",
+            "Because",
+            "And then"
+          ],
+          "correct_index": 0,
+          "correct_answer": "For instance"
+        },
+        {
+          "question": "\"faca de dois gumes\":",
+          "options": [
+            "double-edged sword",
+            "two knives",
+            "sharp sword"
+          ],
+          "correct_index": 0,
+          "correct_answer": "double-edged sword"
+        },
+        {
+          "question": "\"até certo ponto\":",
+          "options": [
+            "to a certain extent",
+            "at certain point",
+            "in a certain way"
+          ],
+          "correct_index": 0,
+          "correct_answer": "to a certain extent"
+        },
+        {
+          "question": "\"Não dá para negar\":",
+          "options": [
+            "There's no denying",
+            "No deny that",
+            "It's no deny"
+          ],
+          "correct_index": 0,
+          "correct_answer": "There's no denying"
+        },
+        {
+          "question": "Concluir argumento:",
+          "options": [
+            "At the end of the day",
+            "In the end of day",
+            "By the end day"
+          ],
+          "correct_index": 0,
+          "correct_answer": "At the end of the day"
+        },
+        {
+          "question": "Defender posição:",
+          "options": [
+            "I'd argue that",
+            "I argue for",
+            "My argue is"
+          ],
+          "correct_index": 0,
+          "correct_answer": "I'd argue that"
+        },
+        {
+          "question": "Manutenção mínima diária recomendada:",
+          "options": [
+            "0 min",
+            "15 min de conversa",
+            "3 horas"
+          ],
+          "correct_index": 1,
+          "correct_answer": "15 min de conversa"
+        },
+        {
+          "question": "Certificações citadas:",
+          "options": [
+            "TOEFL/IELTS/Cambridge",
+            "OAB",
+            "ENEM"
+          ],
+          "correct_index": 0,
+          "correct_answer": "TOEFL/IELTS/Cambridge"
+        },
+        {
+          "question": "Fluência é:",
+          "options": [
+            "ponto de chegada",
+            "estado mantido com uso",
+            "diploma"
+          ],
+          "correct_index": 1,
+          "correct_answer": "estado mantido com uso"
+        }
+      ]
+    }
+  ]
+}

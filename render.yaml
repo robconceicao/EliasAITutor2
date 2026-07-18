@@ -1,0 +1,61 @@
+# Render Blueprint — Elias AI Tutor backend (Socket.io + ElevenLabs TTS)
+# Docs: https://render.com/docs/blueprint-spec
+# Apply: Dashboard → New → Blueprint → select this repo
+# Or update the existing service "eliasaitutor2" settings to match below.
+#
+# SECRETS: never put API keys here. Set them in the Render Dashboard
+# (Environment) or when the Blueprint prompts for sync: false vars.
+
+services:
+  - type: web
+    name: eliasaitutor2
+    runtime: node
+    plan: free
+    # Production tracks main. Merge feat/task-final-tts-echo-complete first
+    # so TTS REST fallback + health key source ship to production.
+    branch: main
+    rootDir: backend_nodejs
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      # Pin Node for native modules (@discordjs/opus)
+      - key: NODE_VERSION
+        value: "20.18.0"
+
+      # ── Required secrets (fill in Dashboard — do not commit values) ──
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      # Alias also supported by code; prefer ELEVENLABS_API_KEY above
+      - key: My-English-Coach-Key
+        sync: false
+
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+      # Optional
+      - key: MONGODB_URI
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+
+      # ── Safe defaults (male US voice — Liam; never Adam) ──
+      - key: MAIN_CHAT_VOICE_ID
+        value: TX3LPaxmHKxFdv7VOQHJ
+      - key: FALLBACK_VOICE_ID
+        value: iP95p4xoKVk53GoZ742B
+      - key: ELEVENLABS_STREAM_MODEL
+        value: eleven_flash_v2_5
+      - key: ELEVENLABS_OUTPUT_FORMAT
+        value: pcm_24000
+      - key: ELEVENLABS_STREAM_LATENCY
+        value: "3"
+      - key: DEFAULT_LLM
+        value: groq

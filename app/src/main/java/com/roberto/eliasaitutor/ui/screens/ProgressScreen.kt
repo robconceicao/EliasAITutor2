@@ -13,34 +13,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roberto.eliasaitutor.data.GameConstants
 import com.roberto.eliasaitutor.model.SentimentEntry
+import com.roberto.eliasaitutor.program.ProgramViewModel
 import com.roberto.eliasaitutor.ui.components.RadarChart
+import com.roberto.eliasaitutor.ui.theme.EliasTokens
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Bg      = Color(0xFF0d0f14)
-private val Surface = Color(0xFF161922)
-private val Border  = Color(0xFF252a35)
-private val Accent  = Color(0xFF4f8ef7)
-private val Gold    = Color(0xFFf7c94f)
-private val Green   = Color(0xFF3ecf8e)
-private val Red     = Color(0xFFf76f6f)
-private val Muted   = Color(0xFF7a8099)
-private val Purple  = Color(0xFFa855f7)
+private val Bg      = EliasTokens.Bg
+private val Surface = EliasTokens.Surface
+private val Border  = EliasTokens.Border
+private val Accent  = EliasTokens.Accent
+private val Gold    = EliasTokens.Gold
+private val Green   = EliasTokens.Green
+private val Red     = EliasTokens.Red
+private val Muted   = EliasTokens.Muted
+private val Purple  = EliasTokens.Purple
 
 @Composable
-fun ProgressScreen(vm: EliasViewModel) {
+fun ProgressScreen(vm: EliasViewModel, programVm: ProgramViewModel? = null) {
     val profile   by vm.profile.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
+    val programUiState = programVm?.ui?.collectAsState()?.value
 
     val lvl5Xp  = GameConstants.LEVEL_THRESHOLDS[5]!!
     val lvl10Xp = GameConstants.LEVEL_THRESHOLDS[10]!!
 
     Column(Modifier.fillMaxSize().background(Bg).verticalScroll(rememberScrollState()).padding(16.dp)) {
 
-        Text("Progresso", color = Color(0xFFe8eaf0), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text("Streak · XP · erros comuns · soft skills", color = Muted, fontSize = 12.sp)
+        Text("Progresso", color = EliasTokens.TextMain, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("Streak · programa · XP · erros · soft skills", color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(16.dp))
 
         // ── Streak first (Task Final Fase 2) ───────────────────────────────
@@ -51,7 +54,7 @@ fun ProgressScreen(vm: EliasViewModel) {
                     Text("🔥 Streak diário", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text(
                         "${profile.streak} dia${if (profile.streak != 1) "s" else ""} seguidos",
-                        color = Color(0xFFe8eaf0), fontSize = 22.sp, fontWeight = FontWeight.Bold
+                        color = EliasTokens.TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold
                     )
                     Text(
                         "Constância > intensidade · +${GameConstants.STREAK_BONUS_COINS} coins/dia",
@@ -62,6 +65,71 @@ fun ProgressScreen(vm: EliasViewModel) {
                     Text("🛡️", fontSize = 28.sp)
                     Text("${profile.streakFreezeCount}", color = Gold, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     Text("Shields", color = Muted, fontSize = 10.sp)
+                }
+            }
+        }
+
+        // Fase 5 — held_back / dias pausados do programa
+        if (programUiState != null) {
+            val ps = programUiState.state
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (ps.heldBack) Color(0xFF2A1A0A) else Surface
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (ps.heldBack) EliasTokens.Orange.copy(alpha = 0.5f)
+                    else EliasTokens.Teal.copy(alpha = 0.35f)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "Programa · 26 semanas",
+                        color = if (ps.heldBack) EliasTokens.Orange else EliasTokens.Teal,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Semana", color = Muted, fontSize = 11.sp)
+                            Text(
+                                "${ps.currentWeek}",
+                                color = EliasTokens.TextMain,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            )
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Dias pausados", color = Muted, fontSize = 11.sp)
+                            Text(
+                                "${ps.totalPausedDays}",
+                                color = EliasTokens.TextMain,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            )
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Status", color = Muted, fontSize = 11.sp)
+                            Text(
+                                if (ps.heldBack) "Revisão" else "Em curso",
+                                color = if (ps.heldBack) EliasTokens.Orange else Green,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                    if (ps.heldBack && !ps.deficientTopics.isNullOrEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Pendências: ${ps.deficientTopics!!.take(3).joinToString(" · ")}",
+                            color = Muted,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
         }

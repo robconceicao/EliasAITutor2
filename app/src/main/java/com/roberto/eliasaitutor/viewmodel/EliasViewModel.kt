@@ -8,8 +8,15 @@ import com.roberto.eliasaitutor.data.DataStoreManager
 import com.roberto.eliasaitutor.data.GameConstants
 import com.roberto.eliasaitutor.model.*
 import com.roberto.eliasaitutor.network.*
+import android.media.MediaPlayer
+import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import java.time.LocalDate
@@ -33,8 +40,18 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    /**
+     * A.5: visible when a chat/network wait timed out — UI must offer retry, never infinite spinner.
+     */
+    private val _loadError = MutableStateFlow<String?>(null)
+    val loadError: StateFlow<String?> = _loadError
+
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage
+
+    /** Max wait for first texto_chunk / mensagem_ia after send (A.5). TTS first-byte is 8s on backend. */
+    private val responseTimeoutMs = 45_000L
+    private var responseTimeoutJob: Job? = null
 
     /**
      * Active chat flow: FREE by default; PROGRAM when started from Programa tab.
@@ -54,6 +71,30 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private var pendingTranslationIndex: Int = -1
+
+    /** Clear infinite-loading guard when any LLM/TTS progress arrives. */
+    private fun clearResponseTimeout() {
+        responseTimeoutJob?.cancel()
+        responseTimeoutJob = null
+    }
+
+    private fun armResponseTimeout() {
+        clearResponseTimeout()
+        _loadError.value = null
+        responseTimeoutJob = viewModelScope.launch {
+            delay(responseTimeoutMs)
+            if (_isLoading.value) {
+                _isLoading.value = false
+                _loadError.value =
+                    "Demorou demais para responder. Verifique a conexão e tente de novo."
+                _toastMessage.value = "Tempo esgotado — tente novamente"
+            }
+        }
+    }
+
+    fun clearLoadError() {
+        _loadError.value = null
+    }
 
     private val bargeInController by lazy {
         com.roberto.eliasaitutor.audio.BargeInController(
@@ -88,6 +129,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     private val fallbackPcmPlayer = PcmFloatPlayer()
+    private val audioHelper = com.roberto.eliasaitutor.audio.AudioHelper(app)
     private var speechRecognizer: android.speech.SpeechRecognizer? = null
 
     private val _userVoiceRms = MutableStateFlow(0f)
@@ -104,6 +146,14 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     val isIaSpeaking: StateFlow<Boolean> = _isIaSpeaking
 
     private var streamingBubbleIndex = -1
+
+    /**
+     * When backend TTS fails (missing Render key / voice_open_failed), speak the
+     * last Elias text via client ElevenLabs REST (mp3 → MediaPlayer).
+     */
+    @Volatile private var pendingClientTtsText: String? = null
+    @Volatile private var backendTtsFailed = false
+    private var clientTtsJob: Job? = null
 
     private fun initSpeechRecognizer() {
         try {
@@ -211,18 +261,314 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
 
+    /**
+     * Immersion / Echo / replay: backend ElevenLabs stream first (Opus path).
+     * Falls back to client REST TTS when offline or backend reports voice failure.
+     * [onCompletion] fires when playback ends (or after failure).
+     */
     fun speakText(text: String, onCompletion: () -> Unit = {}) {
-        // Fallback for immersion / shadowing now uses backend ElevenLabs unification
-        com.roberto.eliasaitutor.network.SocketClient.sendShadowSpeak(text)
-        onCompletion()
+        if (text.isBlank()) {
+            onCompletion()
+            return
+        }
+        val cleaned = text.trim()
+        if (!SocketClient.connectionStatus.value) {
+            viewModelScope.launch {
+                val ok = playClientTts(cleaned)
+                if (!ok) {
+                    _toastMessage.value = "Offline — conecte-se para ouvir o áudio"
+                }
+                onCompletion()
+            }
+            return
+        }
+        backendTtsFailed = false
+        SocketClient.sendShadowSpeak(cleaned)
+        viewModelScope.launch {
+            val started = withTimeoutOrNull(10_000) {
+                SocketClient.iaStateFlow.first { it == "falando" }
+            }
+            if (started == null || backendTtsFailed) {
+                val ok = playClientTts(cleaned)
+                if (!ok && !backendTtsFailed) {
+                    _toastMessage.value = "Voz indisponível — tente de novo"
+                }
+                onCompletion()
+                return@launch
+            }
+            withTimeoutOrNull(60_000) {
+                SocketClient.iaStateFlow.first { it == "ociosa" }
+            }
+            if (backendTtsFailed) {
+                playClientTts(cleaned)
+            }
+            onCompletion()
+        }
     }
 
-    fun submitShadowingAudio(audioFile: java.io.File, phrase: String = "") {
-        // Dummy implementation
+    /**
+     * Emergency client-side TTS (ElevenLabs REST → mp3). Returns true if audio started.
+     */
+    private suspend fun playClientTts(text: String): Boolean {
+        if (text.isBlank()) return false
+        if (!ElevenLabsClient.hasApiKey) {
+            android.util.Log.w(
+                "EliasViewModel",
+                "Client TTS skipped — no ELEVENLABS_API_KEY / My-English-Coach-Key in BuildConfig"
+            )
+            return false
+        }
+        return withContext(Dispatchers.IO) {
+            try {
+                clientTtsJob?.cancel()
+                val body = ElevenLabsClient.textToSpeech(text)
+                val bytes = body.bytes()
+                if (bytes.size < 200) {
+                    android.util.Log.e("EliasViewModel", "Client TTS empty body size=${bytes.size}")
+                    return@withContext false
+                }
+                withContext(Dispatchers.Main) {
+                    _isIaSpeaking.value = true
+                    audioHelper.playAudio(bytes) {
+                        _isIaSpeaking.value = false
+                    }
+                }
+                android.util.Log.i("EliasViewModel", "Client TTS playing ${bytes.size} bytes")
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("EliasViewModel", "Client TTS failed: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    _isIaSpeaking.value = false
+                }
+                false
+            }
+        }
     }
+
+    /** Speak last Elias bubble via client when backend stream failed. */
+    private fun maybeClientSpeakPending() {
+        val text = pendingClientTtsText?.trim().orEmpty()
+        if (text.isEmpty() || !backendTtsFailed) return
+        pendingClientTtsText = null
+        clientTtsJob?.cancel()
+        clientTtsJob = viewModelScope.launch {
+            delay(200) // let any late opus frames settle
+            if (_isIaSpeaking.value) return@launch
+            val ok = playClientTts(text)
+            if (ok) {
+                _toastMessage.value = "Voz (fallback local)"
+            }
+        }
+    }
+
+    private val _shadowTranscript = MutableStateFlow("")
+    val shadowTranscript: StateFlow<String> = _shadowTranscript
+
+    /**
+     * Echo scoring:
+     * - Online: backend Whisper (Groq) + LLM / word-overlap / duration heuristic
+     * - Offline: local duration heuristic
+     * Awards XP/coins once per successful score.
+     */
+    fun submitShadowingAudio(audioFile: java.io.File, phrase: String = "") {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _shadowScore.value = null
+            _shadowFeedback.value = ""
+            _shadowTranscript.value = ""
+            try {
+                val target = phrase.ifBlank { _shadowPhrase.value }
+                if (!audioFile.exists() || audioFile.length() < 400L) {
+                    applyShadowScore(
+                        score = 28,
+                        feedback = "Gravação vazia ou muito curta. Segure o mic e fale a frase completa de uma vez.",
+                        awardRewards = false,
+                    )
+                    return@launch
+                }
+
+                val durationMs = withContext(Dispatchers.IO) { probeAudioDurationMs(audioFile) }
+                val focus = PronunciationFocus.focusOfDay()
+
+                if (SocketClient.connectionStatus.value) {
+                    val b64 = withContext(Dispatchers.IO) {
+                        val bytes = audioFile.readBytes()
+                        // Cap ~2MB base64 payload
+                        if (bytes.size > 2_000_000) {
+                            null
+                        } else {
+                            Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        }
+                    }
+                    if (b64 == null) {
+                        applyLocalHeuristicScore(target, durationMs, focus, audioFile.length())
+                        return@launch
+                    }
+
+                    val reqId = "echo_${System.currentTimeMillis()}"
+                    SocketClient.requestEchoScore(
+                        reference = target,
+                        audioBase64 = b64,
+                        mimeType = "audio/mp4",
+                        durationMs = durationMs,
+                        focus = focus,
+                        requestId = reqId,
+                    )
+
+                    val remote = withTimeoutOrNull(45_000) {
+                        SocketClient.echoScoreFlow.first {
+                            it.requestId == null || it.requestId == reqId || it.requestId.isNullOrBlank()
+                        }
+                    }
+                    if (remote != null && remote.ok) {
+                        _shadowTranscript.value = remote.transcript
+                        val fb = buildString {
+                            append(remote.feedback.ifBlank { "Continue praticando!" })
+                            if (remote.transcript.isNotBlank() &&
+                                !remote.feedback.contains(remote.transcript)
+                            ) {
+                                append("\nVocê disse: “${remote.transcript}”")
+                            }
+                        }
+                        applyShadowScore(
+                            remote.score.coerceIn(1, 100),
+                            fb,
+                            awardRewards = true,
+                        )
+                        return@launch
+                    }
+                    // Fall through to local if backend timed out / failed
+                }
+
+                applyLocalHeuristicScore(target, durationMs, focus, audioFile.length())
+            } catch (e: Exception) {
+                applyShadowScore(
+                    score = 50,
+                    feedback = "Gravação recebida. Ouça o Echo e compare com Elias. " +
+                        PronunciationFocus.coachingTip(),
+                    awardRewards = false,
+                )
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private suspend fun applyLocalHeuristicScore(
+        target: String,
+        durationMs: Long,
+        focus: String,
+        sizeBytes: Long,
+    ) {
+        val wordCount = target.trim()
+            .split(Regex("\\s+"))
+            .count { it.isNotEmpty() }
+            .coerceAtLeast(1)
+        val expectedMs = (wordCount * 320 + 450).coerceIn(900, 14_000)
+        val ratio = if (durationMs > 0) durationMs.toDouble() / expectedMs else 0.65
+
+        val durationScore = when {
+            durationMs in 1..399 -> 32
+            ratio < 0.35 -> 42
+            ratio < 0.55 -> 58
+            ratio <= 1.4 -> 84
+            ratio <= 2.0 -> 72
+            else -> 54
+        }
+        val sizeScore = when {
+            sizeBytes < 2_500L -> 38
+            sizeBytes < 10_000L -> 62
+            else -> 80
+        }
+        var score = ((durationScore * 0.65) + (sizeScore * 0.35)).toInt()
+        if (ratio in 0.7..1.35) score = (score + 6).coerceAtMost(94)
+        score = score.coerceIn(20, 95)
+
+        val tip = PronunciationFocus.coachingTip(focus)
+        val headline = when {
+            score >= 85 -> "Excelente ritmo e presença de voz."
+            score >= 65 -> "Bom eco — continue imitando o modelo."
+            else -> "Tente de novo: ouça Elias e repita em um fôlego."
+        }
+        val timingNote = when {
+            durationMs > 0 && ratio < 0.5 -> " A gravação parece curta demais para a frase."
+            durationMs > 0 && ratio > 1.85 -> " Fale um pouco mais fluido, sem alongar demais."
+            else -> ""
+        }
+        val ipaHint = when (focus) {
+            "IPA" -> " Confira /θ/ /ð/ /æ/ e vogais longas no cartão IPA."
+            "Schwa" -> " Enfraqueça sílabas átonas para /ə/."
+            "Linking" -> " Ligue consoante final + vogal (ex.: pick_it_up)."
+            "Elisão" -> " Use reduções naturais (wanna / gonna) sem perder clareza."
+            "Entonação" -> " Caia em afirmações; marque content words."
+            else -> " Compare sílaba a sílaba com o modelo de Elias."
+        }
+        applyShadowScore(
+            score = score,
+            feedback = "$headline$timingNote$ipaHint Foco de hoje ($focus): $tip",
+            awardRewards = true,
+        )
+    }
+
+    private suspend fun applyShadowScore(score: Int, feedback: String, awardRewards: Boolean) {
+        val sc = score.coerceIn(0, 100)
+        _shadowScore.value = sc
+        _shadowFeedback.value = feedback
+        if (!awardRewards) return
+        val cur = profile.first()
+        ds.save(
+            cur.copy(
+                xp = cur.xp + GameConstants.SHADOWING_XP,
+                coins = cur.coins + GameConstants.SHADOWING_COINS,
+                clarity = (cur.clarity * 0.7 + sc * 0.3).toInt().coerceIn(0, 100),
+            )
+        )
+    }
+
+    private fun probeAudioDurationMs(file: java.io.File): Long {
+        return try {
+            val mmr = android.media.MediaMetadataRetriever()
+            mmr.setDataSource(file.absolutePath)
+            val d = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            mmr.release()
+            d
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private var localMediaPlayer: MediaPlayer? = null
 
     fun playLocalFile(file: java.io.File, onCompletion: () -> Unit = {}) {
-        // Dummy implementation
+        if (!file.exists() || file.length() == 0L) {
+            _toastMessage.value = "Nenhuma gravação para ouvir"
+            onCompletion()
+            return
+        }
+        try {
+            localMediaPlayer?.release()
+            localMediaPlayer = MediaPlayer().apply {
+                setDataSource(file.absolutePath)
+                setOnCompletionListener {
+                    it.release()
+                    if (localMediaPlayer === it) localMediaPlayer = null
+                    onCompletion()
+                }
+                setOnErrorListener { mp, _, _ ->
+                    mp.release()
+                    if (localMediaPlayer === mp) localMediaPlayer = null
+                    onCompletion()
+                    true
+                }
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            localMediaPlayer = null
+            _toastMessage.value = "Não foi possível reproduzir a gravação"
+            onCompletion()
+        }
     }
 
     // ── Scenario ───────────────────────────────────────────────────────────────
@@ -273,6 +619,9 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             SocketClient.opusFrameFlow.collect { frame ->
+                backendTtsFailed = false
+                pendingClientTtsText = null
+                clientTtsJob?.cancel()
                 opusAudioPlayer.startPlayout()
                 opusAudioPlayer.handleIncomingOpusFrame(frame.data, frame.seq, frame.ts)
                 _jitterStats.value = opusAudioPlayer.getJitterStats()
@@ -294,24 +643,84 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             SocketClient.erroFlow.collect { errorMsg ->
                 _toastMessage.value = "Erro no servidor: $errorMsg"
                 _isLoading.value = false
+                clearResponseTimeout()
+                _loadError.value = errorMsg
+            }
+        }
+
+        viewModelScope.launch {
+            SocketClient.ttsUnavailableFlow.collect { reason ->
+                // Drop any late primary frames that may still be in the jitter buffer
+                opusAudioPlayer.stopPlayout()
+                _isIaSpeaking.value = false
+                backendTtsFailed = true
+                // Backend already falls back to text-only; surface once, never hang spinner
+                clearResponseTimeout()
+                val friendly = when {
+                    reason.contains("api_key_missing", ignoreCase = true) ||
+                        reason.contains("ELEVENLABS_API_KEY", ignoreCase = true) ->
+                        "Voz: chave ElevenLabs ausente no servidor — tentando fallback local"
+                    reason.contains("voice_open_failed", ignoreCase = true) ->
+                        "Voz indisponível no servidor — tentando fallback local"
+                    reason.contains("first_audio", ignoreCase = true) ||
+                        reason.contains("timeout", ignoreCase = true) ->
+                        "Voz demorou demais — tentando fallback local"
+                    else ->
+                        "Voz indisponível (${reason.ifBlank { "erro" }}) — texto mantido"
+                }
+                if (_isLoading.value && _chatBubbles.value.none { !it.isUser }) {
+                    // Still waiting for text — keep loading until texto_chunk or response timeout
+                    _toastMessage.value = friendly
+                } else {
+                    _isLoading.value = false
+                    _toastMessage.value = friendly
+                    // Prefer pending text; else last Elias bubble
+                    if (pendingClientTtsText.isNullOrBlank()) {
+                        pendingClientTtsText = _chatBubbles.value
+                            .lastOrNull { !it.isUser && it.message.isNotBlank() }
+                            ?.message
+                    }
+                    maybeClientSpeakPending()
+                }
+            }
+        }
+
+        // Progressive TTS status (fallback voice) — light UX; full polish later
+        viewModelScope.launch {
+            SocketClient.ttsStatusFlow.collect { msg ->
+                if (msg.isNotBlank()) {
+                    _toastMessage.value = msg
+                    // Clear any primary audio still buffered while switching voices
+                    opusAudioPlayer.stopPlayout()
+                }
             }
         }
 
         viewModelScope.launch {
             SocketClient.traducaoFlow.collect { result ->
+                translationTimeoutJob?.cancel()
+                translationTimeoutJob = null
                 val idx = result.requestId?.toIntOrNull() ?: pendingTranslationIndex
                 if (idx < 0) return@collect
                 val bubbles = _chatBubbles.value.toMutableList()
                 if (idx >= bubbles.size) return@collect
                 val b = bubbles[idx]
                 bubbles[idx] = if (result.ok && result.translation.isNotBlank()) {
-                    b.copy(translationPt = result.translation, isTranslating = false)
+                    b.copy(
+                        translationPt = result.translation,
+                        isTranslating = false,
+                        translationError = null,
+                    )
                 } else {
-                    b.copy(isTranslating = false)
+                    b.copy(
+                        isTranslating = false,
+                        translationError = result.error?.ifBlank { null }
+                            ?: "Não foi possível traduzir",
+                    )
                 }
                 _chatBubbles.value = bubbles
                 if (!result.ok) {
-                    _toastMessage.value = "Tradução indisponível: ${result.error ?: "tente de novo"}"
+                    _toastMessage.value = "Tradução: ${result.error ?: "tente de novo"}"
                 }
                 pendingTranslationIndex = -1
             }
@@ -320,14 +729,18 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             SocketClient.textoChunkFlow.collect { chunk ->
                 _isLoading.value = false
+                clearResponseTimeout()
+                _loadError.value = null
                 val bubbles = _chatBubbles.value.toMutableList()
                 if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
                     val prev = bubbles[streamingBubbleIndex]
                     bubbles[streamingBubbleIndex] = prev.copy(message = prev.message + chunk)
+                    pendingClientTtsText = bubbles[streamingBubbleIndex].message
                 } else {
                     val newBubble = UiChatBubble(message = chunk, isUser = false)
                     bubbles.add(newBubble)
                     streamingBubbleIndex = bubbles.size - 1
+                    pendingClientTtsText = chunk
                 }
                 _chatBubbles.value = bubbles
             }
@@ -336,11 +749,17 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             SocketClient.mensagemIaFlow.collect { finalBubble ->
                 _isLoading.value = false
+                clearResponseTimeout()
+                _loadError.value = null
                 val bubbles = _chatBubbles.value.toMutableList()
                 if (streamingBubbleIndex != -1 && streamingBubbleIndex < bubbles.size) {
                     bubbles[streamingBubbleIndex] = finalBubble
                 } else {
                     bubbles.add(finalBubble)
+                }
+                pendingClientTtsText = finalBubble.message
+                if (backendTtsFailed) {
+                    maybeClientSpeakPending()
                 }
                 _chatBubbles.value = bubbles
                 streamingBubbleIndex = -1 // Reset for next response
@@ -499,7 +918,8 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * PROGRAM flow (Task Final): no level picker, week prompt, auto TTS via backend stream.
+     * PROGRAM flow (Task Final / A.1): no level picker, week prompt, auto TTS via backend stream.
+     * [level] must come from program_weeks.level for the current week — never user self-report.
      */
     fun beginProgramSession(
         week: Int,
@@ -509,6 +929,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         phase: Int,
         sessionType: String,
         userId: String,
+        level: String = "",
     ) {
         _chatContext.value = com.roberto.eliasaitutor.model.ChatContext(
             type = com.roberto.eliasaitutor.model.ChatType.PROGRAM,
@@ -518,6 +939,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             grammar = grammar,
             phase = phase,
             sessionType = sessionType,
+            level = level,
         )
         _chatBubbles.value = emptyList()
         claudeHistory.clear()
@@ -525,18 +947,23 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         isInterrupted = false
         _selectedScenario.value = ""
         _isLoading.value = true
+        armResponseTimeout()
 
         SocketClient.iniciarSessaoPrograma(userId, week, sessionType)
 
         // Brief delay so backend locks program prompt + TTS before kickoff (lower first-byte lag)
         viewModelScope.launch {
             kotlinx.coroutines.delay(450)
+            val dayFocus = PronunciationFocus.focusOfDay()
+            val cefr = level.ifBlank { "from week curriculum" }
             val kickoff =
                 "[PROGRAM_SESSION_START] Roberto is ready for today's ${sessionType} session. " +
-                    "Week $week — $title. Theme/lexis: $lexis. Grammar: $grammar. " +
-                    "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level. " +
+                    "Week $week — $title (CEFR $cefr). Theme/lexis: $lexis. Grammar: $grammar. " +
+                    "MODE: Pronúncia Avançada Máxima ON. Do NOT ask level — curriculum level is $cefr. " +
+                    "${PronunciationFocus.kickoffHint(dayFocus)} " +
                     "Open with the official Portuguese greeting, then coach with full focus on " +
-                    "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation. " +
+                    "IPA + Shadowing + Schwa + Linked Speech + Elision + Intonation " +
+                    "(prioritize $dayFocus today). " +
                     "Use ready drills (1–5) with phrase+IPA+contrast+shadowing; demand excellence before next phrase. " +
                     "TTS streams automatically — speak naturally for voice."
             SocketClient.enviarMensagem(kickoff)
@@ -553,24 +980,82 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Translate Elias bubble at [index] via backend LLM — shows PT under the message. */
+    private var translationTimeoutJob: Job? = null
+    private val translationTimeoutMs = 12_000L
+
+    /** Translate Elias bubble at [index] via backend LLM — PT under EN, never replaces original. */
     fun translateBubble(index: Int) {
         val bubbles = _chatBubbles.value
         if (index !in bubbles.indices) return
         val b = bubbles[index]
         if (b.isUser || b.message.isBlank()) return
         if (b.translationPt != null) return // already translated
+        if (!SocketClient.connectionStatus.value) {
+            _toastMessage.value = "Offline — conecte-se para traduzir"
+            _chatBubbles.value = bubbles.toMutableList().also {
+                it[index] = b.copy(
+                    isTranslating = false,
+                    translationError = "Offline — toque para tentar de novo",
+                )
+            }
+            return
+        }
         pendingTranslationIndex = index
+        translationTimeoutJob?.cancel()
         _chatBubbles.value = bubbles.toMutableList().also {
-            it[index] = b.copy(isTranslating = true)
+            it[index] = b.copy(isTranslating = true, translationError = null)
         }
         SocketClient.requestTranslation(b.message, requestId = index.toString())
+        // A.5: never leave "Traduzindo…" forever
+        translationTimeoutJob = viewModelScope.launch {
+            delay(translationTimeoutMs)
+            val cur = _chatBubbles.value.toMutableList()
+            if (index !in cur.indices) return@launch
+            val bb = cur[index]
+            if (bb.isTranslating && bb.translationPt == null) {
+                cur[index] = bb.copy(
+                    isTranslating = false,
+                    translationError = "Tempo esgotado — toque para tentar de novo",
+                )
+                _chatBubbles.value = cur
+                _toastMessage.value = "Tradução demorou demais"
+                if (pendingTranslationIndex == index) pendingTranslationIndex = -1
+            }
+        }
     }
 
     /** Translate the last Elias message (voice: "não entendi", "traduz pra mim"). */
     fun translateLastEliasMessage() {
         val idx = _chatBubbles.value.indexOfLast { !it.isUser && it.message.isNotBlank() }
-        if (idx >= 0) translateBubble(idx)
+        if (idx >= 0) {
+            translateBubble(idx)
+        } else {
+            _toastMessage.value = "Nenhuma mensagem do Elias para traduzir ainda"
+        }
+    }
+
+    /**
+     * True when the user utterance is only a translation request (no extra content).
+     * In that case we translate in-place and skip a new chat turn.
+     */
+    fun isPureTranslationRequest(userText: String): Boolean {
+        val t = userText.lowercase().trim()
+            .replace(Regex("[.!?…]+$"), "")
+            .trim()
+        if (t.isBlank()) return false
+        val pure = setOf(
+            "não entendi", "nao entendi",
+            "traduz", "traduza", "traduzir", "traduza pra mim", "traduz pra mim",
+            "traduza para mim", "traduz para mim", "traduza isso", "traduz isso",
+            "me traduz", "me traduza", "em português", "em portugues",
+            "o que significa", "o que que significa", "what does it mean",
+            "translate", "translate please", "i don't understand", "i dont understand",
+        )
+        if (t in pure) return true
+        // Short help phrases that clearly ask only for translation
+        return (t.startsWith("traduz") || t.startsWith("traduza") || t.startsWith("não entendi") ||
+            t.startsWith("nao entendi") || t.startsWith("me traduz") || t.startsWith("em portugu")) &&
+            t.length <= 40
     }
 
     fun sendMessage(userText: String) {
@@ -581,15 +1066,22 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         val minLevel = scenarioData?.first ?: 1
         val p = profile.value
 
-        // Voice/command shortcut: translate last Elias turn without new LLM chat turn
+        // Voice/command: translate last Elias turn
         val lower = userText.lowercase()
-        if (
+        val wantsTranslation =
             lower.contains("não entendi") || lower.contains("nao entendi") ||
-            lower.contains("traduz") || lower.contains("traduza") ||
-            lower.contains("translate")
-        ) {
+                lower.contains("traduz") || lower.contains("traduza") ||
+                lower.contains("translate") || lower.contains("em português") ||
+                lower.contains("em portugues") || lower.contains("o que significa") ||
+                lower.contains("me traduz")
+
+        if (wantsTranslation) {
             translateLastEliasMessage()
-            // Still forward to Elias so he can rephrase in simple English + PT scaffold
+            // Pure translate request → only show PT under last message (no new chat turn)
+            if (isPureTranslationRequest(userText)) {
+                return
+            }
+            // Longer utterance still goes to Elias so he can rephrase simply
         }
 
         // Scenario gates only apply outside program mode
@@ -622,6 +1114,9 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         _isLoading.value = true
         isInterrupted = false
         streamingBubbleIndex = -1
+        backendTtsFailed = false
+        pendingClientTtsText = null
+        armResponseTimeout()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -663,34 +1158,70 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Score from known transcript (no audio file) — LLM or word-overlap. */
     fun scoreShadowing(reference: String, transcribed: String) {
         viewModelScope.launch {
             _isLoading.value = true
+            _shadowTranscript.value = transcribed
             try {
-                val resp = AnthropicClient.api.generateMessage(ClaudeRequest(
-                    max_tokens = 80,
-                    messages = listOf(ClaudeMessage("user",
-                        "Reference: \"$reference\"\nStudent said: \"$transcribed\"\n\n" +
-                        "Score pronunciation 0-100. Reply ONLY with JSON: {\"score\":<int>,\"feedback\":\"<sentence>\"}"))
-                ))
-                val raw = resp.content.firstOrNull()?.text?.trim() ?: "{\"score\":60,\"feedback\":\"Keep practicing!\"}"
-                val obj = JSONObject(raw.removePrefix("```json").removeSuffix("```").trim())
-                _shadowScore.value    = obj.optInt("score", 60).coerceIn(0, 100)
-                _shadowFeedback.value = obj.optString("feedback", "Keep practicing!")
-
-                // reward + clarity update
-                val cur = profile.first()
-                val sc  = _shadowScore.value ?: 60
-                ds.save(cur.copy(
-                    xp    = cur.xp    + GameConstants.SHADOWING_XP,
-                    coins = cur.coins + GameConstants.SHADOWING_COINS,
-                    clarity = (cur.clarity * 0.7 + sc * 0.3).toInt().coerceIn(0, 100),
-                ))
+                val focus = PronunciationFocus.focusOfDay()
+                val localOverlap = estimateWordOverlap(reference, transcribed)
+                try {
+                    val resp = AnthropicClient.api.generateMessage(
+                        ClaudeRequest(
+                            max_tokens = 80,
+                            messages = listOf(
+                                ClaudeMessage(
+                                    "user",
+                                    "Reference: \"$reference\"\nStudent said: \"$transcribed\"\n" +
+                                        "Focus: $focus\n" +
+                                        "Score pronunciation 0-100. Reply ONLY with JSON: " +
+                                        "{\"score\":<int>,\"feedback\":\"<sentence in PT-BR>\"}"
+                                )
+                            )
+                        )
+                    )
+                    val raw = resp.content.firstOrNull()?.text?.trim()
+                        ?: "{\"score\":$localOverlap,\"feedback\":\"Continue praticando!\"}"
+                    val obj = JSONObject(
+                        raw.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                    )
+                    val sc = obj.optInt("score", localOverlap).coerceIn(0, 100)
+                    val blended = ((sc * 0.75) + (localOverlap * 0.25)).toInt().coerceIn(0, 100)
+                    applyShadowScore(
+                        blended,
+                        obj.optString("feedback", "Continue praticando!"),
+                        awardRewards = true,
+                    )
+                } catch (_: Exception) {
+                    applyShadowScore(
+                        localOverlap,
+                        "Você disse: “$transcribed”. ${PronunciationFocus.coachingTip(focus)}",
+                        awardRewards = true,
+                    )
+                }
             } catch (e: Exception) {
-                _shadowScore.value    = 60
-                _shadowFeedback.value = "Keep practicing!"
-            } finally { _isLoading.value = false }
+                applyShadowScore(60, "Continue praticando!", awardRewards = false)
+            } finally {
+                _isLoading.value = false
+            }
         }
+    }
+
+    private fun estimateWordOverlap(reference: String, hypothesis: String): Int {
+        fun words(s: String) = s.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}\\s']"), " ")
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+        val ref = words(reference)
+        val hyp = words(hypothesis)
+        if (ref.isEmpty()) return 50
+        if (hyp.isEmpty()) return 15
+        val set = hyp.toSet()
+        val hit = ref.count { it in set }
+        val coverage = hit.toDouble() / ref.size
+        val extra = (hyp.size - ref.size).coerceAtLeast(0).toDouble() / ref.size
+        return (coverage * 100 - extra * 12).toInt().coerceIn(10, 98)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1003,7 +1534,16 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        super.onCleared()
+        clientTtsJob?.cancel()
+        try {
+            localMediaPlayer?.release()
+        } catch (_: Exception) {
+        }
+        localMediaPlayer = null
+        try {
+            audioHelper.stopPlaying()
+        } catch (_: Exception) {
+        }
         try {
             opusAudioPlayer.release()
         } catch (e: Exception) {
@@ -1019,6 +1559,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        super.onCleared()
         try {
             speechRecognizer?.destroy()
         } catch (e: Exception) {

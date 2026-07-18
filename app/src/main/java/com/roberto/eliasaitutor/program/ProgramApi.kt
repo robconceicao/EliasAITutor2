@@ -56,12 +56,30 @@ interface ProgramApi {
         @Path("week") week: Int,
         @Path("index") index: Int,
     ): ResponseBody
+
+    /** B.6 weekly quiz (answers stripped). */
+    @GET("program/quiz/{week}")
+    suspend fun getQuiz(@Path("week") week: Int): ProgramQuizPayload
+
+    @POST("program/quiz/{week}/submit")
+    suspend fun submitQuiz(
+        @Path("week") week: Int,
+        @Body body: Map<String, @JvmSuppressWildcards Any?>,
+    ): QuizSubmitResult
+
+    @POST("program/checkpoint")
+    suspend fun runCheckpoint(): CheckpointResult
 }
 
 object ProgramApiClient {
+    /** D9 / A.5: program data fetches must not hang forever (default 10s). */
+    private const val PROGRAM_TIMEOUT_SEC = 10L
+
     private val http = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .readTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .writeTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
+        .callTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
         .build()
 
     private fun baseUrl(): String {

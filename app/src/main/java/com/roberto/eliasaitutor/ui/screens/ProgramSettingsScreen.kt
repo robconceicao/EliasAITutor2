@@ -105,6 +105,50 @@ fun ProgramSettingsScreen(
                 }
             }
 
+            // Fase 5 — status do tutor adaptativo (somente leitura)
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (state.heldBack) Color(0xFF2A1A0A) else Surface
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "Tutor adaptativo",
+                        color = if (state.heldBack) Gold else Accent,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Semana ${state.currentWeek}/26 · ${if (state.heldBack) "em revisão" else "em curso"}",
+                        color = TextMain,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        "Dias de calendário pausados: ${state.totalPausedDays}",
+                        color = Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    if (state.heldBack) {
+                        Text(
+                            "O Elias retém o avanço até o checkpoint (quiz + prática + CEFR).",
+                            color = Gold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                    Text(
+                        "O nível nunca é perguntado — vem da semana do programa.",
+                        color = Muted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
+
             Spacer(Modifier.height(16.dp))
             SectionTitle("Data de início")
             OutlinedTextField(

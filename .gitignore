@@ -31,3 +31,11 @@ jks/
 *.keystore
 *.jks
 !debug.keystore
+
+# Program mode chunk TTS cache
+backend_nodejs/cache/
+backend_nodejs/node_modules/
+
+# Kotlin incremental / compiler caches
+.kotlin/
+

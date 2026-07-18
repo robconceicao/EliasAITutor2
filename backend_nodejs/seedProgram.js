@@ -8,7 +8,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { upsertWeeks, setMongoEnabled, getWeekCount, getAllWeeks } from './services/programStore.js';
+import {
+  upsertWeeks,
+  upsertQuizzes,
+  setMongoEnabled,
+  getWeekCount,
+  getAllWeeks,
+} from './services/programStore.js';
 import { pregenerateWeekChunks } from './services/elevenLabsClient.js';
 import { loadCurriculumSeedFile, DEFAULT_SEED_PATH } from './services/loadCurriculumSeed.js';
 
@@ -79,6 +85,19 @@ async function main() {
   console.log(`✅ Re-run complete — still ${all.length} weeks (expected 26)`);
   if (all.length !== 26) {
     process.exitCode = 1;
+  }
+
+  // B.5 quiz seed (separate collection, join by week)
+  const quizPath = path.join(__dirname, 'seeds', 'elias_quiz_seed.json');
+  if (fs.existsSync(quizPath)) {
+    const quizSeed = JSON.parse(fs.readFileSync(quizPath, 'utf8'));
+    const qn = await upsertQuizzes(quizSeed);
+    console.log(
+      `✅ Upserted ${qn} quizzes (pass ${quizSeed.passing_score_percent}%)`
+    );
+    if (qn !== 26) process.exitCode = 1;
+  } else {
+    console.warn('⚠️ Quiz seed missing — skip:', quizPath);
   }
 
   if (mongoose.connection.readyState === 1) {

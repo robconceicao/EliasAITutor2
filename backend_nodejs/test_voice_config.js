@@ -11,6 +11,12 @@ import {
   LEGACY_ADAM_VOICE_ID,
   STREAM_MODEL_ID,
   streamInputUrl,
+  FIRST_AUDIO_BYTE_TIMEOUT_MS,
+  createFirstAudioWatchdog,
+  hasElevenLabsKey,
+  resolveApiKeySource,
+  ensureElevenLabsKeyEnv,
+  apiKey,
 } from './services/elevenLabsClient.js';
 
 const saved = { ...process.env };
@@ -47,12 +53,42 @@ try {
   assert.ok(url.includes('stream-input'));
   assert.ok(url.includes('eleven_flash_v2_5') || url.includes(STREAM_MODEL_ID));
   assert.ok(url.includes('optimize_streaming_latency'), 'latency query present');
+  // pcm_* required for Opus pipeline (mp3 default caused static/hiss)
+  assert.ok(url.includes('output_format=pcm_'), 'PCM output_format required for Opus');
   assert.ok(!url.includes(LEGACY_ADAM_VOICE_ID));
+
+  // D8: first-audio-byte timeout is explicit and watchdog is exportable
+  assert.strictEqual(FIRST_AUDIO_BYTE_TIMEOUT_MS, 8000, 'D8 first-byte default 8s');
+  assert.strictEqual(typeof createFirstAudioWatchdog, 'function');
+
+  // Key alias resolution (My-English-Coach-Key → usable)
+  delete process.env.ELEVENLABS_API_KEY;
+  delete process.env['My-English-Coach-Key'];
+  delete process.env.MY_ENGLISH_COACH_KEY;
+  delete process.env.ELEVEN_LABS_API_KEY;
+  delete process.env.ELEVENLABS_KEY;
+  assert.strictEqual(hasElevenLabsKey(), false, 'no key');
+  assert.strictEqual(resolveApiKeySource(), 'none');
+  process.env['My-English-Coach-Key'] = 'test-key-alias-123';
+  assert.strictEqual(apiKey(), 'test-key-alias-123');
+  assert.strictEqual(resolveApiKeySource(), 'My-English-Coach-Key');
+  assert.ok(ensureElevenLabsKeyEnv());
+  assert.strictEqual(process.env.ELEVENLABS_API_KEY, 'test-key-alias-123');
+  assert.ok(hasElevenLabsKey());
 
   console.log('✅ voice config tests passed');
 } finally {
   Object.assign(process.env, saved);
-  for (const k of ['MAIN_CHAT_VOICE_ID', 'FALLBACK_VOICE_ID', 'CHUNK_VOICE_ID']) {
+  for (const k of [
+    'MAIN_CHAT_VOICE_ID',
+    'FALLBACK_VOICE_ID',
+    'CHUNK_VOICE_ID',
+    'ELEVENLABS_API_KEY',
+    'My-English-Coach-Key',
+    'MY_ENGLISH_COACH_KEY',
+    'ELEVEN_LABS_API_KEY',
+    'ELEVENLABS_KEY',
+  ]) {
     if (!(k in saved)) delete process.env[k];
   }
 }

@@ -41,8 +41,32 @@ export const UserProgramStateSchema = new mongoose.Schema(
     week_mode: { type: String, enum: ['auto', 'manual'], default: 'auto' },
     reminder_time: { type: String, default: null }, // HH:mm or null
     daily_goal_minutes: { type: Number, default: 30 },
+    // B.3 — adaptive tutor / pausable calendar
+    held_back: { type: Boolean, default: false },
+    review_since: { type: String, default: null }, // YYYY-MM-DD
+    total_paused_days: { type: Number, default: 0 },
+    deficient_topics: { type: mongoose.Schema.Types.Mixed, default: null },
+    /** YYYY-MM-DD of last total_paused_days +1 while held_back */
+    last_pause_increment_date: { type: String, default: null },
+    /** Latest quiz result per week: { "3": { score_percent, passed, submitted_at } } */
+    quiz_scores: { type: mongoose.Schema.Types.Mixed, default: {} },
+    /**
+     * Mastery hard-gate: highest week with checkpoint ready=true.
+     * Auto mode never opens week > mastery_cleared_week + 1.
+     */
+    mastery_cleared_week: { type: Number, default: 0, min: 0, max: 26 },
   },
   { collection: 'user_program_state' }
+);
+
+/** B.5 — weekly quiz bank (join to program_weeks by week; keep separate). */
+export const ProgramQuizSchema = new mongoose.Schema(
+  {
+    week: { type: Number, required: true, unique: true, min: 1, max: 26 },
+    passing_score_percent: { type: Number, default: 70 },
+    questions: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  },
+  { collection: 'program_quizzes' }
 );
 
 export const PracticeSessionSchema = new mongoose.Schema(
@@ -71,3 +95,5 @@ export const UserProgramState =
 export const PracticeSession =
   mongoose.models.PracticeSession ||
   mongoose.model('PracticeSession', PracticeSessionSchema);
+export const ProgramQuiz =
+  mongoose.models.ProgramQuiz || mongoose.model('ProgramQuiz', ProgramQuizSchema);

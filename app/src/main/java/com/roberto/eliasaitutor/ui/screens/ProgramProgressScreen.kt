@@ -20,12 +20,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roberto.eliasaitutor.program.ProgramPhaseUi
 import com.roberto.eliasaitutor.program.ProgramViewModel
+import com.roberto.eliasaitutor.ui.theme.EliasTokens
 
-private val Bg = Color(0xFF0d0f14)
-private val Surface = Color(0xFF161922)
-private val Accent = Color(0xFF4f8ef7)
-private val Muted = Color(0xFF7a8099)
-private val TextMain = Color(0xFFE8EAF0)
+private val Bg = EliasTokens.Bg
+private val Surface = EliasTokens.Surface
+private val Accent = EliasTokens.Accent
+private val Muted = EliasTokens.Muted
+private val TextMain = EliasTokens.TextMain
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +64,67 @@ fun ProgramProgressScreen(
                 StatCard("Streak", "${p.streak} dias", Modifier.weight(1f))
                 StatCard("Recorde", "${p.bestStreak} dias", Modifier.weight(1f))
                 StatCard("Hoje", "${p.todayMinutes} min", Modifier.weight(1f))
+            }
+
+            // Fase 5 — tutor adaptativo / calendário pausável
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (ui.state.heldBack) Color(0xFF2A1A0A) else Surface
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        if (ui.state.heldBack) "Modo revisão ativo" else "Tutor adaptativo",
+                        color = if (ui.state.heldBack) EliasTokens.Orange else EliasTokens.Teal,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Semana atual: ${ui.state.currentWeek}/26",
+                        color = TextMain,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        "Dias pausados (revisão): ${ui.state.totalPausedDays}",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                    if (ui.state.heldBack) {
+                        Text(
+                            "held_back = true" +
+                                (ui.state.reviewSince?.let { " · desde $it" } ?: ""),
+                            color = EliasTokens.Orange,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        val topics = ui.state.deficientTopics.orEmpty()
+                        if (topics.isNotEmpty()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text("Pendências:", color = Muted, fontSize = 11.sp)
+                            topics.take(5).forEach {
+                                Text("· $it", color = EliasTokens.TextDim, fontSize = 11.sp)
+                            }
+                        }
+                    } else if (ui.state.totalPausedDays > 0) {
+                        Text(
+                            "Calendário já descontou ${ui.state.totalPausedDays} dia(s) de revisão.",
+                            color = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    } else {
+                        Text(
+                            "Sem retenção — avance com quiz + prática de qualidade.",
+                            color = Muted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(12.dp))

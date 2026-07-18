@@ -3,7 +3,10 @@ import http from 'http';
 import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { encodePCMToOpus } from './audioEncoder.js';
+import {
+  createPcmInt16OpusEncoder,
+  sampleRateFromOutputFormat,
+} from './audioEncoder.js';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -21,25 +24,36 @@ import {
 import {
   setMongoEnabled,
   upsertWeeks,
+  upsertQuizzes,
   getWeek,
   getProgramState,
 } from './services/programStore.js';
 import {
   resolveMainChatVoiceId,
   resolveFallbackVoiceId,
+  openTtsWebSocket,
   openTtsWebSocketWithFallback,
+  createFirstAudioWatchdog,
+  FIRST_AUDIO_BYTE_TIMEOUT_MS,
   STREAM_MODEL_ID,
+  STREAM_OUTPUT_FORMAT,
+  ensureElevenLabsKeyEnv,
+  hasElevenLabsKey,
+  resolveApiKeySource,
+  synthesizePcmRest,
 } from './services/elevenLabsClient.js';
 import programRoutes from './routes/programRoutes.js';
 import { translateToPtBr } from './services/translationService.js';
+import { scoreEchoAttempt } from './services/echoScoreService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env first (for any existing env vars)
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 // Load keys from local.properties if not already set (respect .env rule)
-const localPropsPath = path.resolve('../local.properties');
+// Prefer path relative to this file so cwd does not break key loading.
+const localPropsPath = path.resolve(__dirname, '../local.properties');
 if (fs.existsSync(localPropsPath)) {
   const lines = fs.readFileSync(localPropsPath, 'utf-8').split('\n');
   lines.forEach(line => {
@@ -54,9 +68,14 @@ if (fs.existsSync(localPropsPath)) {
   });
 }
 
-global.WebSocket = ws;
+// Alias: some installs store the ElevenLabs key as My-English-Coach-Key only
+// (local.properties / Render env). Normalize into ELEVENLABS_API_KEY.
+ensureElevenLabsKeyEnv();
+if (!process.env.ELEVENLABS_API_KEY && process.env['My-English-Coach-Key']) {
+  process.env.ELEVENLABS_API_KEY = process.env['My-English-Coach-Key'];
+}
 
-dotenv.config();
+global.WebSocket = ws;
 
 const app = express();
 app.use(cors());
@@ -91,7 +110,7 @@ if (process.env.MONGODB_URI) {
   loadCurriculumSeed();
 }
 
-/** Load F1 curriculum seed into memory (+ Mongo if enabled). Idempotent. */
+/** Load F1 curriculum + B.5 quiz seeds into memory (+ Mongo if enabled). Idempotent. */
 async function loadCurriculumSeed() {
   try {
     const { loadCurriculumSeedFile } = await import('./services/loadCurriculumSeed.js');
@@ -100,6 +119,20 @@ async function loadCurriculumSeed() {
     console.log(`📚 Curriculum seed v${version ?? '?'} loaded: ${n} weeks`);
   } catch (e) {
     console.error('❌ Failed to load curriculum seed:', e.message);
+  }
+  try {
+    const quizPath = path.join(__dirname, 'seeds', 'elias_quiz_seed.json');
+    if (fs.existsSync(quizPath)) {
+      const quizSeed = JSON.parse(fs.readFileSync(quizPath, 'utf8'));
+      const qn = await upsertQuizzes(quizSeed);
+      console.log(
+        `📝 Quiz seed v${quizSeed.version ?? '?'} loaded: ${qn} weeks · pass=${quizSeed.passing_score_percent ?? 70}%`
+      );
+    } else {
+      console.warn('⚠️ Quiz seed not found:', quizPath);
+    }
+  } catch (e) {
+    console.error('❌ Failed to load quiz seed:', e.message);
   }
 }
 
@@ -369,27 +402,68 @@ io.on('connection', (socket) => {
       await handleAIResponse(textoUsuario, modelOverride);
   });
 
-  // 3b. Contextual translation (Task Final v1.0) — discrete PT under Elias message
+  // 3b. Contextual translation (A.3) — discrete PT under Elias message; never replaces EN
   socket.on('traduzir_texto', async (payload = {}) => {
+    const requestId =
+      typeof payload === 'object' && payload ? payload.requestId || null : null;
     try {
       const text =
         typeof payload === 'string' ? payload : payload.text || payload.texto || '';
       if (!text.trim()) {
-        socket.emit('traducao_pronta', { ok: false, error: 'empty' });
+        socket.emit('traducao_pronta', { ok: false, error: 'empty', requestId });
         return;
       }
       const translation = await translateToPtBr(text);
+      if (!translation) {
+        socket.emit('traducao_pronta', {
+          ok: false,
+          error: 'empty_translation',
+          requestId,
+          text,
+        });
+        return;
+      }
       socket.emit('traducao_pronta', {
         ok: true,
         text,
         translation,
-        requestId: payload.requestId || null,
+        requestId,
       });
     } catch (e) {
       console.error('[traduzir_texto]', e.message);
       socket.emit('traducao_pronta', {
         ok: false,
+        error: e.message || 'translation_failed',
+        requestId,
+      });
+    }
+  });
+
+  // 3c. Echo Mode scoring (ASR Whisper when available + LLM / heuristic)
+  socket.on('echo_avaliar', async (payload = {}) => {
+    try {
+      const reference = payload.reference || payload.phrase || '';
+      const result = await scoreEchoAttempt({
+        reference,
+        audioBase64: payload.audioBase64 || payload.audio || '',
+        mimeType: payload.mimeType || 'audio/mp4',
+        durationMs: payload.durationMs || 0,
+        focus: payload.focus || '',
+        transcript: payload.transcript || '',
+      });
+      socket.emit('echo_score_pronto', {
+        ...result,
+        requestId: payload.requestId || null,
+      });
+    } catch (e) {
+      console.error('[echo_avaliar]', e.message);
+      socket.emit('echo_score_pronto', {
+        ok: false,
         error: e.message,
+        score: 0,
+        feedback: '',
+        transcript: '',
+        method: 'error',
         requestId: payload?.requestId || null,
       });
     }
@@ -398,25 +472,109 @@ io.on('connection', (socket) => {
   // 4. Shadowing / Fallback TTS via ElevenLabs (same voice config as main chat)
   socket.on('shadow_speak', async (texto) => {
     try {
-      console.log(`🎙️ Shadow speak requisitado: ${texto}`);
+      console.log(`🎙️ Shadow speak requisitado: ${String(texto || '').slice(0, 80)}`);
       if (!sessionVoiceId) await lockSessionVoice(null);
       const tts = await openTtsWebSocketWithFallback(sessionVoiceId);
-      if (tts.textOnly || !tts.socket) {
-        socket.emit('tts_unavailable', { reason: 'voice_open_failed', mode: 'text_only' });
-        return;
-      }
-      const elevenSocket = tts.socket;
       const pseudoEstado = { ativo: true };
       const seqTracker = { val: 0 };
-      escutarRetornoElevenLabs(elevenSocket, socket, pseudoEstado, seqTracker);
+
+      // No key at all → client may use local ElevenLabs fallback
+      if (!hasElevenLabsKey() || (tts.textOnly && !tts.restOk)) {
+        socket.emit('tts_unavailable', {
+          reason: tts.error || 'elevenlabs_api_key_missing',
+          mode: 'text_only',
+          clientFallback: true,
+        });
+        return;
+      }
+
+      // Stream-input failed but REST is available
+      if (!tts.socket && tts.restOk) {
+        try {
+          await emitRestTtsAsOpus(texto, socket, pseudoEstado, seqTracker, {
+            voiceId: tts.voiceId || sessionVoiceId,
+          });
+          return;
+        } catch (restErr) {
+          console.error('[shadow_speak] REST fallback failed:', restErr.message);
+          socket.emit('tts_unavailable', {
+            reason: restErr.message || 'voice_open_failed',
+            mode: 'text_only',
+            clientFallback: true,
+          });
+          return;
+        }
+      }
+
+      let elevenSocket = tts.socket;
+      let activeVoice = tts.voiceId || sessionVoiceId;
+      let usedFallback = false;
+      let firstByteWatchdog = null;
+
+      const attachShadowListener = (ws, voiceLabel) => {
+        escutarRetornoElevenLabs(ws, socket, pseudoEstado, seqTracker, {
+          onAudioMessage: (msg) => firstByteWatchdog?.noteMessage(msg),
+        });
+        firstByteWatchdog?.cancel();
+        firstByteWatchdog = createFirstAudioWatchdog({
+          timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+          label: `shadow:${voiceLabel || 'voice'}`,
+          onTimeout: async () => {
+            if (!pseudoEstado.ativo) return;
+            console.warn(`[shadow_speak] first-audio-byte timeout voice=${voiceLabel}`);
+            try { ws.close(); } catch (_) {}
+            const fb = resolveFallbackVoiceId();
+            if (!usedFallback && fb && fb !== voiceLabel) {
+              usedFallback = true;
+              try {
+                const fbWs = await openTtsWebSocket(fb, { timeoutMs: 5000 });
+                elevenSocket = fbWs;
+                activeVoice = fb;
+                attachShadowListener(fbWs, fb);
+                if (fbWs.readyState === WebSocket.OPEN) {
+                  firstByteWatchdog.arm();
+                  fbWs.send(JSON.stringify({ text: texto, try_trigger_generation: true }));
+                  fbWs.send(JSON.stringify({ text: '' }));
+                }
+                return;
+              } catch (e) {
+                console.warn(`[shadow_speak] fallback failed: ${e.message}`);
+              }
+            }
+            // Last resort: REST complete generation
+            try {
+              await emitRestTtsAsOpus(texto, socket, pseudoEstado, seqTracker, {
+                voiceId: activeVoice || sessionVoiceId,
+              });
+              return;
+            } catch (restErr) {
+              console.warn(`[shadow_speak] REST after timeout failed: ${restErr.message}`);
+            }
+            pseudoEstado.ativo = false;
+            socket.emit('tts_unavailable', {
+              reason: 'first_audio_byte_timeout',
+              mode: 'text_only',
+              timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+              clientFallback: true,
+            });
+          },
+        });
+      };
+
+      attachShadowListener(elevenSocket, activeVoice);
 
       if (elevenSocket.readyState === WebSocket.OPEN) {
+        firstByteWatchdog.arm();
         elevenSocket.send(JSON.stringify({ "text": texto, "try_trigger_generation": true }));
         elevenSocket.send(JSON.stringify({ "text": "" }));
       }
     } catch (e) {
       console.error("Erro no shadow_speak:", e);
-      socket.emit('tts_unavailable', { reason: e.message, mode: 'text_only' });
+      socket.emit('tts_unavailable', {
+        reason: e.message,
+        mode: 'text_only',
+        clientFallback: true,
+      });
     }
   });
 
@@ -434,6 +592,9 @@ io.on('connection', (socket) => {
       );
     }
 
+    /** Cancelled in finally — must be outer-scoped for catch/finally. */
+    let firstByteWatchdog = null;
+
     try {
       // Registrar os AbortControllers para Barge-in (TurnTaking engine cancel)
       const llmAbort = new AbortController();
@@ -443,20 +604,133 @@ io.on('connection', (socket) => {
       // Connect to ElevenLabs WebSocket (session-locked voice + fallback §8)
       if (!sessionVoiceId) await lockSessionVoice(null);
       const tts = await openTtsWebSocketWithFallback(sessionVoiceId);
-      const elevenSocket = tts.socket;
-      const textOnlyMode = tts.textOnly || !elevenSocket;
+      let elevenSocket = tts.socket;
+      /** Pure text-only: no key / REST also impossible. */
+      let textOnlyMode = Boolean(tts.textOnly && !tts.restOk);
+      /** Prefer complete REST generation after LLM (WS open failed but key ok). */
+      let restFallbackMode = Boolean(!tts.socket && tts.restOk && !textOnlyMode);
+      let activeTtsVoice = tts.voiceId || sessionVoiceId;
+      /** Text already sent to TTS (for re-send on first-byte timeout fallback). */
+      let ttsTextSent = '';
+      let usedFirstByteFallback = false;
+      let audioEmitted = false;
+      /**
+       * Stream generation token: when primary times out and we switch to fallback,
+       * late audio from the abandoned WebSocket must NOT be forwarded (no overlap).
+       */
+      let ttsStreamGen = 0;
+      const abandonTtsSocket = (ws) => {
+        ttsStreamGen += 1; // invalidate any in-flight handlers on old socket
+        try {
+          ws?.removeAllListeners?.('message');
+          ws?.removeAllListeners?.('close');
+          ws?.removeAllListeners?.('error');
+        } catch (_) {}
+        try {
+          if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+        } catch (_) {}
+        if (estadoGeracao.elevenSocket === ws) estadoGeracao.elevenSocket = null;
+        if (elevenSocket === ws) elevenSocket = null;
+      };
+
+      const goTextOnly = (reason, { clientFallback = true } = {}) => {
+        textOnlyMode = true;
+        restFallbackMode = false;
+        ttsStreamGen += 1;
+        elevenSocket = null;
+        estadoGeracao.elevenSocket = null;
+        firstByteWatchdog?.cancel();
+        console.warn(`📝 TTS unavailable — text-only mode. reason=${reason}`);
+        socket.emit('tts_unavailable', {
+          reason: reason || 'voice_open_failed',
+          mode: 'text_only',
+          timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+          clientFallback,
+        });
+      };
+
+      const attachChatTts = (ws, voiceLabel) => {
+        const myGen = ++ttsStreamGen;
+        elevenSocket = ws;
+        estadoGeracao.elevenSocket = ws;
+        activeTtsVoice = voiceLabel;
+        restFallbackMode = false;
+        escutarRetornoElevenLabs(ws, socket, estadoGeracao, seqTracker, {
+          onAudioMessage: (msg) => {
+            firstByteWatchdog?.noteMessage(msg);
+            if (msg?.audio) audioEmitted = true;
+          },
+          // Discard late primary audio after fallback/text-only switch
+          isActive: () =>
+            estadoGeracao.ativo &&
+            !textOnlyMode &&
+            myGen === ttsStreamGen &&
+            estadoGeracao.elevenSocket === ws,
+        });
+        firstByteWatchdog?.cancel();
+        firstByteWatchdog = createFirstAudioWatchdog({
+          timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
+          label: `chat:${voiceLabel || 'voice'}`,
+          onTimeout: async () => {
+            if (!estadoGeracao.ativo || textOnlyMode) return;
+            if (myGen !== ttsStreamGen) return; // already abandoned
+            console.warn(
+              `[tts] first-audio-byte timeout after ${FIRST_AUDIO_BYTE_TIMEOUT_MS}ms voice=${voiceLabel}`
+            );
+            // Invalidate stream BEFORE close so any late frames are dropped
+            abandonTtsSocket(ws);
+
+            const fb = resolveFallbackVoiceId();
+            if (!usedFirstByteFallback && fb && fb !== voiceLabel) {
+              usedFirstByteFallback = true;
+              try {
+                console.warn(`[tts] first-byte fallback → voice=${fb}`);
+                // Progressive status for future UI polish (client may ignore)
+                socket.emit('tts_status', {
+                  phase: 'fallback_voice',
+                  message: 'Tentando voz alternativa…',
+                  voiceId: fb,
+                });
+                const fbWs = await openTtsWebSocket(fb, { timeoutMs: 5000 });
+                sessionVoiceId = fb;
+                attachChatTts(fbWs, fb);
+                if (ttsTextSent && fbWs.readyState === WebSocket.OPEN) {
+                  firstByteWatchdog.arm();
+                  fbWs.send(
+                    JSON.stringify({ text: ttsTextSent, try_trigger_generation: true })
+                  );
+                }
+                return;
+              } catch (e) {
+                console.warn(`[tts] first-byte fallback open failed: ${e.message}`);
+              }
+            }
+            // Prefer REST complete TTS over pure text-only when key is present
+            if (hasElevenLabsKey() && ttsTextSent) {
+              restFallbackMode = true;
+              socket.emit('tts_status', {
+                phase: 'rest_fallback',
+                message: 'Gerando áudio completo…',
+              });
+              return;
+            }
+            goTextOnly('first_audio_byte_timeout');
+          },
+        });
+      };
 
       if (textOnlyMode) {
+        goTextOnly(tts.error || 'elevenlabs_api_key_missing');
+      } else if (restFallbackMode) {
         console.warn(
-          `📝 TTS unavailable — text-only mode. reason=${tts.error || 'voice_open_failed'}`
+          `[tts] stream-input unavailable — REST complete TTS after LLM. reason=${tts.error || 'ws_failed'}`
         );
-        socket.emit('tts_unavailable', {
-          reason: tts.error || 'voice_open_failed',
-          mode: 'text_only',
+        socket.emit('tts_status', {
+          phase: 'rest_fallback',
+          message: 'Usando TTS completo…',
         });
       } else {
-        estadoGeracao.elevenSocket = elevenSocket;
-        escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker);
+        attachChatTts(elevenSocket, activeTtsVoice);
       }
 
       // We should check llmAbort.signal.aborted during generation loop
@@ -485,7 +759,13 @@ io.on('connection', (socket) => {
         // Stream only the text inside <RESPONSE> tags to ElevenLabs and user app
         const { text: newResponseText, newLength } = getNewResponseText(respostaCompletaIA, sentLength);
         if (newResponseText.length > 0) {
+          // Always accumulate for REST complete TTS / first-byte re-send
+          ttsTextSent += newResponseText;
           if (elevenSocket && elevenSocket.readyState === WebSocket.OPEN) {
+            // Arm first-audio-byte watchdog on the first TTS text flush (D8)
+            if (ttsTextSent.length === newResponseText.length) {
+              firstByteWatchdog?.arm();
+            }
             elevenSocket.send(JSON.stringify({ "text": newResponseText, "try_trigger_generation": true }));
           }
           socket.emit("texto_chunk", newResponseText);
@@ -686,12 +966,46 @@ io.on('connection', (socket) => {
         // Send final parsed message object (UiChatBubble structure) to Android
         const parsed = parseClaudeResponse(respostaCompletaIA);
         socket.emit("mensagem_ia", parsed);
+
+        // REST complete TTS when stream failed / timed out (still has API key)
+        const speakText =
+          (parsed?.message || ttsTextSent || '').trim() ||
+          getNewResponseText(respostaCompletaIA, 0).text;
+        const needRest =
+          restFallbackMode ||
+          (!audioEmitted &&
+            !textOnlyMode &&
+            hasElevenLabsKey() &&
+            speakText.length > 0 &&
+            !(firstByteWatchdog?.hasAudio));
+        if (needRest && speakText) {
+          try {
+            console.log(`[tts] REST complete generation (${speakText.length} chars)`);
+            await emitRestTtsAsOpus(speakText, socket, estadoGeracao, seqTracker, {
+              voiceId: activeTtsVoice || sessionVoiceId,
+            });
+            audioEmitted = true;
+          } catch (restErr) {
+            console.error('[tts] REST complete failed:', restErr.message);
+            if (!audioEmitted) {
+              goTextOnly(restErr.message || 'rest_tts_failed');
+            }
+          }
+        }
+      }
+
+      // If TTS never produced audio but we got text, ensure client leaves loading state
+      if (textOnlyMode || (firstByteWatchdog && !firstByteWatchdog.hasAudio && ttsTextSent.length > 0)) {
+        // text already streamed via texto_chunk / mensagem_ia — client must not wait forever
+        firstByteWatchdog?.cancel();
       }
 
     } catch (error) {
       console.error("❌ Erro no fluxo principal:", error);
+      firstByteWatchdog?.cancel();
       socket.emit("erro_backend", error.message);
     } finally {
+      firstByteWatchdog?.cancel();
       clearGeneration(socket.id);
     }
   }
@@ -701,30 +1015,113 @@ io.on('connection', (socket) => {
   });
 });
 
-// Function to stream audio chunks directly to Android (encodes PCM to Opus frames)
-function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker) {
+/**
+ * Complete REST TTS → Opus frames (same client event as stream-input).
+ * Used when WebSocket stream-input fails but the API key is valid.
+ *
+ * @param {string} text
+ * @param {import('socket.io').Socket} socket
+ * @param {{ ativo: boolean }} estadoGeracao
+ * @param {{ val: number }} seqTracker
+ * @param {{ voiceId?: string }} [opts]
+ */
+async function emitRestTtsAsOpus(text, socket, estadoGeracao, seqTracker, opts = {}) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) throw new Error('empty_tts_text');
+  if (estadoGeracao && estadoGeracao.ativo === false) {
+    throw new Error('generation_inactive');
+  }
+
+  socket.emit('tts_status', {
+    phase: 'rest_tts',
+    message: 'Gerando voz…',
+  });
+  socket.emit('estado_ia', 'falando');
+
+  const { pcm, sampleRate, voiceId } = await synthesizePcmRest(
+    trimmed,
+    opts.voiceId || resolveMainChatVoiceId()
+  );
+  const opusEncoder = createPcmInt16OpusEncoder({ inputSampleRate: sampleRate });
+  const frames = opusEncoder.encode(pcm).concat(opusEncoder.flush());
+
+  for (const frame of frames) {
+    if (estadoGeracao && estadoGeracao.ativo === false) break;
+    socket.emit('audio_opus_frame', {
+      frame: frame.toString('base64'),
+      seq: seqTracker.val++,
+      ts: Date.now(),
+    });
+  }
+
+  socket.emit('estado_ia', 'ociosa');
+  console.log(
+    `[tts] REST→Opus done voice=${voiceId} frames=${frames.length} pcmBytes=${pcm.length}`
+  );
+}
+
+/**
+ * Stream ElevenLabs audio to Android as Opus frames.
+ * ElevenLabs stream-input must use output_format=pcm_* (Int16 LE).
+ * Encoding as Float32/MP3 was the root cause of static/hiss (chiado).
+ *
+ * @param {object} [hooks]
+ * @param {(msg: object) => void} [hooks.onAudioMessage] — first-audio-byte watchdog
+ * @param {() => boolean} [hooks.isActive] — false after stream abandoned (late audio discard)
+ */
+function escutarRetornoElevenLabs(elevenSocket, socket, estadoGeracao, seqTracker, hooks = {}) {
   socket.emit("estado_ia", "falando");
-  
+
+  const inputSampleRate = sampleRateFromOutputFormat(STREAM_OUTPUT_FORMAT);
+  const opusEncoder = createPcmInt16OpusEncoder({ inputSampleRate });
+  const stillActive = () =>
+    estadoGeracao.ativo && (typeof hooks.isActive !== 'function' || hooks.isActive());
+
+  const emitOpusFrames = (opusFrames) => {
+    if (!stillActive()) return; // hard discard after fallback switch
+    opusFrames.forEach((frame) => {
+      socket.emit("audio_opus_frame", {
+        frame: frame.toString("base64"),
+        seq: seqTracker.val++,
+        ts: Date.now(),
+      });
+    });
+  };
+
   elevenSocket.on("message", (msgStr) => {
-    if (!estadoGeracao.ativo) return;
+    if (!stillActive()) return;
     try {
-      const msg = JSON.parse(msgStr);
+      const raw = typeof msgStr === 'string' ? msgStr : msgStr.toString();
+      const msg = JSON.parse(raw);
       if (msg.audio) {
-        const pcmBuffer = Buffer.from(msg.audio, 'base64');
-        const opusFrames = encodePCMToOpus(pcmBuffer);
-        opusFrames.forEach((frame) => {
-          socket.emit("audio_opus_frame", {
-            frame: frame.toString("base64"),
-            seq: seqTracker.val++,
-            ts: Date.now()
-          });
-        });
+        if (!stillActive()) return;
+        // Notify first-audio-byte watchdog (D8) before encode
+        try {
+          hooks.onAudioMessage?.(msg);
+        } catch (_) {
+          /* ignore */
+        }
+        // pcm_* formats: base64 of raw s16le mono (NOT mp3, NOT float32)
+        const pcmInt16 = Buffer.from(msg.audio, 'base64');
+        emitOpusFrames(opusEncoder.encode(pcmInt16));
       }
       if (msg.isFinal) {
+        if (!stillActive()) return;
+        emitOpusFrames(opusEncoder.flush());
         socket.emit("estado_ia", "ociosa");
       }
     } catch (e) {
       console.error("Erro processando retorno ElevenLabs:", e);
+    }
+  });
+
+  // Ensure last partial frame is not dropped if socket closes without isFinal
+  elevenSocket.on("close", () => {
+    if (!stillActive()) return;
+    try {
+      emitOpusFrames(opusEncoder.flush());
+    } catch (_) {
+      /* ignore */
     }
   });
 }
@@ -818,18 +1215,31 @@ app.get('/', (req, res) => {
 
 /** Lightweight health — no secrets. Used to verify deploy + TTS env. */
 app.get('/health', (req, res) => {
+  ensureElevenLabsKeyEnv();
   res.json({
     ok: true,
-    elevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
+    elevenLabsKey: hasElevenLabsKey(),
+    elevenLabsKeySource: resolveApiKeySource(),
     mainChatVoiceId: resolveMainChatVoiceId(),
     fallbackVoiceId: resolveFallbackVoiceId(),
+    streamOutputFormat: STREAM_OUTPUT_FORMAT,
+    streamModel: STREAM_MODEL_ID,
     mongo: useMongo,
+    hint: hasElevenLabsKey()
+      ? undefined
+      : 'Set ELEVENLABS_API_KEY (or My-English-Coach-Key) on the host env (e.g. Render).',
   });
 });
 
 server.listen(PORT, () => {
+  ensureElevenLabsKeyEnv();
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(
-    `[boot] TTS main=${resolveMainChatVoiceId()} elevenLabsKey=${Boolean(process.env.ELEVENLABS_API_KEY)}`
+    `[boot] TTS main=${resolveMainChatVoiceId()} format=${STREAM_OUTPUT_FORMAT} model=${STREAM_MODEL_ID} elevenLabsKey=${hasElevenLabsKey()} source=${resolveApiKeySource()}`
   );
+  if (!hasElevenLabsKey()) {
+    console.error(
+      '[boot] ⚠️ ELEVENLABS_API_KEY missing — set it (or My-English-Coach-Key) on Render Environment. TTS will stay silent until fixed.'
+    );
+  }
 });

@@ -30,15 +30,17 @@ import androidx.compose.ui.unit.sp
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import kotlinx.coroutines.delay
 
-private val Bg = Color(0xFF0d0f14)
-private val Surface = Color(0xFF161922)
-private val Border = Color(0xFF252a35)
-private val Accent = Color(0xFF4f8ef7)
-private val Green = Color(0xFF3ecf8e)
-private val Muted = Color(0xFF7a8099)
-private val Red = Color(0xFFf76f6f)
-private val Gold = Color(0xFFf7c94f)
-private val TextMain = Color(0xFFE8EAF0)
+import com.roberto.eliasaitutor.ui.theme.EliasTokens
+
+private val Bg = EliasTokens.Bg
+private val Surface = EliasTokens.Surface
+private val Border = EliasTokens.Border
+private val Accent = EliasTokens.Accent
+private val Green = EliasTokens.Green
+private val Muted = EliasTokens.Muted
+private val Red = EliasTokens.Red
+private val Gold = EliasTokens.Gold
+private val TextMain = EliasTokens.TextMain
 
 /**
  * Immersion — silent period: hear English, map sound → meaning (Task Final Fase 2).
@@ -49,7 +51,8 @@ fun ImmersionScreen(vm: EliasViewModel) {
     var step by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
     var feedback by remember { mutableStateOf<String?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
+    // Drive play UI from real TTS state (Opus stream), not an immediate callback
+    val isPlaying by vm.isIaSpeaking.collectAsState()
 
     val levelsData = remember {
         mapOf(
@@ -84,11 +87,10 @@ fun ImmersionScreen(vm: EliasViewModel) {
     val total = immersionData.size
     val inProgress = step < total
 
-    // Auto-play phrase when step changes
+    // Auto-play phrase when step changes (isPlaying tracks iaStateFlow via ViewModel)
     LaunchedEffect(currentLevel, step) {
         if (inProgress) {
-            isPlaying = true
-            vm.speakText(immersionData[step].phrase) { isPlaying = false }
+            vm.speakText(immersionData[step].phrase)
         }
     }
 
@@ -103,35 +105,56 @@ fun ImmersionScreen(vm: EliasViewModel) {
         Modifier
             .fillMaxSize()
             .background(Bg)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Header
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Immersion", color = TextMain, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "Período silencioso · som → ação",
-                    color = Muted,
-                    fontSize = 12.sp
-                )
-            }
-            Surface(
-                color = Accent.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Text(
-                    if (inProgress) "${step + 1}/$total" else "✓",
-                    color = Accent,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+        // Fase 5 — hero visual
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(EliasTokens.HeroBrush)
+                .padding(16.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "IMMERSION",
+                        color = EliasTokens.Teal,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        "Período silencioso",
+                        color = TextMain,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Ouça → escolha o emoji · som vira significado",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                }
+                Surface(
+                    color = Accent.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        if (inProgress) "${step + 1}/$total" else "✓",
+                        color = Accent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Column(
+            Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
 
         // Level chips
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -190,8 +213,7 @@ fun ImmersionScreen(vm: EliasViewModel) {
             ) {
                 Surface(
                     onClick = {
-                        isPlaying = true
-                        vm.speakText(current.phrase) { isPlaying = false }
+                        vm.speakText(current.phrase)
                     },
                     modifier = Modifier.size(100.dp),
                     shape = CircleShape,
@@ -326,6 +348,7 @@ fun ImmersionScreen(vm: EliasViewModel) {
             lineHeight = 15.sp
         )
         Spacer(Modifier.height(16.dp))
+        } // content under hero
     }
 }
 

@@ -61,6 +61,7 @@ fun EliasApp(
 ) {
     var currentTab by remember { mutableIntStateOf(initialTab) }
     var programSubScreen by remember { mutableStateOf("home") } // home | progress
+    var showEndSessionConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toastMsg by vm.toastMessage.collectAsState()
     val profile by vm.profile.collectAsState()
@@ -90,37 +91,51 @@ fun EliasApp(
 
     val tabs = listOf(
         TabItem("Programa", Icons.Default.School),
-        TabItem("Immersion", Icons.Default.Hearing),
+        TabItem("Imersão", Icons.Default.Hearing),
         TabItem("Chat", Icons.AutoMirrored.Filled.Chat),
         TabItem("Echo", Icons.Default.GraphicEq),
-        TabItem("Progress", Icons.AutoMirrored.Filled.ShowChart),
-        TabItem("Store", Icons.Default.Store)
+        TabItem("Progresso", Icons.AutoMirrored.Filled.ShowChart),
+        TabItem("Loja", Icons.Default.Store)
     )
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = Surface, contentColor = Muted) {
+            NavigationBar(
+                containerColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Surface,
+                contentColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                tonalElevation = 0.dp,
+            ) {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = currentTab == index,
                         onClick = {
+                            // Leaving Chat during free mode is fine; PROGRAM session
+                            // stays active until Encerrar (timer continues on other tabs).
+                            // If user opens Chat while no practice is running but context
+                            // is still PROGRAM, reset to FREE so level chips work again.
+                            if (index == 2 && practice == null &&
+                                vm.chatContext.value.type ==
+                                com.roberto.eliasaitutor.model.ChatType.PROGRAM
+                            ) {
+                                vm.endProgramSession()
+                            }
                             currentTab = index
                             if (index == 0) programSubScreen = "home"
                         },
                         icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title, fontSize = 9.sp) },
+                        label = { Text(tab.title, fontSize = 9.sp, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Accent,
-                            selectedTextColor = Accent,
-                            unselectedIconColor = Muted,
-                            unselectedTextColor = Muted,
-                            indicatorColor = Accent.copy(alpha = 0.1f)
+                            selectedIconColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent,
+                            selectedTextColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent,
+                            unselectedIconColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                            unselectedTextColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                            indicatorColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent.copy(alpha = 0.12f)
                         )
                     )
                 }
             }
         },
-        containerColor = Bg
+        containerColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Bg
     ) { innerPadding ->
         Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (currentTab) {
@@ -131,7 +146,7 @@ fun EliasApp(
                         ProgramHomeScreen(
                             programVm = programVm,
                             userId = profile.userId.ifBlank { "local_user" },
-                            onStartChat = { week, title, lexis, grammar, phase, sessionType, _ ->
+                            onStartChat = { week, title, lexis, grammar, phase, sessionType, _, level ->
                                 val uid = profile.userId.ifBlank { "local_user" }
                                 vm.beginProgramSession(
                                     week = week,
@@ -141,6 +156,7 @@ fun EliasApp(
                                     phase = phase,
                                     sessionType = sessionType,
                                     userId = uid,
+                                    level = level,
                                 )
                                 currentTab = 2
                             },
@@ -151,7 +167,7 @@ fun EliasApp(
                 1 -> ImmersionScreen(vm)
                 2 -> ChatScreen(vm)
                 3 -> ShadowingScreen(vm)
-                4 -> ProgressScreen(vm)
+                4 -> ProgressScreen(vm, programVm)
                 5 -> StoreScreen(vm)
             }
 
@@ -162,16 +178,42 @@ fun EliasApp(
                     goalMinutes = practice!!.goalMinutes,
                     goalReached = practice!!.goalReachedNotified,
                     week = practice!!.week,
-                    onEnd = {
-                        val transcript = bubbles.joinToString("\n") { b ->
-                            val role = if (b.isUser) "Student" else "Tutor"
-                            "$role: ${b.message}"
+                    onEnd = { showEndSessionConfirm = true }
+                )
+            }
+
+            if (showEndSessionConfirm && practice != null) {
+                val mm = practice!!.elapsedSeconds / 60
+                val ss = practice!!.elapsedSeconds % 60
+                AlertDialog(
+                    onDismissRequest = { showEndSessionConfirm = false },
+                    title = { Text("Encerrar sessão?") },
+                    text = {
+                        Text(
+                            "Tempo: %d:%02d / %d min. O relatório de correção será gerado se a sessão for longa o suficiente."
+                                .format(mm, ss, practice!!.goalMinutes)
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showEndSessionConfirm = false
+                                val transcript = bubbles.joinToString("\n") { b ->
+                                    val role = if (b.isUser) "Student" else "Tutor"
+                                    "$role: ${b.message}"
+                                }
+                                programVm.endConversationSession(transcript) {
+                                    vm.endProgramSession()
+                                }
+                                currentTab = 0 // back to Programa for feedback report
+                            }
+                        ) { Text("Encerrar", color = Color(0xFFEF4444)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEndSessionConfirm = false }) {
+                            Text("Continuar")
                         }
-                        programVm.endConversationSession(transcript) {
-                            vm.endProgramSession()
-                        }
-                        currentTab = 0 // back to Programa for feedback report
-                    }
+                    },
                 )
             }
         }

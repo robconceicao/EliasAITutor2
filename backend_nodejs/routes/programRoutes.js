@@ -14,6 +14,10 @@ import {
   endSession,
   getSession,
   getProgressSummary,
+  getQuiz,
+  quizForClient,
+  submitQuizAnswers,
+  runCheckpoint,
 } from '../services/programStore.js';
 import {
   generateSessionFeedback,
@@ -72,6 +76,11 @@ router.put('/program/state', async (req, res) => {
       'week_mode',
       'reminder_time',
       'daily_goal_minutes',
+      // adaptive fields usually set via checkpoint, but allow admin/debug patches
+      'held_back',
+      'review_since',
+      'total_paused_days',
+      'deficient_topics',
     ];
     const patch = {};
     for (const k of allowed) {
@@ -84,6 +93,49 @@ router.put('/program/state', async (req, res) => {
     res.json(state);
   } catch (e) {
     sendError(res, e.status || 500, e.status === 422 ? 'invalid' : 'internal', e.message);
+  }
+});
+
+// GET /program/quiz/:week — no correct_index / correct_answer (B.6)
+router.get('/program/quiz/:week', async (req, res) => {
+  try {
+    const n = Number(req.params.week);
+    if (!Number.isInteger(n) || n < 1 || n > 26) {
+      return sendError(res, 404, 'not_found', `Quiz week ${req.params.week} not found`);
+    }
+    const quiz = await getQuiz(n);
+    if (!quiz) return sendError(res, 404, 'not_found', `Quiz for week ${n} not found`);
+    res.json(quizForClient(quiz));
+  } catch (e) {
+    sendError(res, 500, 'internal', e.message);
+  }
+});
+
+// POST /program/quiz/:week/submit — { answers: [index, ...] }
+router.post('/program/quiz/:week/submit', async (req, res) => {
+  try {
+    const n = Number(req.params.week);
+    if (!Number.isInteger(n) || n < 1 || n > 26) {
+      return sendError(res, 404, 'not_found', `Quiz week ${req.params.week} not found`);
+    }
+    const answers = req.body?.answers;
+    if (!Array.isArray(answers)) {
+      return sendError(res, 422, 'invalid', 'answers must be an array of option indices');
+    }
+    const result = await submitQuizAnswers(n, answers);
+    res.json(result);
+  } catch (e) {
+    sendError(res, e.status || 500, e.status === 404 ? 'not_found' : 'internal', e.message);
+  }
+});
+
+// POST /program/checkpoint — weekly readiness gate (B.4)
+router.post('/program/checkpoint', async (_req, res) => {
+  try {
+    const result = await runCheckpoint();
+    res.json(result);
+  } catch (e) {
+    sendError(res, 500, 'internal', e.message);
   }
 });
 
@@ -124,7 +176,13 @@ router.patch('/sessions/:id/end', async (req, res) => {
       feedback_status = 'pending';
       // fire-and-forget; transcript from client if provided
       const history = typeof transcript === 'string' ? transcript : transcript || '';
-      generateSessionFeedback(id, history).catch((err) =>
+      const weekDoc = await getWeek(session.week).catch(() => null);
+      const weekMeta = {
+        week: session.week,
+        title: weekDoc?.title,
+        level: weekDoc?.level,
+      };
+      generateSessionFeedback(id, history, weekMeta).catch((err) =>
         console.error('[feedback]', err.message)
       );
     }
@@ -158,7 +216,12 @@ router.post('/sessions/:id/feedback/retry', async (req, res) => {
     const session = await getSession(req.params.id);
     if (!session) return sendError(res, 404, 'not_found', 'Session not found');
     const transcript = req.body?.transcript || '';
-    const result = await generateSessionFeedback(req.params.id, transcript);
+    const weekDoc = await getWeek(session.week).catch(() => null);
+    const result = await generateSessionFeedback(req.params.id, transcript, {
+      week: session.week,
+      title: weekDoc?.title,
+      level: weekDoc?.level,
+    });
     res.json(result);
   } catch (e) {
     sendError(res, 500, 'internal', e.message);

@@ -19,28 +19,31 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.roberto.eliasaitutor.model.PronunciationFocus
 import com.roberto.eliasaitutor.program.ProgramDates
 import com.roberto.eliasaitutor.program.ProgramPhaseUi
 import com.roberto.eliasaitutor.program.ProgramSessionType
 import com.roberto.eliasaitutor.program.ProgramViewModel
+import com.roberto.eliasaitutor.ui.theme.EliasTokens
 import java.time.LocalDate
 
-private val Bg = Color(0xFF0d0f14)
-private val Surface = Color(0xFF161922)
-private val Accent = Color(0xFF4f8ef7)
-private val Muted = Color(0xFF7a8099)
-private val TextMain = Color(0xFFE8EAF0)
+private val Bg = EliasTokens.Bg
+private val Surface = EliasTokens.Surface
+private val Accent = EliasTokens.Accent
+private val Muted = EliasTokens.Muted
+private val TextMain = EliasTokens.TextMain
 
 @Composable
 fun ProgramHomeScreen(
     programVm: ProgramViewModel,
     userId: String,
-    onStartChat: (week: Int, title: String, lexis: String, grammar: String, phase: Int, sessionType: String, goalMinutes: Int) -> Unit,
+    onStartChat: (week: Int, title: String, lexis: String, grammar: String, phase: Int, sessionType: String, goalMinutes: Int, level: String) -> Unit,
     onOpenProgress: () -> Unit = {},
 ) {
     val ui by programVm.ui.collectAsState()
@@ -53,6 +56,8 @@ fun ProgramHomeScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showQuickPick by remember { mutableStateOf(false) }
     var showOnboarding by remember { mutableStateOf(false) }
+    var showWeeklyQuiz by remember { mutableStateOf(false) }
+    val checkpointMsg by programVm.checkpointMsg.collectAsState()
 
     val notifPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -74,6 +79,13 @@ fun ProgramHomeScreen(
     }
 
     when {
+        showWeeklyQuiz -> {
+            WeeklyQuizScreen(
+                programVm = programVm,
+                onClose = { showWeeklyQuiz = false },
+            )
+            return
+        }
         drill != null && drill?.done != true -> {
             ChunksDrillScreen(programVm)
             return
@@ -132,10 +144,10 @@ fun ProgramHomeScreen(
                         showQuickPick = false
                         programVm.startConversationSession(
                             ProgramSessionType.QUICK, 5,
-                        ) { week, title, lexis, grammar, phase ->
+                        ) { week, title, lexis, grammar, phase, level ->
                             onStartChat(
                                 week, title, lexis, grammar, phase,
-                                ProgramSessionType.QUICK.apiValue, 5,
+                                ProgramSessionType.QUICK.apiValue, 5, level,
                             )
                         }
                     }) { Text("5 min") }
@@ -145,10 +157,10 @@ fun ProgramHomeScreen(
                         showQuickPick = false
                         programVm.startConversationSession(
                             ProgramSessionType.QUICK, 10,
-                        ) { week, title, lexis, grammar, phase ->
+                        ) { week, title, lexis, grammar, phase, level ->
                             onStartChat(
                                 week, title, lexis, grammar, phase,
-                                ProgramSessionType.QUICK.apiValue, 10,
+                                ProgramSessionType.QUICK.apiValue, 10, level,
                             )
                         }
                     }) { Text("10 min") }
@@ -162,71 +174,143 @@ fun ProgramHomeScreen(
             .fillMaxSize()
             .background(Bg)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Fase 4 — hero wireframe
+        val weekPreview = ui.week
+        val journeyFrac = ((ui.state.currentWeek - 1).coerceAtLeast(0) / 25f).coerceIn(0f, 1f)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(EliasTokens.HeroBrush)
+                .padding(16.dp)
         ) {
             Column {
-                Text("Elias · Programa", color = TextMain, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                val start = ui.state.startDate
-                val targetBr = if (start.isNotBlank()) {
-                    ProgramDates.targetDateBr(start)
-                } else {
-                    "6 meses após o início"
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "ELIAS · FLUÊNCIA",
+                            color = Accent,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.5.sp
+                        )
+                        Text(
+                            "Programa 6 meses",
+                            color = TextMain,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val start = ui.state.startDate
+                        val targetBr = if (start.isNotBlank()) {
+                            ProgramDates.targetDateBr(start)
+                        } else {
+                            "6 meses após o início"
+                        }
+                        Text(
+                            "C1 · General American · meta $targetBr",
+                            color = Muted,
+                            fontSize = 12.sp
+                        )
+                    }
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Configurações", tint = TextMain)
+                    }
                 }
-                Text(
-                    "Fluência C1 · General American · meta até $targetBr",
-                    color = Muted,
-                    fontSize = 11.sp
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        color = Accent.copy(alpha = 0.18f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            "Semana ${ui.state.currentWeek}/26",
+                            color = Accent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                    Surface(
+                        color = EliasTokens.Purple.copy(alpha = 0.18f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            "Nível ${weekPreview?.level ?: "—"}",
+                            color = EliasTokens.Purple,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                    if (ui.state.heldBack) {
+                        Surface(
+                            color = EliasTokens.Orange.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Text(
+                                "Revisão",
+                                color = EliasTokens.Orange,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Jornada A1 → C1", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = { journeyFrac },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = EliasTokens.Teal,
+                    trackColor = EliasTokens.Border,
                 )
             }
-            IconButton(onClick = { showSettings = true }) {
-                Icon(Icons.Default.Settings, contentDescription = "Configurações", tint = Muted)
-            }
         }
 
-        // Pronunciation pillars (aligned with Elias master prompt)
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            listOf("IPA", "Shadowing", "Schwa", "Linking", "Elisão", "Entonação").forEach { tag ->
-                Surface(
-                    color = Accent.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text(
-                        tag,
-                        color = Accent,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-        }
+        Column(Modifier.padding(horizontal = 16.dp)) {
 
-        if (ui.offline) {
+        if (ui.offline || ui.error != null) {
             Surface(
                 color = Color(0xFF3D2E00),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             ) {
-                Text(
-                    "Offline — exibindo cache local",
-                    color = Color(0xFFFFD54F),
-                    modifier = Modifier.padding(12.dp),
-                    fontSize = 13.sp
-                )
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        ui.error ?: "Offline — exibindo cache local",
+                        color = Color(0xFFFFD54F),
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // A.5: every error state must offer a visible retry
+                    TextButton(onClick = { programVm.refresh() }) {
+                        Text("Tentar novamente", color = Color(0xFFFFD54F))
+                    }
+                }
             }
         }
 
         if (ui.loading) {
-            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.fillMaxWidth().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 CircularProgressIndicator(color = Accent)
+                Spacer(Modifier.height(12.dp))
+                Text("Carregando programa…", color = Muted, fontSize = 13.sp)
+                Text("máx. 10s", color = Muted, fontSize = 11.sp)
             }
             return
         }
@@ -270,7 +354,7 @@ fun ProgramHomeScreen(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    week?.title ?: "Carregando…",
+                    week?.title ?: "Semana ${ui.state.currentWeek}",
                     color = TextMain,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
@@ -345,6 +429,100 @@ fun ProgramHomeScreen(
             }
         }
 
+        // B.4 review mode: FULL practice round (conversation + chunks), quiz only at the end
+        if (ui.state.heldBack) {
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1A0A)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "Modo revisão",
+                        color = Color(0xFFFFB74D),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        "O Elias pediu para reforçar a semana ${ui.state.currentWeek} antes de avançar." +
+                            (ui.state.reviewSince?.let { " Desde $it." } ?: "") +
+                            " Calendário pausado (${ui.state.totalPausedDays} dias).",
+                        color = Color(0xFFFFE0B2),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 8.dp)
+                    )
+                    val topics = ui.state.deficientTopics.orEmpty()
+                    if (topics.isNotEmpty()) {
+                        Text("Pendências:", color = Color(0xFFFFCC80), fontWeight = FontWeight.SemiBold)
+                        topics.take(8).forEach { t ->
+                            Text("· $t", color = Color(0xFFFFE0B2), fontSize = 12.sp)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        "Ordem da rodada de revisão (prática completa — não só o quiz):",
+                        color = Color(0xFFFFE0B2),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "1) Conversa temática da semana → 2) Chunks/IPA → 3) Quiz → 4) Checkpoint",
+                        color = Muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+                    // Step 1 — themed conversation (same week topics)
+                    Button(
+                        onClick = {
+                            programVm.startConversationSession(
+                                ProgramSessionType.THEMED,
+                                ui.state.dailyGoalMinutes,
+                            ) { week, title, lexis, grammar, phase, level ->
+                                onStartChat(
+                                    week, title, lexis, grammar, phase,
+                                    ProgramSessionType.THEMED.apiValue,
+                                    ui.state.dailyGoalMinutes,
+                                    level,
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
+                    ) {
+                        Text("1 · Conversa temática (revisão)", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Step 2 — chunks drill
+                    OutlinedButton(
+                        onClick = { programVm.startChunksDrill() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("2 · Chunks da semana (IPA / shadowing)", color = Color(0xFFFFB74D))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Step 3 — quiz only after practice (still available here at end of round)
+                    OutlinedButton(
+                        onClick = {
+                            programVm.loadWeekQuiz()
+                            showWeeklyQuiz = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("3 · Quiz semanal (após a prática)", color = Color(0xFFFFB74D))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { programVm.runCheckpoint() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5D4037))
+                    ) {
+                        Text("4 · Checkpoint de prontidão", color = Color.White)
+                    }
+                }
+            }
+        }
+
         // Primary CTA — wireframe: Iniciar Sessão de Hoje
         Spacer(Modifier.height(12.dp))
         Card(
@@ -354,13 +532,14 @@ fun ProgramHomeScreen(
         ) {
             Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "Iniciar sessão de hoje",
+                    if (ui.state.heldBack) "Praticar de novo (mesma semana)" else "Iniciar sessão de hoje",
                     color = TextMain,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
                 Text(
-                    "Semana ${ui.state.currentWeek} · ${ui.state.dailyGoalMinutes} min · TTS streaming · sem perguntar nível",
+                    "Semana ${ui.state.currentWeek} · Nível ${week?.level ?: "—"} · " +
+                        "${ui.state.dailyGoalMinutes} min · sem perguntar nível",
                     color = Muted,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
@@ -370,11 +549,12 @@ fun ProgramHomeScreen(
                         programVm.startConversationSession(
                             ProgramSessionType.THEMED,
                             ui.state.dailyGoalMinutes,
-                        ) { week, title, lexis, grammar, phase ->
+                        ) { week, title, lexis, grammar, phase, level ->
                             onStartChat(
                                 week, title, lexis, grammar, phase,
                                 ProgramSessionType.THEMED.apiValue,
                                 ui.state.dailyGoalMinutes,
+                                level,
                             )
                         }
                     },
@@ -389,10 +569,84 @@ fun ProgramHomeScreen(
             }
         }
 
+        // Quiz + checkpoint (Tutor Adaptativo B.4 / B.6)
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    programVm.loadWeekQuiz()
+                    showWeeklyQuiz = true
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Quiz semanal", color = Accent, fontSize = 13.sp)
+            }
+            Button(
+                onClick = { programVm.runCheckpoint() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF374151))
+            ) {
+                Text("Checkpoint", color = TextMain, fontSize = 13.sp)
+            }
+        }
+        if (!checkpointMsg.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                color = Color(0xFF1E293B),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(checkpointMsg!!, color = TextMain, fontSize = 13.sp)
+                    TextButton(onClick = { programVm.clearCheckpointMsg() }) {
+                        Text("OK", color = Accent)
+                    }
+                }
+            }
+        }
+        if (ui.state.totalPausedDays > 0 && !ui.state.heldBack) {
+            Text(
+                "Calendário ajustado: ${ui.state.totalPausedDays} dia(s) de revisão já contabilizados.",
+                color = Muted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
         Text("Foco de pronúncia de hoje", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Spacer(Modifier.height(6.dp))
-        // tags already above — drill CTA
+        // Daily highlight (same source as session kickoff)
+        val focusOfDay = remember { PronunciationFocus.focusOfDay() }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            PronunciationFocus.TAGS.forEach { tag ->
+                val selected = tag == focusOfDay
+                Surface(
+                    color = if (selected) Accent.copy(alpha = 0.35f) else Accent.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        tag,
+                        color = if (selected) TextMain else Accent,
+                        fontSize = 10.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+        Text(
+            "Hoje: $focusOfDay · ${PronunciationFocus.coachingTip(focusOfDay)}",
+            color = Muted,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
         ProgramActionButton(
             icon = { Icon(Icons.Default.RecordVoiceOver, null) },
             label = "Drill rápido (5–10 min)",
@@ -427,6 +681,8 @@ fun ProgramHomeScreen(
                 programVm.closeDrill()
             }
         }
+        Spacer(Modifier.height(24.dp))
+        } // content column under hero (Fase 4)
     }
 }
 

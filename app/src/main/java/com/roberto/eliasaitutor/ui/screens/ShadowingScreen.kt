@@ -27,17 +27,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.roberto.eliasaitutor.model.PronunciationFocus
+import com.roberto.eliasaitutor.ui.theme.EliasTokens
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
 import java.io.File
 
-private val Bg      = Color(0xFF0d0f14)
-private val Surface = Color(0xFF161922)
-private val Border  = Color(0xFF252a35)
-private val Accent  = Color(0xFF4f8ef7)
-private val Gold    = Color(0xFFf7c94f)
-private val Green   = Color(0xFF3ecf8e)
-private val Red     = Color(0xFFf76f6f)
-private val Muted   = Color(0xFF7a8099)
+private val Bg      = EliasTokens.Bg
+private val Surface = EliasTokens.Surface
+private val Border  = EliasTokens.Border
+private val Accent  = EliasTokens.Accent
+private val Gold    = EliasTokens.Gold
+private val Green   = EliasTokens.Green
+private val Red     = EliasTokens.Red
+private val Muted   = EliasTokens.Muted
+private val Purple  = EliasTokens.Purple
 
 @Composable
 fun ShadowingScreen(vm: EliasViewModel) {
@@ -45,11 +48,15 @@ fun ShadowingScreen(vm: EliasViewModel) {
     val phrase by vm.shadowPhrase.collectAsState()
     val score by vm.shadowScore.collectAsState()
     val feedback by vm.shadowFeedback.collectAsState()
+    val transcript by vm.shadowTranscript.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
+    val isIaSpeaking by vm.isIaSpeaking.collectAsState()
 
     var isRecording by remember { mutableStateOf(false) }
     var isPlayingElias by remember { mutableStateOf(false) }
     var isPlayingYou by remember { mutableStateOf(false) }
+    // Prefer real TTS state when Elias is playing via backend stream
+    val eliasActive = isPlayingElias || isIaSpeaking
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var lastAudioFile by remember { mutableStateOf<File?>(null) }
 
@@ -83,19 +90,40 @@ fun ShadowingScreen(vm: EliasViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            "🌊 Echo Mode",
-            color = Color(0xFFe8eaf0),
-            fontSize = 24.sp,
+            "Echo Mode",
+            color = EliasTokens.TextMain,
+            fontSize = 26.sp,
             fontWeight = FontWeight.ExtraBold
         )
         Text(
-            "Natural acquisition through imitation.",
+            "Imite · IPA · shadowing · aquisição natural",
             color = Muted,
             fontSize = 13.sp,
             textAlign = TextAlign.Center
         )
+        val focus = remember { PronunciationFocus.focusOfDay() }
+        Spacer(Modifier.height(10.dp))
+        Surface(
+            color = Purple.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Text(
+                "Foco de hoje: $focus",
+                color = Purple,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+            )
+        }
+        Text(
+            PronunciationFocus.coachingTip(focus),
+            color = Muted,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp, start = 8.dp, end = 8.dp)
+        )
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
 
         if (phrase.isEmpty()) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -103,60 +131,100 @@ fun ShadowingScreen(vm: EliasViewModel) {
                     onClick = { vm.generateShadowPhrase() },
                     colors = ButtonDefaults.buttonColors(containerColor = Accent),
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.height(56.dp).fillMaxWidth(0.7f)
+                    modifier = Modifier.height(56.dp).fillMaxWidth(0.85f)
                 ) {
                     Icon(Icons.Default.Refresh, null)
                     Spacer(Modifier.width(12.dp))
-                    Text("Get Daily Phrase", fontWeight = FontWeight.Bold)
+                    Text("Frase do dia + IPA", fontWeight = FontWeight.Bold)
                 }
             }
         } else {
+            // English phrase card
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1a1e29)),
-                border = BorderStroke(1.dp, Accent.copy(alpha = 0.3f)),
+                colors = CardDefaults.cardColors(containerColor = EliasTokens.SurfaceElevated),
+                border = BorderStroke(1.dp, Accent.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(20.dp)
             ) {
-                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("ECHO · SHADOWING + IPA", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                    Spacer(Modifier.height(16.dp))
+                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "FRASE",
+                        color = Accent,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         "\"$phrase\"",
-                        color = Color(0xFFe8eaf0),
+                        color = EliasTokens.TextMain,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         lineHeight = 32.sp
                     )
-                    val ipa by vm.shadowIpa.collectAsState()
-                    if (ipa.isNotBlank()) {
-                        Spacer(Modifier.height(12.dp))
+                }
+            }
+
+            // IPA card — Fase 4 wireframe highlight
+            val ipa by vm.shadowIpa.collectAsState()
+            if (ipa.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(EliasTokens.IpaBrush, RoundedCornerShape(20.dp))
+                            .border(1.dp, Purple.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                            .padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "IPA",
+                            color = Purple,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 3.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             ipa,
-                            color = Accent,
-                            fontSize = 16.sp,
+                            color = EliasTokens.TextMain,
+                            fontSize = 22.sp,
                             textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 30.sp
                         )
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            "IPA · foque schwa /ə/, linking e ritmo",
+                            "Schwa /ə/ · linking · ritmo · elisão",
                             color = Muted,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 4.dp)
+                            fontSize = 11.sp
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "1 Ouça  →  2 Grave  →  3 Compare",
+                color = Muted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(Modifier.height(16.dp))
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 1. Listen to Elias
-                val eliasBorder = if (isPlayingElias) Accent else Border
-                val eliasBg     = if (isPlayingElias) Accent.copy(alpha = 0.2f) else Surface
+                val eliasBorder = if (eliasActive) Accent else Border
+                val eliasBg     = if (eliasActive) Accent.copy(alpha = 0.2f) else Surface
                 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
@@ -172,7 +240,7 @@ fun ShadowingScreen(vm: EliasViewModel) {
                     ) {
                         Icon(Icons.Default.PlayArrow, "Listen", tint = Accent, modifier = Modifier.size(32.dp))
                     }
-                    Text("Elias", color = if (isPlayingElias) Accent else Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text("Elias", color = if (eliasActive) Accent else Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
 
                 // 2. Record Yourself
@@ -195,19 +263,25 @@ fun ShadowingScreen(vm: EliasViewModel) {
                                         setAudioSource(MediaRecorder.AudioSource.MIC)
                                         setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                         setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                                        setAudioEncodingBitRate(128_000)
+                                        setAudioSamplingRate(44_100)
                                         setOutputFile(file.absolutePath)
                                         prepare()
                                         start()
                                     }
                                     isRecording = true
                                 } else {
-                                    recorder?.apply {
-                                        stop()
-                                        release()
+                                    try {
+                                        recorder?.apply {
+                                            stop()
+                                            release()
+                                        }
+                                    } catch (_: Exception) {
+                                        try { recorder?.release() } catch (_: Exception) {}
                                     }
                                     recorder = null
                                     isRecording = false
-                                    lastAudioFile?.let { vm.submitShadowingAudio(it) }
+                                    lastAudioFile?.let { vm.submitShadowingAudio(it, phrase) }
                                 }
                             }
                         },
@@ -307,6 +381,14 @@ fun ShadowingScreen(vm: EliasViewModel) {
                                 fontSize = 12.sp,
                                 lineHeight = 16.sp,
                                 modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        if (transcript.isNotBlank()) {
+                            Text(
+                                "ASR: “$transcript”",
+                                color = Accent.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 6.dp)
                             )
                         }
                     }

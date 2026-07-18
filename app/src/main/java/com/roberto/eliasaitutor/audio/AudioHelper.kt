@@ -46,17 +46,26 @@ class AudioHelper(private val context: Context) {
             player?.release()
             player = MediaPlayer().apply {
                 setDataSource(file.absolutePath)
-                setOnCompletionListener { 
+                setOnCompletionListener {
                     it.release()
+                    if (player === it) player = null
                     onCompletion()
                     // Delete temp file after playing
                     file.delete()
+                }
+                setOnErrorListener { mp, _, _ ->
+                    mp.release()
+                    if (player === mp) player = null
+                    onCompletion()
+                    file.delete()
+                    true
                 }
                 prepare()
                 start()
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            onCompletion()
         }
     }
 

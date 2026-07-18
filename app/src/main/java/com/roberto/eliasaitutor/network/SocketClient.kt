@@ -80,6 +80,14 @@ object SocketClient {
     private val _erroFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
     val erroFlow: SharedFlow<String> = _erroFlow
 
+    /** Backend TTS degraded to text-only (first-audio-byte timeout / voice open fail). */
+    private val _ttsUnavailableFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
+    val ttsUnavailableFlow: SharedFlow<String> = _ttsUnavailableFlow
+
+    /** Progressive TTS status (e.g. "Tentando voz alternativa…") — optional UI. */
+    private val _ttsStatusFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
+    val ttsStatusFlow: SharedFlow<String> = _ttsStatusFlow
+
     private val _textoChunkFlow = MutableSharedFlow<String>(
         extraBufferCapacity = 100,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -105,6 +113,22 @@ object SocketClient {
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
     val traducaoFlow: SharedFlow<TranslationResult> = _traducaoFlow
+
+    data class EchoScoreResult(
+        val ok: Boolean,
+        val score: Int,
+        val feedback: String,
+        val transcript: String = "",
+        val method: String = "",
+        val requestId: String? = null,
+        val error: String? = null,
+    )
+
+    private val _echoScoreFlow = MutableSharedFlow<EchoScoreResult>(
+        extraBufferCapacity = 5,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val echoScoreFlow: SharedFlow<EchoScoreResult> = _echoScoreFlow
 
     // Monitora as mudanças de rede
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -249,6 +273,36 @@ object SocketClient {
                     _erroFlow.tryEmit(err)
                 }
 
+                on("tts_unavailable") { args ->
+                    try {
+                        val reason = when (val raw = args.firstOrNull()) {
+                            is JSONObject -> raw.optString("reason", "text_only")
+                            is String -> raw
+                            else -> "text_only"
+                        }
+                        Log.w(TAG, "TTS unavailable — text-only: $reason")
+                        _ttsUnavailableFlow.tryEmit(reason)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse tts_unavailable: ${e.message}")
+                        _ttsUnavailableFlow.tryEmit("text_only")
+                    }
+                }
+
+                on("tts_status") { args ->
+                    try {
+                        val msg = when (val raw = args.firstOrNull()) {
+                            is JSONObject -> raw.optString("message").ifBlank {
+                                raw.optString("phase", "tts")
+                            }
+                            is String -> raw
+                            else -> ""
+                        }
+                        if (msg.isNotBlank()) _ttsStatusFlow.tryEmit(msg)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse tts_status: ${e.message}")
+                    }
+                }
+
                 on("traducao_pronta") { args ->
                     try {
                         val data = args.firstOrNull() as? JSONObject ?: return@on
@@ -263,6 +317,25 @@ object SocketClient {
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "Erro parse traducao_pronta: ${e.message}")
+                    }
+                }
+
+                on("echo_score_pronto") { args ->
+                    try {
+                        val data = args.firstOrNull() as? JSONObject ?: return@on
+                        _echoScoreFlow.tryEmit(
+                            EchoScoreResult(
+                                ok = data.optBoolean("ok", false),
+                                score = data.optInt("score", 0).coerceIn(0, 100),
+                                feedback = data.optString("feedback"),
+                                transcript = data.optString("transcript"),
+                                method = data.optString("method"),
+                                requestId = data.optString("requestId").ifBlank { null },
+                                error = data.optString("error").ifBlank { null },
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse echo_score_pronto: ${e.message}")
                     }
                 }
 
@@ -403,6 +476,31 @@ object SocketClient {
                 put("requestId", requestId)
             }
             socket?.emit("traduzir_texto", payload)
+        }
+    }
+
+    /**
+     * Echo Mode scoring: optional base64 audio (Whisper) + reference phrase.
+     * Result arrives on [echoScoreFlow] as event `echo_score_pronto`.
+     */
+    fun requestEchoScore(
+        reference: String,
+        audioBase64: String = "",
+        mimeType: String = "audio/mp4",
+        durationMs: Long = 0L,
+        focus: String = "",
+        requestId: String = "",
+    ) {
+        if (_connectionState.value == ConnectionState.CONNECTED) {
+            val payload = JSONObject().apply {
+                put("reference", reference)
+                put("audioBase64", audioBase64)
+                put("mimeType", mimeType)
+                put("durationMs", durationMs)
+                put("focus", focus)
+                put("requestId", requestId)
+            }
+            socket?.emit("echo_avaliar", payload)
         }
     }
 
