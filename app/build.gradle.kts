@@ -19,8 +19,8 @@ fun prop(name: String, default: String = ""): String =
     System.getenv(name)?.takeIf { it.isNotBlank() }
         ?: localProperties.getProperty(name, default)
 
-// Liam — never Adam (legacy Default voices expire 2026-12-31)
-val defaultElevenLabsVoiceId = "TX3LPaxmHKxFdv7VOQHJ"
+// Brian — clear American male for tutoring (never Adam — expires 2026-12-31)
+val defaultElevenLabsVoiceId = "nPczCjzI2devNBz1zQrb"
 
 /** ElevenLabs key: official name or project alias My-English-Coach-Key. */
 fun elevenLabsApiKey(): String =
@@ -50,8 +50,8 @@ android {
         applicationId = "com.roberto.eliasaitutor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 4
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -29,10 +29,15 @@ function resetEnv() {
 
 try {
   resetEnv();
-  assert.strictEqual(resolveMainChatVoiceId(), DEFAULT_MAIN_CHAT_VOICE_ID, 'default Liam');
+  assert.strictEqual(resolveMainChatVoiceId(), DEFAULT_MAIN_CHAT_VOICE_ID, 'default Brian');
   assert.notStrictEqual(resolveMainChatVoiceId(), LEGACY_ADAM_VOICE_ID, 'not Adam');
-  assert.strictEqual(resolveFallbackVoiceId(), DEFAULT_FALLBACK_VOICE_ID, 'default Chris');
-  assert.strictEqual(STREAM_MODEL_ID.includes('flash') || STREAM_MODEL_ID.length > 0, true);
+  assert.strictEqual(resolveFallbackVoiceId(), DEFAULT_FALLBACK_VOICE_ID, 'default Liam fallback');
+  assert.strictEqual(
+    STREAM_MODEL_ID.includes('turbo') ||
+      STREAM_MODEL_ID.includes('flash') ||
+      STREAM_MODEL_ID.length > 0,
+    true
+  );
 
   process.env.MAIN_CHAT_VOICE_ID = LEGACY_ADAM_VOICE_ID;
   assert.strictEqual(

@@ -47,16 +47,16 @@ services:
       - key: CARTESIA_API_KEY
         sync: false
 
-      # ── Safe defaults (male US voice — Liam; never Adam) ──
+      # ── Safe defaults (clear American male Brian; never Adam) ──
       - key: MAIN_CHAT_VOICE_ID
-        value: TX3LPaxmHKxFdv7VOQHJ
+        value: nPczCjzI2devNBz1zQrb
       - key: FALLBACK_VOICE_ID
-        value: iP95p4xoKVk53GoZ742B
+        value: TX3LPaxmHKxFdv7VOQHJ
       - key: ELEVENLABS_STREAM_MODEL
-        value: eleven_flash_v2_5
+        value: eleven_turbo_v2_5
       - key: ELEVENLABS_OUTPUT_FORMAT
         value: pcm_24000
       - key: ELEVENLABS_STREAM_LATENCY
-        value: "3"
+        value: "2"
       - key: DEFAULT_LLM
         value: groq
