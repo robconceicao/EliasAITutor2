@@ -51,6 +51,8 @@ fun ShadowingScreen(vm: EliasViewModel) {
     val transcript by vm.shadowTranscript.collectAsState()
     val isLoading by vm.isLoading.collectAsState()
     val isIaSpeaking by vm.isIaSpeaking.collectAsState()
+    val canAdvance by vm.echoCanAdvance.collectAsState()
+    val passThreshold = vm.echoPassThreshold
 
     var isRecording by remember { mutableStateOf(false) }
     var isPlayingElias by remember { mutableStateOf(false) }
@@ -340,7 +342,7 @@ fun ShadowingScreen(vm: EliasViewModel) {
         if (score != null && !isRecording) {
             val scoreColor = when {
                 score!! >= 85 -> Green
-                score!! >= 65 -> Gold
+                score!! >= passThreshold -> Gold
                 else -> Red
             }
             
@@ -362,17 +364,33 @@ fun ShadowingScreen(vm: EliasViewModel) {
                             strokeWidth = 6.dp,
                             modifier = Modifier.size(70.dp)
                         )
-                        Text("$score", color = scoreColor, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                        Text(
+                            "${score!!}%",
+                            color = scoreColor,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp
+                        )
                     }
                     
                     Spacer(Modifier.width(20.dp))
                     
                     Column {
                         Text(
-                            if (score!! >= 85) "Native Level! 🏆" else if (score!! >= 65) "Great Echo! 🌊" else "Keep Trying! 💪",
+                            when {
+                                score!! >= 85 -> "Excelente! 🏆"
+                                canAdvance -> "Aprovado — pode avançar 🌊"
+                                else -> "Ainda não — pratique de novo 💪"
+                            },
                             color = scoreColor,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Acerto: ${score!!}% · Mínimo: $passThreshold%",
+                            color = Muted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 2.dp)
                         )
                         if (feedback.isNotEmpty()) {
                             Text(
@@ -395,14 +413,50 @@ fun ShadowingScreen(vm: EliasViewModel) {
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-            Button(
-                onClick = { vm.generateShadowPhrase() },
-                colors = ButtonDefaults.buttonColors(containerColor = Surface),
-                border = BorderStroke(1.dp, Border),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Next Phrase →", color = Accent)
+            Spacer(Modifier.height(16.dp))
+            // Advance only if pronunciation meets tolerance (task v3.1)
+            if (canAdvance) {
+                Button(
+                    onClick = { vm.generateShadowPhrase() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    Text("Próxima frase →", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    Text(
+                        "Grave de novo para atingir $passThreshold% e desbloquear a próxima frase.",
+                        color = Red,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = {
+                            // Clear score so user can re-record same phrase
+                            // Keep phrase; only reset score UI via re-record
+                        },
+                        enabled = false,
+                        border = BorderStroke(1.dp, Border),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Próxima frase bloqueada", color = Muted)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Use o microfone acima para tentar outra vez nesta frase.",
+                        color = Muted,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
         

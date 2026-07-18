@@ -122,6 +122,8 @@ data class FeedbackMistake(
 data class ProgramQuizQuestion(
     val question: String = "",
     val options: List<String> = emptyList(),
+    /** "vocabulary" | "pronunciation" (task v3.1 dual section). */
+    val section: String = "vocabulary",
 )
 
 @Serializable
@@ -139,6 +141,9 @@ data class QuizSubmitResult(
     @SerialName("score_percent")
     val scorePercent: Int = 0,
     val passed: Boolean = false,
+    @SerializedName("can_advance")
+    @SerialName("can_advance")
+    val canAdvance: Boolean = false,
     @SerializedName("passing_score_percent")
     @SerialName("passing_score_percent")
     val passingScorePercent: Int = 70,
@@ -146,6 +151,18 @@ data class QuizSubmitResult(
     @SerialName("correct_count")
     val correctCount: Int = 0,
     val total: Int = 0,
+    @SerializedName("vocabulary_score")
+    @SerialName("vocabulary_score")
+    val vocabularyScore: Int = 0,
+    @SerializedName("pronunciation_score")
+    @SerialName("pronunciation_score")
+    val pronunciationScore: Int = 0,
+    @SerializedName("vocabulary_total")
+    @SerialName("vocabulary_total")
+    val vocabularyTotal: Int = 0,
+    @SerializedName("pronunciation_total")
+    @SerialName("pronunciation_total")
+    val pronunciationTotal: Int = 0,
 )
 
 @Serializable

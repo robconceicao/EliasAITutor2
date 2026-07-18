@@ -36,8 +36,10 @@ object GameConstants {
     // Non-legacy ElevenLabs voices (Default Adam/Antoni expire 2026-12-31).
     // Main chat TTS runs on backend via MAIN_CHAT_VOICE_ID; these constants
     // are for any residual client-side REST calls only.
-    val VOICE_AMERICAN = "TX3LPaxmHKxFdv7VOQHJ"  // Liam — clear male (D5)
-    val VOICE_BRITISH  = "iP95p4xoKVk53GoZ742B"  // Chris — fallback family
+    val VOICE_AMERICAN = "nPczCjzI2devNBz1zQrb"  // Brian — clear American male (tutoring)
+    val VOICE_BRITISH  = "TX3LPaxmHKxFdv7VOQHJ"  // Liam — fallback family
+    /** Echo Mode: minimum score % to unlock next phrase. */
+    const val ECHO_PASS_THRESHOLD = 70
 
     const val SYSTEM_PROMPT = """You are Elias, a master of the "Natural Approach" (Stephen Krashen's theory). 
 Your goal is subconscious ACQUISITION, not conscious learning.

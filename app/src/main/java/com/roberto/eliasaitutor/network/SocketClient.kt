@@ -122,6 +122,8 @@ object SocketClient {
         val method: String = "",
         val requestId: String? = null,
         val error: String? = null,
+        val canAdvance: Boolean = false,
+        val passThreshold: Int = 70,
     )
 
     private val _echoScoreFlow = MutableSharedFlow<EchoScoreResult>(
@@ -129,6 +131,21 @@ object SocketClient {
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
     val echoScoreFlow: SharedFlow<EchoScoreResult> = _echoScoreFlow
+
+    data class EchoPhraseResult(
+        val ok: Boolean,
+        val phrase: String,
+        val ipa: String = "",
+        val source: String = "",
+        val requestId: String? = null,
+        val error: String? = null,
+    )
+
+    private val _echoPhraseFlow = MutableSharedFlow<EchoPhraseResult>(
+        extraBufferCapacity = 5,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val echoPhraseFlow: SharedFlow<EchoPhraseResult> = _echoPhraseFlow
 
     // Monitora as mudanças de rede
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -323,19 +340,41 @@ object SocketClient {
                 on("echo_score_pronto") { args ->
                     try {
                         val data = args.firstOrNull() as? JSONObject ?: return@on
+                        val score = data.optInt("score", 0).coerceIn(0, 100)
+                        val pass = data.optInt("passThreshold", 70).coerceIn(50, 100)
                         _echoScoreFlow.tryEmit(
                             EchoScoreResult(
                                 ok = data.optBoolean("ok", false),
-                                score = data.optInt("score", 0).coerceIn(0, 100),
+                                score = score,
                                 feedback = data.optString("feedback"),
                                 transcript = data.optString("transcript"),
                                 method = data.optString("method"),
                                 requestId = data.optString("requestId").ifBlank { null },
                                 error = data.optString("error").ifBlank { null },
+                                canAdvance = data.optBoolean("canAdvance", score >= pass),
+                                passThreshold = pass,
                             )
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "Erro parse echo_score_pronto: ${e.message}")
+                    }
+                }
+
+                on("echo_frase_pronta") { args ->
+                    try {
+                        val data = args.firstOrNull() as? JSONObject ?: return@on
+                        _echoPhraseFlow.tryEmit(
+                            EchoPhraseResult(
+                                ok = data.optBoolean("ok", true),
+                                phrase = data.optString("phrase"),
+                                ipa = data.optString("ipa"),
+                                source = data.optString("source"),
+                                requestId = data.optString("requestId").ifBlank { null },
+                                error = data.optString("error").ifBlank { null },
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro parse echo_frase_pronta: ${e.message}")
                     }
                 }
 
@@ -490,6 +529,8 @@ object SocketClient {
         durationMs: Long = 0L,
         focus: String = "",
         requestId: String = "",
+        passThreshold: Int = 70,
+        transcript: String = "",
     ) {
         if (_connectionState.value == ConnectionState.CONNECTED) {
             val payload = JSONObject().apply {
@@ -499,8 +540,22 @@ object SocketClient {
                 put("durationMs", durationMs)
                 put("focus", focus)
                 put("requestId", requestId)
+                put("passThreshold", passThreshold)
+                if (transcript.isNotBlank()) put("transcript", transcript)
             }
             socket?.emit("echo_avaliar", payload)
+        }
+    }
+
+    /**
+     * Request a new Echo Mode phrase from backend (LLM failover — not Anthropic on device).
+     */
+    fun requestEchoPhrase(requestId: String = "") {
+        if (_connectionState.value == ConnectionState.CONNECTED) {
+            val payload = JSONObject().apply {
+                put("requestId", requestId)
+            }
+            socket?.emit("echo_frase_nova", payload)
         }
     }
 
