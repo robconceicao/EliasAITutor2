@@ -41,9 +41,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val openProgram = intent?.getBooleanExtra("open_program", false) == true
+        // O Programa é a tela inicial: sessão do dia em no máximo 2 toques (F2).
         setContent {
-            EliasApp(eliasVm, programVm, initialTab = if (openProgram) 0 else 1)
+            EliasApp(eliasVm, programVm, initialTab = 0)
         }
     }
 
@@ -60,7 +60,7 @@ fun EliasApp(
     initialTab: Int = 1,
 ) {
     var currentTab by remember { mutableIntStateOf(initialTab) }
-    var programSubScreen by remember { mutableStateOf("home") } // home | progress
+    var programSubScreen by remember { mutableStateOf("home") } // home | progress | placement
     var showEndSessionConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toastMsg by vm.toastMessage.collectAsState()
@@ -140,7 +140,15 @@ fun EliasApp(
         Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (currentTab) {
                 0 -> {
-                    if (programSubScreen == "progress") {
+                    // Enquanto não houver nivelamento, a home pede o teste:
+                    // a semana inicial não é fixa na Semana 1.
+                    val programUi by programVm.ui.collectAsState()
+                    val needsPlacement =
+                        !programUi.loading && !programUi.offline && !programUi.state.placementDone
+
+                    if (programSubScreen == "placement" || needsPlacement) {
+                        PlacementScreen(programVm) { programSubScreen = "home" }
+                    } else if (programSubScreen == "progress") {
                         ProgramProgressScreen(programVm) { programSubScreen = "home" }
                     } else {
                         ProgramHomeScreen(

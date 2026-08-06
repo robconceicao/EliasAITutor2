@@ -35,6 +35,7 @@ fun ProgramSettingsScreen(
     state: UserProgramState,
     onBack: () -> Unit,
     onSave: (startDate: String, mode: String, reminder: String?, goal: Int) -> Unit,
+    onRetakePlacement: () -> Unit = {},
 ) {
     var startDate by remember { mutableStateOf(state.startDate) }
     var mode by remember { mutableStateOf(state.weekMode) }
@@ -146,6 +147,43 @@ fun ProgramSettingsScreen(
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 6.dp)
                     )
+                }
+            }
+
+            // Nivelamento — o início do programa não é fixo na Semana 1
+            Spacer(Modifier.height(12.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Surface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Nivelamento", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (state.placementDone) {
+                            "Semana inicial: ${state.startWeek}" +
+                                (state.placementLevel?.let { " · nível $it" } ?: "")
+                        } else {
+                            "Ainda não realizado — o programa está começando na Semana 1."
+                        },
+                        color = TextMain,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        "O início do programa não é fixo: o teste coloca você na semana " +
+                            "correspondente ao seu nível real.",
+                        color = Muted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(onClick = onRetakePlacement, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            if (state.placementDone) "Refazer nivelamento" else "Fazer nivelamento",
+                            color = Accent
+                        )
+                    }
                 }
             }
 

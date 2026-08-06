@@ -27,6 +27,7 @@ import {
   upsertWeeks,
   upsertQuizzes,
   getWeek,
+  getWeekCount,
   getProgramState,
 } from './services/programStore.js';
 import {
@@ -101,21 +102,69 @@ const PORT = process.env.PORT || 3000;
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const googleAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
-// MongoDB Connection (Optional - Graceful fallback to memory if not configured)
+// MongoDB Connection (opcional — fallback gracioso para memória/arquivo)
 let useMongo = false;
+let mongoStatus = 'disabled';
+
+/**
+ * O currículo é SEMPRE carregado em memória primeiro, antes de qualquer
+ * tentativa de conexão. Antes, o seed só rodava dentro do `.then()` do
+ * mongoose.connect: se a URI estivesse configurada mas a conexão falhasse
+ * (senha errada, IP fora do Network Access do Atlas — o erro mais comum na
+ * primeira configuração), o backend subia com ZERO semanas. `/program/weeks`
+ * devolvia [], o nivelamento dava 503 e a conversa caía no prompt genérico,
+ * tudo em silêncio.
+ */
+setMongoEnabled(false);
+await loadCurriculumSeed();
+
 if (process.env.MONGODB_URI) {
-  mongoose.connect(process.env.MONGODB_URI)
+  mongoStatus = 'connecting';
+  mongoose
+    .connect(process.env.MONGODB_URI, {
+      // Falha rápido e visível em vez de pendurar 30s no boot
+      serverSelectionTimeoutMS: 10000,
+    })
     .then(async () => {
       console.log('✅ Conectado ao MongoDB');
       useMongo = true;
+      mongoStatus = 'connected';
       setMongoEnabled(true);
+      // Reexecuta o seed para popular/atualizar as coleções (upsert idempotente)
       await loadCurriculumSeed();
     })
-    .catch(err => console.error('❌ Erro no MongoDB:', err));
+    .catch((err) => {
+      mongoStatus = `error: ${err.message}`;
+      console.error('❌ Erro no MongoDB:', err.message);
+      console.error(
+        '   → O backend CONTINUA funcionando, mas sem persistência entre instâncias.\n' +
+          '   → Verifique: usuário/senha na URI (senha precisa de URL-encode se tiver @ : / ?),\n' +
+          '     nome do banco no fim da URI, e Network Access do Atlas liberando 0.0.0.0/0.'
+      );
+      useMongo = false;
+      setMongoEnabled(false);
+    });
+
+  // Se a conexão cair depois do boot, volta para memória/arquivo
+  mongoose.connection.on('disconnected', () => {
+    if (useMongo) {
+      console.warn('⚠️ MongoDB desconectado — voltando para persistência em arquivo.');
+      useMongo = false;
+      mongoStatus = 'disconnected';
+      setMongoEnabled(false);
+    }
+  });
+  mongoose.connection.on('reconnected', () => {
+    console.log('✅ MongoDB reconectado.');
+    useMongo = true;
+    mongoStatus = 'connected';
+    setMongoEnabled(true);
+  });
 } else {
-  console.log('⚠️ MONGODB_URI não configurada. Usando histórico em memória por sessão.');
-  setMongoEnabled(false);
-  loadCurriculumSeed();
+  console.log(
+    '⚠️ MONGODB_URI não configurada. Estado do programa vai para backend_nodejs/data/program_state.json ' +
+      '(sobrevive a restart do processo, não a troca de instância).'
+  );
 }
 
 /** Load F1 curriculum + B.5 quiz seeds into memory (+ Mongo if enabled). Idempotent. */
@@ -1356,6 +1405,9 @@ app.get('/health', (req, res) => {
     streamModel: STREAM_MODEL_ID,
     opusBackend,
     mongo: useMongo,
+    mongoStatus,
+    mongoConfigured: !!process.env.MONGODB_URI,
+    programWeeksLoaded: getWeekCount(),
     hint: hasElevenLabsKey()
       ? undefined
       : 'Set ELEVENLABS_API_KEY (or My-English-Coach-Key) on the host env (e.g. Render).',

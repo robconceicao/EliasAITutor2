@@ -55,6 +55,15 @@ export const UserProgramStateSchema = new mongoose.Schema(
      * Auto mode never opens week > mastery_cleared_week + 1.
      */
     mastery_cleared_week: { type: Number, default: 0, min: 0, max: 26 },
+    /**
+     * Nivelamento — o início do programa não é fixo na Semana 1.
+     * start_week ancora tanto o calendário quanto o gate de quiz.
+     */
+    start_week: { type: Number, default: 1, min: 1, max: 26 },
+    placement_done: { type: Boolean, default: false },
+    placement_level: { type: String, default: null },
+    placement_score: { type: Number, default: null },
+    placement_at: { type: String, default: null },
   },
   { collection: 'user_program_state' }
 );

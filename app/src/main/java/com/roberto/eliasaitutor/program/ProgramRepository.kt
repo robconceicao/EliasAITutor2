@@ -43,6 +43,9 @@ class ProgramRepository(private val context: Context) {
         val TOTAL_PAUSED = intPreferencesKey("total_paused_days")
         val DEFICIENT_JSON = stringPreferencesKey("deficient_topics_json")
         val MASTERY_CLEARED = intPreferencesKey("mastery_cleared_week")
+        val START_WEEK = intPreferencesKey("start_week")
+        val PLACEMENT_DONE = booleanPreferencesKey("placement_done")
+        val PLACEMENT_LEVEL = stringPreferencesKey("placement_level")
     }
 
     val cachedState: Flow<UserProgramState> = context.programDataStore.data
@@ -62,6 +65,9 @@ class ProgramRepository(private val context: Context) {
                 totalPausedDays = p[Keys.TOTAL_PAUSED] ?: 0,
                 deficientTopics = deficient,
                 masteryClearedWeek = p[Keys.MASTERY_CLEARED] ?: 0,
+                startWeek = p[Keys.START_WEEK] ?: 1,
+                placementDone = p[Keys.PLACEMENT_DONE] ?: false,
+                placementLevel = p[Keys.PLACEMENT_LEVEL],
             ).let { resolveWeekLocally(it) }
         }
 
@@ -76,8 +82,20 @@ class ProgramRepository(private val context: Context) {
 
     suspend fun refreshFromNetwork(): Result<Pair<UserProgramState, List<ProgramWeek>>> {
         return runCatching {
-            val state = api.getState()
+            val remote = api.getState()
             val weeks = api.getWeeks()
+
+            // Rede de segurança: se o backend reiniciou sem persistência, ele
+            // devolve um estado virgem (Semana 1, sem nivelamento, início hoje).
+            // Nesse caso o cache local é mais confiável — restauramos o progresso
+            // no servidor em vez de deixá-lo apagar semanas de estudo.
+            val local = cachedState.first()
+            val state = if (looksVirgin(remote) && hasRealProgress(local)) {
+                restoreRemoteFromLocal(local) ?: local
+            } else {
+                remote
+            }
+
             persistState(state)
             context.programDataStore.edit {
                 it[Keys.WEEKS_JSON] = json.encodeToString(weeks)
@@ -85,6 +103,38 @@ class ProgramRepository(private val context: Context) {
             }
             resolveWeekLocally(state) to weeks
         }
+    }
+
+    /** Estado recém-inicializado pelo backend (nada foi feito ainda). */
+    private fun looksVirgin(s: UserProgramState): Boolean =
+        !s.placementDone &&
+            s.startWeek <= 1 &&
+            s.masteryClearedWeek == 0 &&
+            s.startDate == LocalDate.now().toString()
+
+    /** Cache local tem progresso que vale a pena preservar. */
+    private fun hasRealProgress(s: UserProgramState): Boolean =
+        s.placementDone || s.masteryClearedWeek > 0 || s.startWeek > 1 ||
+            (s.startDate.isNotBlank() && s.startDate != LocalDate.now().toString())
+
+    private suspend fun restoreRemoteFromLocal(local: UserProgramState): UserProgramState? {
+        return runCatching {
+            api.updateState(
+                mapOf(
+                    "start_date" to local.startDate,
+                    "week_mode" to local.weekMode,
+                    "current_week" to local.currentWeek,
+                    "daily_goal_minutes" to local.dailyGoalMinutes,
+                    "reminder_time" to local.reminderTime,
+                    "total_paused_days" to local.totalPausedDays,
+                    "held_back" to local.heldBack,
+                    "mastery_cleared_week" to local.masteryClearedWeek,
+                    "start_week" to local.startWeek,
+                    "placement_done" to local.placementDone,
+                    "placement_level" to local.placementLevel,
+                )
+            )
+        }.getOrNull()
     }
 
     suspend fun getWeek(n: Int): ProgramWeek? {
@@ -209,6 +259,34 @@ class ProgramRepository(private val context: Context) {
         }
     }
 
+    // ─── Nivelamento (semana inicial) ──────────────────────────
+
+    suspend fun getPlacement(): PlacementPayload? {
+        return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
+            runCatching { api.getPlacement() }.getOrNull()
+        }
+    }
+
+    /** [answers] nulo = atalho "nunca estudei" → começa na Semana 1. */
+    suspend fun submitPlacement(answers: List<Int>?): PlacementResult? {
+        val body: Map<String, Any?> =
+            if (answers == null) mapOf("beginner" to true) else mapOf("answers" to answers)
+        return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
+            runCatching { api.submitPlacement(body) }.getOrNull()
+        }?.also { result ->
+            result.state?.let {
+                persistState(it)
+                context.programDataStore.edit { prefs -> prefs[Keys.ONBOARDED] = true }
+            }
+        }
+    }
+
+    suspend fun resetPlacement(): UserProgramState? {
+        return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
+            runCatching { api.resetPlacement() }.getOrNull()
+        }?.also { persistState(it) }
+    }
+
     suspend fun runCheckpoint(): CheckpointResult? {
         return withTimeoutOrNull(PROGRAM_NET_TIMEOUT_MS) {
             runCatching { api.runCheckpoint() }.getOrNull()
@@ -230,6 +308,10 @@ class ProgramRepository(private val context: Context) {
             else it.remove(Keys.REVIEW_SINCE)
             it[Keys.TOTAL_PAUSED] = state.totalPausedDays
             it[Keys.MASTERY_CLEARED] = state.masteryClearedWeek.coerceIn(0, 26)
+            it[Keys.START_WEEK] = state.startWeek.coerceIn(1, 26)
+            it[Keys.PLACEMENT_DONE] = state.placementDone
+            if (state.placementLevel != null) it[Keys.PLACEMENT_LEVEL] = state.placementLevel
+            else it.remove(Keys.PLACEMENT_LEVEL)
             val topics = state.deficientTopics
             if (topics != null) it[Keys.DEFICIENT_JSON] = json.encodeToString(topics)
             else it.remove(Keys.DEFICIENT_JSON)
@@ -244,42 +326,55 @@ class ProgramRepository(private val context: Context) {
             return computeEffectiveWeek(startDate, today, 0)
         }
 
-        /** B.3: discount paused review days. */
+        /**
+         * B.3: discount paused review days.
+         * Ancorado em [startWeek] — o início do programa não é fixo na Semana 1;
+         * o nivelamento pode colocar o aluno em qualquer semana de 1 a 26.
+         */
         fun computeEffectiveWeek(
             startDate: String,
             today: LocalDate = LocalDate.now(),
             totalPausedDays: Int = 0,
+            startWeek: Int = 1,
         ): Int {
+            val base = startWeek.coerceIn(1, 26)
             return try {
                 val start = LocalDate.parse(startDate)
                 val days = ChronoUnit.DAYS.between(start, today).toInt()
                 val effective = (days - totalPausedDays.coerceAtLeast(0)).coerceAtLeast(0)
-                (1 + effective / 7).coerceIn(1, 26)
+                (base + effective / 7).coerceIn(base, 26)
             } catch (_: Exception) {
-                1
+                base
             }
         }
 
         /**
          * Mastery hard-gate (aligned with backend resolveWeek):
-         * auto week never exceeds masteryClearedWeek + 1.
+         * auto week never exceeds masteryClearedWeek + 1, and never falls below
+         * the placement start week.
          */
         fun resolveWeekLocally(state: UserProgramState): UserProgramState {
+            val base = state.startWeek.coerceIn(1, 26)
             val cleared = state.masteryClearedWeek.coerceIn(0, 26)
-            val masteryCap = (cleared + 1).coerceIn(1, 26)
+            val masteryCap = maxOf(base, cleared + 1).coerceIn(1, 26)
             if (state.heldBack) {
                 return state.copy(
-                    currentWeek = state.currentWeek.coerceIn(1, masteryCap)
+                    currentWeek = state.currentWeek.coerceIn(base, masteryCap)
                 )
             }
             return if (state.weekMode == "auto") {
                 val calendar = computeEffectiveWeek(
                     state.startDate,
                     totalPausedDays = state.totalPausedDays,
+                    startWeek = base,
                 )
-                state.copy(currentWeek = minOf(calendar, masteryCap))
+                state.copy(
+                    currentWeek = maxOf(base, minOf(calendar, masteryCap)),
+                    calendarWeek = calendar,
+                    gateBlockingCalendar = calendar > minOf(calendar, masteryCap),
+                )
             } else {
-                state.copy(currentWeek = state.currentWeek.coerceIn(1, 26))
+                state.copy(currentWeek = state.currentWeek.coerceIn(base, masteryCap))
             }
         }
     }

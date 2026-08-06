@@ -82,6 +82,16 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
     private val _checkpointMsg = MutableStateFlow<String?>(null)
     val checkpointMsg: StateFlow<String?> = _checkpointMsg.asStateFlow()
 
+    /** Nivelamento — define a semana inicial (o início não é fixo na Semana 1). */
+    private val _placement = MutableStateFlow<PlacementPayload?>(null)
+    val placement: StateFlow<PlacementPayload?> = _placement.asStateFlow()
+
+    private val _placementResult = MutableStateFlow<PlacementResult?>(null)
+    val placementResult: StateFlow<PlacementResult?> = _placementResult.asStateFlow()
+
+    private val _placementLoading = MutableStateFlow(false)
+    val placementLoading: StateFlow<Boolean> = _placementLoading.asStateFlow()
+
     private var timerJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
     private var lastTranscript: String = ""
@@ -163,11 +173,51 @@ class ProgramViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ─── Nivelamento ───────────────────────────────────────────
+
+    fun loadPlacement() {
+        viewModelScope.launch {
+            _placementLoading.value = true
+            _placementResult.value = null
+            _placement.value = repo.getPlacement()
+            _placementLoading.value = false
+        }
+    }
+
+    /** [answers] nulo = "nunca estudei inglês" → Semana 1. */
+    fun submitPlacement(answers: List<Int>?) {
+        viewModelScope.launch {
+            _placementLoading.value = true
+            val result = repo.submitPlacement(answers)
+            _placementResult.value = result
+            _placementLoading.value = false
+            if (result != null) {
+                _placement.value = null
+                refresh()
+            }
+        }
+    }
+
+    fun clearPlacement() {
+        _placement.value = null
+        _placementResult.value = null
+    }
+
+    /** Refazer o nivelamento (Configurações). */
+    fun resetPlacement() {
+        viewModelScope.launch {
+            repo.resetPlacement()
+            _placementResult.value = null
+            refresh()
+        }
+    }
+
     fun shiftWeek(delta: Int) {
         viewModelScope.launch {
             val s = _ui.value.state
             if (s.weekMode != "manual") return@launch
-            val next = (s.currentWeek + delta).coerceIn(1, 26)
+            val floor = s.startWeek.coerceIn(1, 26)
+            val next = (s.currentWeek + delta).coerceIn(floor, 26)
             repo.updateState(mapOf("current_week" to next, "week_mode" to "manual"))
             refresh()
         }

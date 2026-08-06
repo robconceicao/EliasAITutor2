@@ -85,6 +85,89 @@ data class UserProgramState(
     @SerializedName("progress_hint")
     @SerialName("progress_hint")
     val progressHint: String = "",
+    /** Semana inicial definida pelo nivelamento (1 = do zero). */
+    @SerializedName("start_week")
+    @SerialName("start_week")
+    val startWeek: Int = 1,
+    /** Semana que o calendário sozinho indicaria (sem o gate de quiz). */
+    @SerializedName("calendar_week")
+    @SerialName("calendar_week")
+    val calendarWeek: Int = 1,
+    /** true quando o calendário passou da semana liberada pelo quiz. */
+    @SerializedName("gate_blocking_calendar")
+    @SerialName("gate_blocking_calendar")
+    val gateBlockingCalendar: Boolean = false,
+    @SerializedName("placement_done")
+    @SerialName("placement_done")
+    val placementDone: Boolean = false,
+    @SerializedName("placement_level")
+    @SerialName("placement_level")
+    val placementLevel: String? = null,
+    @SerializedName("placement_score")
+    @SerialName("placement_score")
+    val placementScore: Int? = null,
+)
+
+// ─── Nivelamento (placement) ──────────────────────────────────
+
+@Serializable
+data class PlacementQuestion(
+    val tier: Int = 1,
+    val level: String = "",
+    val question: String = "",
+    val options: List<String> = emptyList(),
+)
+
+@Serializable
+data class PlacementTierInfo(
+    val tier: Int = 1,
+    val level: String = "",
+    @SerializedName("start_week")
+    @SerialName("start_week")
+    val startWeek: Int = 1,
+)
+
+@Serializable
+data class PlacementPayload(
+    val total: Int = 0,
+    @SerializedName("tier_pass_ratio")
+    @SerialName("tier_pass_ratio")
+    val tierPassRatio: Double = 0.75,
+    val tiers: List<PlacementTierInfo> = emptyList(),
+    val questions: List<PlacementQuestion> = emptyList(),
+)
+
+@Serializable
+data class PlacementTierResult(
+    val tier: Int = 1,
+    val level: String = "",
+    @SerializedName("start_week")
+    @SerialName("start_week")
+    val startWeek: Int = 1,
+    val correct: Int = 0,
+    val total: Int = 0,
+    val passed: Boolean = false,
+)
+
+@Serializable
+data class PlacementResult(
+    @SerializedName("start_week")
+    @SerialName("start_week")
+    val startWeek: Int = 1,
+    val level: String = "A1",
+    @SerializedName("cleared_tier")
+    @SerialName("cleared_tier")
+    val clearedTier: Int = 0,
+    @SerializedName("score_percent")
+    @SerialName("score_percent")
+    val scorePercent: Int = 0,
+    @SerializedName("correct_count")
+    @SerialName("correct_count")
+    val correctCount: Int = 0,
+    val total: Int = 0,
+    val tiers: List<PlacementTierResult> = emptyList(),
+    val summary: String = "",
+    val state: UserProgramState? = null,
 )
 
 @Serializable

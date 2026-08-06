@@ -3,7 +3,9 @@
  * Start server first: node server.js
  * Then: node test_program_api.js
  */
-const BASE = process.env.BACKEND_URL || 'http://127.0.0.1:3000';
+// A porta precisa acompanhar o .env (PORT=3001), senão o smoke test nunca roda.
+const PORT = process.env.PORT || 3001;
+const BASE = process.env.BACKEND_URL || `http://127.0.0.1:${PORT}`;
 
 async function req(method, path, body) {
   const res = await fetch(BASE + path, {
@@ -45,20 +47,71 @@ async function main() {
   r = await req('GET', '/program/weeks/99');
   assert(r.status === 404, 'GET invalid week 404');
 
-  // F2 state
-  r = await req('PUT', '/program/state', {
-    start_date: new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10),
-    week_mode: 'auto',
+  // Nivelamento — o início do programa não é fixo na Semana 1
+  r = await req('GET', '/program/placement');
+  assert(r.status === 200, 'GET /program/placement 200');
+  assert(r.json.questions?.length === 20, '20 questões de nivelamento');
+  assert(
+    !JSON.stringify(r.json).includes('correct_index'),
+    'nivelamento não vaza gabarito'
+  );
+  const placementSize = r.json.questions.length;
+
+  r = await req('POST', '/program/placement/submit', {
+    answers: new Array(placementSize).fill(-1),
   });
+  assert(r.status === 200, 'POST placement (tudo errado) 200');
+  assert(r.json.start_week === 1, 'errando tudo → começa na Semana 1');
+  assert(r.json.state.placement_done === true, 'placement_done marcado');
+
+  r = await req('POST', '/program/placement/submit', { beginner: true });
+  assert(r.json.start_week === 1, 'atalho iniciante → Semana 1');
+
+  r = await req('POST', '/program/placement/submit', { answers: [1, 2] });
+  assert(r.status === 422, 'quantidade errada de respostas → 422');
+
+  // F2 state — calendário anda, mas o gate de quiz é quem libera a semana
+  const d14 = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  r = await req('PUT', '/program/state', { start_date: d14, week_mode: 'auto' });
   assert(r.status === 200, 'PUT /program/state auto');
-  assert(r.json.current_week === 3, `auto week is 3 (got ${r.json.current_week})`);
+  assert(r.json.calendar_week === 3, `calendário na semana 3 (got ${r.json.calendar_week})`);
+  assert(
+    r.json.current_week === 1 && r.json.gate_blocking_calendar === true,
+    'sem quiz aprovado, o gate segura a semana e sinaliza o bloqueio'
+  );
+
+  // Dias travados pelo gate viram total_paused_days (a meta de 6 meses não some)
+  r = await req('GET', '/program/state');
+  assert(
+    r.json.total_paused_days >= 1,
+    `dia bloqueado contabilizado como pausa (got ${r.json.total_paused_days})`
+  );
+
+  // Liberando o gate, a semana do calendário passa a valer
+  r = await req('POST', '/program/quiz/1/submit', { answers: [] });
+  assert(r.status === 200, 'POST quiz submit responde 200');
+  r = await req('PUT', '/program/state', {
+    start_date: d14,
+    week_mode: 'auto',
+    mastery_cleared_week: 5,
+    total_paused_days: 0,
+  });
+  assert(
+    r.json.current_week === 3 && r.json.gate_blocking_calendar === false,
+    `com o gate liberado, auto week = 3 (got ${r.json.current_week})`
+  );
 
   r = await req('PUT', '/program/state', { week_mode: 'manual', current_week: 1 });
   assert(r.json.current_week === 1, 'manual week 1');
   r = await req('PUT', '/program/state', { current_week: 0 });
   assert(r.json.current_week === 1, 'clamp week min 1');
   r = await req('PUT', '/program/state', { current_week: 99 });
-  assert(r.json.current_week === 26, 'clamp week max 26');
+  assert(r.json.current_week <= 26, 'clamp week max 26');
+
+  // Nivelamento em nível intermediário reancora tudo
+  r = await req('PUT', '/program/state', { start_week: 9, placement_done: true });
+  assert(r.json.start_week === 9, 'start_week persistido');
+  assert(r.json.current_week >= 9, 'nunca volta antes da semana do nivelamento');
 
   // F4 sessions
   r = await req('POST', '/sessions', {

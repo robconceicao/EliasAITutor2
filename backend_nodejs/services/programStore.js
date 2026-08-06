@@ -8,6 +8,11 @@ import {
   PracticeSession,
   ProgramQuiz,
 } from '../models/programModels.js';
+import {
+  readSnapshot,
+  writeSnapshot,
+  setFileStoreEnabled,
+} from './stateFileStore.js';
 
 /** @type {Map<number, object>} */
 const memoryWeeks = new Map();
@@ -20,12 +25,46 @@ const memoryQuizzes = new Map();
 
 let mongoEnabled = false;
 
+/** Snapshot em arquivo já restaurado nesta execução? */
+let snapshotRestored = false;
+
 export function setMongoEnabled(flag) {
   mongoEnabled = !!flag;
+  // Com Mongo ativo, ele é a fonte de verdade — o arquivo vira ruído.
+  setFileStoreEnabled(!mongoEnabled);
 }
 
 export function isMongoEnabled() {
   return mongoEnabled;
+}
+
+/**
+ * Restaura estado + sessões do arquivo (uma vez por processo).
+ * Chamado preguiçosamente na primeira leitura de estado.
+ */
+function restoreFromFileOnce() {
+  if (snapshotRestored || mongoEnabled) return;
+  snapshotRestored = true;
+  const snap = readSnapshot();
+  if (!snap) return;
+  if (snap.state) memoryState = snap.state;
+  for (const s of snap.sessions || []) {
+    if (s?.id) memorySessions.set(s.id, s);
+  }
+  console.log(
+    `💾 Estado do programa restaurado do disco (semana ${snap.state?.current_week ?? '?'}, ${
+      (snap.sessions || []).length
+    } sessões)`
+  );
+}
+
+/** Persiste estado + sessões no arquivo (no-op quando Mongo está ativo). */
+function persistSnapshot() {
+  if (mongoEnabled) return;
+  writeSnapshot({
+    state: memoryState,
+    sessions: Array.from(memorySessions.values()),
+  });
 }
 
 function todayISO() {
@@ -37,23 +76,28 @@ export function computeAutoWeek(startDateStr, todayStr = todayISO()) {
 }
 
 /**
- * B.3 / D7 — calendar with review pauses:
+ * B.3 / D7 — calendar with review pauses, ancorado na SEMANA INICIAL:
  * effective_days = (today - start) - total_paused_days
- * week = clamp(1 + floor(effective_days / 7), 1, 26)
+ * week = clamp(start_week + floor(effective_days / 7), start_week, 26)
+ *
+ * `startWeek` vem do teste de nivelamento (placement). Sem nivelamento vale 1,
+ * preservando o comportamento anterior.
  */
 export function computeEffectiveWeek(
   startDateStr,
   todayStr = todayISO(),
-  totalPausedDays = 0
+  totalPausedDays = 0,
+  startWeek = 1
 ) {
   const start = new Date(startDateStr + 'T00:00:00');
   const today = new Date(todayStr + 'T00:00:00');
-  if (Number.isNaN(start.getTime()) || Number.isNaN(today.getTime())) return 1;
+  const base = Math.min(26, Math.max(1, Number(startWeek) || 1));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(today.getTime())) return base;
   const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24));
   const paused = Math.max(0, Number(totalPausedDays) || 0);
   const effective = Math.max(0, diffDays - paused);
-  const week = 1 + Math.floor(effective / 7);
-  return Math.min(26, Math.max(1, week));
+  const week = base + Math.floor(effective / 7);
+  return Math.min(26, Math.max(base, week));
 }
 
 function defaultState() {
@@ -72,6 +116,16 @@ function defaultState() {
     quiz_scores: {},
     /** Highest week cleared by checkpoint (0 = none). Mastery hard-gate. */
     mastery_cleared_week: 0,
+    /** Semana inicial definida pelo teste de nivelamento (1 = do zero). */
+    start_week: 1,
+    /** Nivelamento concluído? Enquanto false, a home pede o teste. */
+    placement_done: false,
+    /** Nível CEFR estimado no nivelamento (A1…C1). */
+    placement_level: null,
+    /** % de acerto no nivelamento. */
+    placement_score: null,
+    /** ISO datetime do nivelamento. */
+    placement_at: null,
   };
 }
 
@@ -96,11 +150,20 @@ export function programDayNumber(startDate, todayStr = todayISO()) {
   return Math.max(1, diff + 1);
 }
 
-/** Highest week the student may open (quiz-gated). */
+/** Semana inicial do programa (nivelamento). Default 1. */
+export function startWeekOf(state) {
+  return Math.min(26, Math.max(1, Number(state?.start_week) || 1));
+}
+
+/**
+ * Highest week the student may open (quiz-gated).
+ * Nunca abaixo da semana inicial definida pelo nivelamento.
+ */
 export function unlockedWeek(state) {
   if (!state) return 1;
+  const base = startWeekOf(state);
   const cleared = Math.max(0, Math.min(26, Number(state.mastery_cleared_week) || 0));
-  return Math.min(26, Math.max(1, cleared + 1));
+  return Math.min(26, Math.max(base, cleared + 1));
 }
 
 /**
@@ -110,26 +173,33 @@ export function unlockedWeek(state) {
 export function resolveWeek(state) {
   if (!state) return 1;
   const masteryCap = unlockedWeek(state);
+  const base = startWeekOf(state);
 
   if (state.held_back) {
     // Stay on the week under review (never jump while held back)
     const w = Number(state.current_week) || masteryCap;
-    return Math.min(26, Math.max(1, Math.min(w, masteryCap)));
+    return Math.min(26, Math.max(base, Math.min(w, masteryCap)));
   }
 
   if (state.week_mode === 'manual') {
-    // Manual pick still cannot skip locked future weeks
-    const want = Math.min(26, Math.max(1, Number(state.current_week) || 1));
+    // Manual pick still cannot skip locked future weeks nor go below placement
+    const want = Math.min(26, Math.max(base, Number(state.current_week) || base));
     return Math.min(want, masteryCap);
   }
 
   // auto: calendar can lag or lead, but never open a week without quiz pass
-  const calendar = computeEffectiveWeek(
-    state.start_date,
+  const calendar = calendarWeek(state);
+  return Math.max(base, Math.min(calendar, masteryCap));
+}
+
+/** Semana que o calendário sozinho indicaria (sem o gate de quiz). */
+export function calendarWeek(state) {
+  return computeEffectiveWeek(
+    state?.start_date,
     todayISO(),
-    state.total_paused_days || 0
+    state?.total_paused_days || 0,
+    startWeekOf(state)
   );
-  return Math.min(calendar, masteryCap);
 }
 
 /**
@@ -143,26 +213,46 @@ export function enrichProgramProgress(state) {
   const quizEntry = s.quiz_scores?.[String(week)] || null;
   const currentWeekQuizPassed = !!(quizEntry && quizEntry.passed);
   const nextWeekLocked = unlocked <= week && week < 26 && !currentWeekQuizPassed;
+  const calendar = calendarWeek(s);
+  const gateBlocked = calendar > week;
   return {
     ...s,
     current_week: week,
     program_day: day,
     unlocked_week: unlocked,
+    start_week: startWeekOf(s),
+    calendar_week: calendar,
+    /** true quando o calendário já passou da semana liberada pelo quiz */
+    gate_blocking_calendar: gateBlocked,
     current_week_quiz_passed: currentWeekQuizPassed,
     next_week_locked: nextWeekLocked,
-    progress_hint: nextWeekLocked
-      ? `Complete o Quiz da Semana ${week} com nota ≥70% para desbloquear a próxima aula.`
-      : week >= 26
-        ? 'Você está na última semana do programa.'
-        : currentWeekQuizPassed
-          ? `Quiz da Semana ${week} aprovado — Semana ${Math.min(26, week + 1)} liberada.`
-          : `Dia ${day} do programa · Semana ${week}/26`,
+    placement_done: !!s.placement_done,
+    progress_hint: !s.placement_done
+      ? 'Faça o teste de nivelamento para descobrir em qual semana você começa.'
+      : gateBlocked
+        ? `O calendário já está na Semana ${calendar}, mas a Semana ${week} ainda não foi liberada. Faça o Quiz da Semana ${week} (≥70%) — os dias parados não contam contra a sua meta de 6 meses.`
+        : nextWeekLocked
+          ? `Complete o Quiz da Semana ${week} com nota ≥70% para desbloquear a próxima aula.`
+          : week >= 26
+            ? 'Você está na última semana do programa.'
+            : currentWeekQuizPassed
+              ? `Quiz da Semana ${week} aprovado — Semana ${Math.min(26, week + 1)} liberada.`
+              : `Dia ${day} do programa · Semana ${week}/26`,
   };
 }
 
-/** While held_back, add 1 paused day per calendar day (once). */
+/**
+ * Acumula 1 dia de pausa por dia de calendário (uma vez por dia) quando o aluno
+ * está parado — seja por hold explícito do checkpoint (held_back), seja porque o
+ * gate de quiz travou o avanço enquanto o calendário seguia correndo.
+ *
+ * Sem isso, cada dia sem passar no quiz era perdido para sempre e a data-alvo de
+ * 6 meses virava ficção: o calendário disparava na frente da semana real.
+ */
 function applyDailyPauseIncrement(state) {
-  if (!state?.held_back) return state;
+  if (!state) return state;
+  const blockedByGate = calendarWeek(state) > resolveWeek(state);
+  if (!state.held_back && !blockedByGate) return state;
   const today = todayISO();
   if (state.last_pause_increment_date === today) return state;
   return {
@@ -238,10 +328,19 @@ function normalizeState(raw) {
     0,
     Math.min(26, Number(s.mastery_cleared_week) || 0)
   );
+  s.start_week = Math.max(1, Math.min(26, Number(s.start_week) || 1));
+  s.placement_done = !!s.placement_done;
+  s.placement_level = s.placement_level || null;
+  s.placement_score =
+    s.placement_score === null || s.placement_score === undefined
+      ? null
+      : Number(s.placement_score);
+  s.placement_at = s.placement_at || null;
   return s;
 }
 
 export async function getProgramState() {
+  restoreFromFileOnce();
   let state;
   if (mongoEnabled) {
     state = await UserProgramState.findOne({ key: 'default' }).lean();
@@ -272,6 +371,7 @@ export async function getProgramState() {
   } else {
     memoryState = { ...next };
   }
+  persistSnapshot();
 
   return enrichProgramProgress(next);
 }
@@ -307,6 +407,24 @@ export async function updateProgramState(patch) {
       patch.mastery_cleared_week !== undefined
         ? Math.max(0, Math.min(26, Number(patch.mastery_cleared_week) || 0))
         : current.mastery_cleared_week,
+    start_week:
+      patch.start_week !== undefined
+        ? Math.max(1, Math.min(26, Number(patch.start_week) || 1))
+        : current.start_week,
+    placement_done:
+      patch.placement_done !== undefined
+        ? !!patch.placement_done
+        : current.placement_done,
+    placement_level:
+      patch.placement_level !== undefined
+        ? patch.placement_level
+        : current.placement_level,
+    placement_score:
+      patch.placement_score !== undefined
+        ? patch.placement_score
+        : current.placement_score,
+    placement_at:
+      patch.placement_at !== undefined ? patch.placement_at : current.placement_at,
   });
 
   if (next.week_mode !== 'auto' && next.week_mode !== 'manual') {
@@ -330,7 +448,43 @@ export async function updateProgramState(patch) {
       new: true,
     });
   }
+  persistSnapshot();
   return enrichProgramProgress(next);
+}
+
+// ─── Nivelamento (placement) ────────────────────────────────
+
+/**
+ * Aplica o resultado do nivelamento: define a semana inicial, libera as semanas
+ * anteriores (o aluno já as domina) e reancora o calendário na data de hoje.
+ *
+ * `mastery_cleared_week = start_week - 1` faz o gate de quiz enxergar as semanas
+ * puladas como já cumpridas, sem inventar notas falsas em `quiz_scores`.
+ *
+ * @param {{start_week:number, level:string, score_percent:number}} result
+ * @param {{ restartCalendar?: boolean }} [opts] reancorar start_date em hoje (default true)
+ */
+export async function applyPlacement(result, opts = {}) {
+  const restartCalendar = opts.restartCalendar !== false;
+  const startWeek = Math.max(1, Math.min(26, Number(result?.start_week) || 1));
+  const patch = {
+    start_week: startWeek,
+    current_week: startWeek,
+    mastery_cleared_week: startWeek - 1,
+    placement_done: true,
+    placement_level: result?.level || null,
+    placement_score:
+      result?.score_percent === undefined ? null : Number(result.score_percent),
+    placement_at: new Date().toISOString(),
+    // Nivelou agora → o cronômetro dos 6 meses começa agora, zerado.
+    held_back: false,
+    review_since: null,
+    deficient_topics: null,
+    total_paused_days: 0,
+    last_pause_increment_date: null,
+  };
+  if (restartCalendar) patch.start_date = todayISO();
+  return updateProgramState(patch);
 }
 
 // ─── Quizzes (B.5 / B.6) ────────────────────────────────────
@@ -641,6 +795,7 @@ export async function createSession({ week, type, started_at }) {
   if (mongoEnabled) {
     await PracticeSession.create(doc);
   }
+  persistSnapshot();
   return { id };
 }
 
@@ -663,10 +818,12 @@ export async function endSession(id, { ended_at, duration_seconds, feedback_json
   if (mongoEnabled) {
     await PracticeSession.findOneAndUpdate({ id }, patch, { new: true });
   }
+  persistSnapshot();
   return updated;
 }
 
 export async function getSession(id) {
+  restoreFromFileOnce();
   if (mongoEnabled) {
     const row = await PracticeSession.findOne({ id }).lean();
     if (row) return row;
@@ -683,10 +840,12 @@ export async function updateSessionFeedback(id, feedback_json, feedback_status) 
   if (mongoEnabled) {
     await PracticeSession.findOneAndUpdate({ id }, patch);
   }
+  persistSnapshot();
   return updated;
 }
 
 export async function listSessions() {
+  restoreFromFileOnce();
   if (mongoEnabled) {
     const rows = await PracticeSession.find({}).lean();
     if (rows.length) return rows;

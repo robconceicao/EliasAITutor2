@@ -18,7 +18,14 @@ import {
   quizForClient,
   submitQuizAnswers,
   runCheckpoint,
+  applyPlacement,
 } from '../services/programStore.js';
+import {
+  buildPlacementQuestions,
+  placementForClient,
+  scorePlacement,
+  beginnerPlacement,
+} from '../services/placementService.js';
 import {
   generateSessionFeedback,
   getSessionFeedback,
@@ -81,6 +88,11 @@ router.put('/program/state', async (req, res) => {
       'review_since',
       'total_paused_days',
       'deficient_topics',
+      // nivelamento (normalmente escrito por /program/placement/submit)
+      'start_week',
+      'placement_done',
+      'placement_level',
+      'mastery_cleared_week',
     ];
     const patch = {};
     for (const k of allowed) {
@@ -93,6 +105,77 @@ router.put('/program/state', async (req, res) => {
     res.json(state);
   } catch (e) {
     sendError(res, e.status || 500, e.status === 422 ? 'invalid' : 'internal', e.message);
+  }
+});
+
+// ─── Nivelamento (o início do programa não é fixo na Semana 1) ───
+
+// GET /program/placement — 20 questões A1→C1, sem gabarito
+router.get('/program/placement', async (_req, res) => {
+  try {
+    const questions = await buildPlacementQuestions(getQuiz);
+    if (!questions.length) {
+      return sendError(res, 503, 'unavailable', 'Quiz seed not loaded yet');
+    }
+    res.json(placementForClient(questions));
+  } catch (e) {
+    sendError(res, 500, 'internal', e.message);
+  }
+});
+
+// POST /program/placement/submit — { answers: [...] } | { beginner: true }
+router.post('/program/placement/submit', async (req, res) => {
+  try {
+    const body = req.body || {};
+
+    if (body.beginner === true) {
+      const result = beginnerPlacement();
+      const state = await applyPlacement(result);
+      return res.json({ ...result, state });
+    }
+
+    const answers = body.answers;
+    if (!Array.isArray(answers)) {
+      return sendError(
+        res,
+        422,
+        'invalid',
+        'answers must be an array of option indices (or send { "beginner": true })'
+      );
+    }
+    const questions = await buildPlacementQuestions(getQuiz);
+    if (!questions.length) {
+      return sendError(res, 503, 'unavailable', 'Quiz seed not loaded yet');
+    }
+    if (answers.length !== questions.length) {
+      return sendError(
+        res,
+        422,
+        'invalid',
+        `answers must have exactly ${questions.length} items`
+      );
+    }
+    const result = scorePlacement(questions, answers);
+    const state = await applyPlacement(result);
+    res.json({ ...result, state });
+  } catch (e) {
+    sendError(res, e.status || 500, 'internal', e.message);
+  }
+});
+
+// POST /program/placement/reset — refazer o nivelamento
+router.post('/program/placement/reset', async (_req, res) => {
+  try {
+    const { updateProgramState } = await import('../services/programStore.js');
+    const state = await updateProgramState({
+      placement_done: false,
+      placement_level: null,
+      placement_score: null,
+      placement_at: null,
+    });
+    res.json(state);
+  } catch (e) {
+    sendError(res, 500, 'internal', e.message);
   }
 });
 

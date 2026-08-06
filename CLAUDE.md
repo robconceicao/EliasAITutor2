@@ -208,8 +208,40 @@ MONGODB_URI=...       # opcional — sem ele, histórico fica em memória por se
 
 As chaves do Android (Cartesia para Immersion/Shadowing, etc.) ficam em `local.properties` e são injetadas via `BuildConfig`.
 
-## MongoDB — Fallback em Memória
-MongoDB é **opcional**. Se `MONGODB_URI` não estiver configurada, o backend usa histórico em memória por sessão (reinicia ao desconectar). Para persistência entre sessões, configurar MongoDB.
+## Modo Programa — Semana inicial e progressão
+
+**O início do programa NÃO é fixo na Semana 1.** A semana inicial vem do teste de nivelamento:
+
+| Rota | Função |
+|---|---|
+| `GET /program/placement` | 20 questões (5 níveis × 4), montadas a partir do banco de quizzes semanal — sem gabarito |
+| `POST /program/placement/submit` | `{answers:[...]}` ou `{beginner:true}` → define `start_week` e reancora o calendário em hoje |
+| `POST /program/placement/reset` | Permite refazer o nivelamento |
+
+Regra de pontuação (`services/placementService.js`): o aluno precisa de ≥75% em **todos** os níveis até T para "dominar" T; começa na primeira semana de T+1. Acerto isolado num nível alto não pula a base.
+
+| Nível dominado | Semana inicial |
+|---|---|
+| nenhum | 1 |
+| A1 | 5 |
+| A2 | 9 |
+| B1 | 15 |
+| B2 ou mais | 22 |
+
+**Progressão da semana** (`resolveWeek` em `programStore.js`) = `max(start_week, min(calendário, unlocked_week))`, onde `unlocked_week = max(start_week, mastery_cleared_week + 1)`. O calendário anda sozinho, mas **só abre a semana liberada pelo quiz** (≥70%).
+
+Quando o gate segura o avanço, `total_paused_days` acumula 1 por dia — assim a meta de 6 meses (`start_date + 6 meses`) não vira ficção. O campo `gate_blocking_calendar` sinaliza esse estado para a UI.
+
+## Persistência de estado
+MongoDB é **recomendado** — guia completo em `docs/MONGODB_SETUP.md`. Verificar a conexão antes de subir: `npm run test:mongo`.
+
+O currículo é sempre carregado em memória **antes** da conexão com o Mongo. Se a URI estiver configurada mas a conexão falhar, o backend continua servindo as 26 semanas e cai para persistência em arquivo — `/health` expõe `mongo`, `mongoStatus` e `programWeeksLoaded` para diagnóstico.
+
+Sem `MONGODB_URI`:
+- histórico de conversa fica em memória por sessão;
+- estado do programa (semana, nivelamento, streak, notas de quiz, sessões) é salvo em `backend_nodejs/data/program_state.json` via `services/stateFileStore.js` — sobrevive a restart do processo, **não** a troca de instância (Render free).
+
+Rede de segurança no Android: se o backend responder um estado "virgem" (Semana 1, sem nivelamento, início hoje) enquanto o cache local tem progresso real, o `ProgramRepository` **restaura o estado no servidor** em vez de deixar o app apagar semanas de estudo.
 
 ## UI de Voz — OndasSonorasAgente.kt
 7 barras animadas com gradientes neon reativos ao estado:

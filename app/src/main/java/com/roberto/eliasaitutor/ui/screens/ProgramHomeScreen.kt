@@ -128,6 +128,10 @@ fun ProgramHomeScreen(
                     programVm.setReminderTime(reminder)
                     programVm.setDailyGoal(goal)
                     showSettings = false
+                },
+                onRetakePlacement = {
+                    showSettings = false
+                    programVm.resetPlacement()
                 }
             )
             return

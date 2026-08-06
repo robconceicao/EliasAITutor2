@@ -223,10 +223,28 @@ const enriched = enrichProgramProgress({
   total_paused_days: 0,
   held_back: false,
   current_week: 1,
+  // já nivelado: aqui testamos o gate de quiz, não o nivelamento
+  placement_done: true,
+  start_week: 1,
 });
 assert.strictEqual(enriched.program_day >= 1, true);
 assert.strictEqual(enriched.unlocked_week, 1);
 assert.strictEqual(enriched.next_week_locked, true);
 assert.ok(String(enriched.progress_hint).includes('Quiz'));
+
+// Sem nivelamento, a dica pede o teste antes de qualquer outra coisa —
+// o início do programa não é fixo na Semana 1.
+const notPlaced = enrichProgramProgress({
+  start_date: '2026-07-18',
+  mastery_cleared_week: 0,
+  week_mode: 'auto',
+  quiz_scores: {},
+  total_paused_days: 0,
+  held_back: false,
+  current_week: 1,
+  placement_done: false,
+});
+assert.ok(String(notPlaced.progress_hint).toLowerCase().includes('nivelamento'));
+assert.strictEqual(notPlaced.placement_done, false);
 
 console.log('✅ evaluateReadiness + pause calendar + mastery gate tests passed');

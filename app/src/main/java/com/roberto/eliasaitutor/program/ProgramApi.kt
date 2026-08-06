@@ -69,6 +69,18 @@ interface ProgramApi {
 
     @POST("program/checkpoint")
     suspend fun runCheckpoint(): CheckpointResult
+
+    /** Nivelamento — define a semana inicial (o início não é fixo na Semana 1). */
+    @GET("program/placement")
+    suspend fun getPlacement(): PlacementPayload
+
+    @POST("program/placement/submit")
+    suspend fun submitPlacement(
+        @Body body: Map<String, @JvmSuppressWildcards Any?>,
+    ): PlacementResult
+
+    @POST("program/placement/reset")
+    suspend fun resetPlacement(): UserProgramState
 }
 
 object ProgramApiClient {

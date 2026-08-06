@@ -33,12 +33,19 @@ class ProgramWeekCalcTest {
         assertEquals(26, ProgramRepository.computeAutoWeek("2020-01-01", LocalDate.of(2026, 7, 1)))
     }
 
+    /**
+     * Manual respeita o gate de mastery (igual ao backend resolveWeek):
+     * escolher a semana à mão não pula conteúdo não liberado pelo quiz.
+     */
     @Test
     fun manual_clamps() {
-        val s = UserProgramState(currentWeek = 99, weekMode = "manual")
+        val s = UserProgramState(currentWeek = 99, weekMode = "manual", masteryClearedWeek = 25)
         assertEquals(26, ProgramRepository.resolveWeekLocally(s).currentWeek)
         val s2 = UserProgramState(currentWeek = 0, weekMode = "manual")
         assertEquals(1, ProgramRepository.resolveWeekLocally(s2).currentWeek)
+        // sem mastery, manual não abre semana futura
+        val s3 = UserProgramState(currentWeek = 20, weekMode = "manual", masteryClearedWeek = 2)
+        assertEquals(3, ProgramRepository.resolveWeekLocally(s3).currentWeek)
     }
 
     @Test
@@ -96,5 +103,66 @@ class ProgramWeekCalcTest {
             currentWeek = 2,
         )
         assertEquals(2, ProgramRepository.resolveWeekLocally(s).currentWeek)
+    }
+
+    // ─── Nivelamento: o início do programa não é fixo na Semana 1 ───
+
+    @Test
+    fun placement_startWeekAnchorsCalendar() {
+        // Nivelado na Semana 9: dia 1 é a Semana 9, não a Semana 1.
+        assertEquals(
+            9,
+            ProgramRepository.computeEffectiveWeek(
+                "2026-07-01", LocalDate.of(2026, 7, 1), 0, 9
+            )
+        )
+        assertEquals(
+            10,
+            ProgramRepository.computeEffectiveWeek(
+                "2026-07-01", LocalDate.of(2026, 7, 8), 0, 9
+            )
+        )
+        // Borda: dia 7 ainda é a mesma semana
+        assertEquals(
+            9,
+            ProgramRepository.computeEffectiveWeek(
+                "2026-07-01", LocalDate.of(2026, 7, 7), 0, 9
+            )
+        )
+        // Sem nivelamento, comportamento antigo preservado
+        assertEquals(
+            1,
+            ProgramRepository.computeEffectiveWeek(
+                "2026-07-01", LocalDate.of(2026, 7, 1), 0, 1
+            )
+        )
+    }
+
+    @Test
+    fun placement_neverFallsBelowStartWeek() {
+        val s = UserProgramState(
+            startDate = "2026-07-01",
+            weekMode = "auto",
+            startWeek = 15,
+            masteryClearedWeek = 14,
+        )
+        assertEquals(15, ProgramRepository.resolveWeekLocally(s).currentWeek)
+
+        // Manual tentando voltar para antes do nivelamento
+        val manual = s.copy(weekMode = "manual", currentWeek = 3)
+        assertEquals(15, ProgramRepository.resolveWeekLocally(manual).currentWeek)
+    }
+
+    @Test
+    fun placement_gateStillAppliesAfterStartWeek() {
+        val s = UserProgramState(
+            startDate = "2020-01-01", // calendário muito à frente
+            weekMode = "auto",
+            startWeek = 9,
+            masteryClearedWeek = 8,
+        )
+        val resolved = ProgramRepository.resolveWeekLocally(s)
+        assertEquals(9, resolved.currentWeek)
+        assertEquals(true, resolved.gateBlockingCalendar)
     }
 }
