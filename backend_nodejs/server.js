@@ -42,8 +42,10 @@ import {
   ensureElevenLabsKeyEnv,
   hasElevenLabsKey,
   resolveApiKeySource,
+  apiKey as elevenLabsApiKey,
   synthesizePcmRest,
 } from './services/elevenLabsClient.js';
+import crypto from 'crypto';
 import programRoutes from './routes/programRoutes.js';
 import { translateToPtBr } from './services/translationService.js';
 import { scoreEchoAttempt } from './services/echoScoreService.js';
@@ -1424,6 +1426,65 @@ app.get('/health', (req, res) => {
     hint: hasElevenLabsKey()
       ? undefined
       : 'Set ELEVENLABS_API_KEY (or My-English-Coach-Key) on the host env (e.g. Render).',
+  });
+});
+
+/**
+ * Guarded credential probe. /health answers "is a key present?"; this answers
+ * the question nothing else does: "is the key ACCEPTED by the provider?"
+ *
+ * Deliberately NOT under /health — that path is Render's healthCheckPath and
+ * would burn an upstream call on every liveness probe.
+ *
+ * Disabled unless DIAG_TOKEN is set; then requires a matching x-diag-token.
+ * Never returns key values — only length, source, and a truncated upstream body.
+ */
+app.get('/diag/providers', async (req, res) => {
+  const expected = (process.env.DIAG_TOKEN || '').trim();
+  if (!expected) return res.status(404).json({ error: 'not_found' });
+
+  const supplied = String(req.get('x-diag-token') || '');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  /** Probe one provider without ever echoing the key. */
+  const probe = async (name, url, headers, key) => {
+    if (!key) return { name, keyPresent: false, ok: false, status: null, detail: 'key missing' };
+    try {
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+      const body = await r.text().catch(() => '');
+      return {
+        name,
+        keyPresent: true,
+        keyLength: key.length,
+        ok: r.ok,
+        status: r.status,
+        detail: r.ok ? undefined : body.slice(0, 200),
+      };
+    } catch (e) {
+      return { name, keyPresent: true, keyLength: key.length, ok: false, status: null, detail: e.message };
+    }
+  };
+
+  ensureElevenLabsKeyEnv();
+  const anthropicKey = (process.env.ANTHROPIC_API_KEY || '').trim();
+
+  const [anthropic_, elevenlabs] = await Promise.all([
+    probe('anthropic', 'https://api.anthropic.com/v1/models', {
+      'x-api-key': anthropicKey,
+      'anthropic-version': '2023-06-01',
+    }, anthropicKey),
+    probe('elevenlabs', 'https://api.elevenlabs.io/v1/user', {
+      'xi-api-key': elevenLabsApiKey(),
+    }, elevenLabsApiKey()),
+  ]);
+
+  res.json({
+    anthropic: anthropic_,
+    elevenlabs: { ...elevenlabs, keySource: resolveApiKeySource() },
   });
 });
 
