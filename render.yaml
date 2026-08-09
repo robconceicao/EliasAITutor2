@@ -17,6 +17,7 @@ services:
     rootDir: backend_nodejs
     # opusscript is pure-JS fallback if @discordjs/opus native .node fails on Render
     buildCommand: npm install --omit=dev
+    # server.js binds HOST=0.0.0.0 + process.env.PORT (required for Render port scan)
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit

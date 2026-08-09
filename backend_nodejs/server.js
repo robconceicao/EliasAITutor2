@@ -96,76 +96,24 @@ const io = new Server(server, {
   cors: { origin: '*' }
 });
 
-const PORT = process.env.PORT || 3000;
+// Render (and most PaaS) inject PORT. Must bind 0.0.0.0 — not localhost — or
+// the deploy port-scan times out with "no open ports detected".
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+
+// Immediate visible log (stdout may be block-buffered on Render; write + flush)
+console.log(`[boot] elias backend starting node=${process.version} host=${HOST} port=${PORT}`);
 
 // Initialize APIs
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const googleAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
 // MongoDB Connection (opcional — fallback gracioso para memória/arquivo)
+// IMPORTANT: seed + mongo run AFTER server.listen (see initDataStores below).
+// Awaiting them before listen caused Render free deploys to hit
+// "Port scan timeout reached, no open ports detected" when boot stalled.
 let useMongo = false;
 let mongoStatus = 'disabled';
-
-/**
- * O currículo é SEMPRE carregado em memória primeiro, antes de qualquer
- * tentativa de conexão. Antes, o seed só rodava dentro do `.then()` do
- * mongoose.connect: se a URI estivesse configurada mas a conexão falhasse
- * (senha errada, IP fora do Network Access do Atlas — o erro mais comum na
- * primeira configuração), o backend subia com ZERO semanas. `/program/weeks`
- * devolvia [], o nivelamento dava 503 e a conversa caía no prompt genérico,
- * tudo em silêncio.
- */
-setMongoEnabled(false);
-await loadCurriculumSeed();
-
-if (process.env.MONGODB_URI) {
-  mongoStatus = 'connecting';
-  mongoose
-    .connect(process.env.MONGODB_URI, {
-      // Falha rápido e visível em vez de pendurar 30s no boot
-      serverSelectionTimeoutMS: 10000,
-    })
-    .then(async () => {
-      console.log('✅ Conectado ao MongoDB');
-      useMongo = true;
-      mongoStatus = 'connected';
-      setMongoEnabled(true);
-      // Reexecuta o seed para popular/atualizar as coleções (upsert idempotente)
-      await loadCurriculumSeed();
-    })
-    .catch((err) => {
-      mongoStatus = `error: ${err.message}`;
-      console.error('❌ Erro no MongoDB:', err.message);
-      console.error(
-        '   → O backend CONTINUA funcionando, mas sem persistência entre instâncias.\n' +
-          '   → Verifique: usuário/senha na URI (senha precisa de URL-encode se tiver @ : / ?),\n' +
-          '     nome do banco no fim da URI, e Network Access do Atlas liberando 0.0.0.0/0.'
-      );
-      useMongo = false;
-      setMongoEnabled(false);
-    });
-
-  // Se a conexão cair depois do boot, volta para memória/arquivo
-  mongoose.connection.on('disconnected', () => {
-    if (useMongo) {
-      console.warn('⚠️ MongoDB desconectado — voltando para persistência em arquivo.');
-      useMongo = false;
-      mongoStatus = 'disconnected';
-      setMongoEnabled(false);
-    }
-  });
-  mongoose.connection.on('reconnected', () => {
-    console.log('✅ MongoDB reconectado.');
-    useMongo = true;
-    mongoStatus = 'connected';
-    setMongoEnabled(true);
-  });
-} else {
-  console.log(
-    '⚠️ MONGODB_URI não configurada. Estado do programa vai para backend_nodejs/data/program_state.json ' +
-      '(sobrevive a restart do processo, não a troca de instância).'
-  );
-}
 
 /** Load F1 curriculum + B.5 quiz seeds into memory (+ Mongo if enabled). Idempotent. */
 async function loadCurriculumSeed() {
@@ -190,6 +138,71 @@ async function loadCurriculumSeed() {
     }
   } catch (e) {
     console.error('❌ Failed to load quiz seed:', e.message);
+  }
+}
+
+/**
+ * Curriculum first (memory), then optional Mongo.
+ * Never blocks HTTP bind — Render requires an open port within the deploy scan window.
+ */
+async function initDataStores() {
+  /**
+   * O currículo é SEMPRE carregado em memória primeiro, antes de qualquer
+   * tentativa de conexão. Antes, o seed só rodava dentro do `.then()` do
+   * mongoose.connect: se a URI estivesse configurada mas a conexão falhasse
+   * (senha errada, IP fora do Network Access do Atlas), o backend subia com
+   * ZERO semanas. Agora o seed em memória roda mesmo se o Mongo falhar.
+   */
+  setMongoEnabled(false);
+  await loadCurriculumSeed();
+
+  if (process.env.MONGODB_URI) {
+    mongoStatus = 'connecting';
+    mongoose
+      .connect(process.env.MONGODB_URI, {
+        // Falha rápido e visível em vez de pendurar 30s no boot
+        serverSelectionTimeoutMS: 10000,
+      })
+      .then(async () => {
+        console.log('✅ Conectado ao MongoDB');
+        useMongo = true;
+        mongoStatus = 'connected';
+        setMongoEnabled(true);
+        // Reexecuta o seed para popular/atualizar as coleções (upsert idempotente)
+        await loadCurriculumSeed();
+      })
+      .catch((err) => {
+        mongoStatus = `error: ${err.message}`;
+        console.error('❌ Erro no MongoDB:', err.message);
+        console.error(
+          '   → O backend CONTINUA funcionando, mas sem persistência entre instâncias.\n' +
+            '   → Verifique: usuário/senha na URI (senha precisa de URL-encode se tiver @ : / ?),\n' +
+            '     nome do banco no fim da URI, e Network Access do Atlas liberando 0.0.0.0/0.'
+        );
+        useMongo = false;
+        setMongoEnabled(false);
+      });
+
+    // Se a conexão cair depois do boot, volta para memória/arquivo
+    mongoose.connection.on('disconnected', () => {
+      if (useMongo) {
+        console.warn('⚠️ MongoDB desconectado — voltando para persistência em arquivo.');
+        useMongo = false;
+        mongoStatus = 'disconnected';
+        setMongoEnabled(false);
+      }
+    });
+    mongoose.connection.on('reconnected', () => {
+      console.log('✅ MongoDB reconectado.');
+      useMongo = true;
+      mongoStatus = 'connected';
+      setMongoEnabled(true);
+    });
+  } else {
+    console.log(
+      '⚠️ MONGODB_URI não configurada. Estado do programa vai para backend_nodejs/data/program_state.json ' +
+        '(sobrevive a restart do processo, não a troca de instância).'
+    );
   }
 }
 
@@ -1414,7 +1427,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-server.listen(PORT, () => {
+// Bind FIRST so Render's port scan succeeds; then load seed/Mongo in background.
+// Host MUST be 0.0.0.0 on Render (localhost-only bind → "no open ports detected").
+server.listen(PORT, HOST, () => {
   ensureElevenLabsKeyEnv();
   let opusBackend = 'unresolved';
   try {
@@ -1423,7 +1438,7 @@ server.listen(PORT, () => {
     opusBackend = `error:${e.message}`;
     console.error('[boot] Opus encoder failed to load:', e.message);
   }
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(`🚀 Servidor rodando em http://${HOST}:${PORT}`);
   console.log(
     `[boot] TTS main=${resolveMainChatVoiceId()} format=${STREAM_OUTPUT_FORMAT} model=${STREAM_MODEL_ID} elevenLabsKey=${hasElevenLabsKey()} source=${resolveApiKeySource()} opus=${opusBackend}`
   );
@@ -1432,4 +1447,14 @@ server.listen(PORT, () => {
       '[boot] ⚠️ ELEVENLABS_API_KEY missing — set it (or My-English-Coach-Key) on Render Environment. TTS will stay silent until fixed.'
     );
   }
+
+  // Seed + optional Mongo after the port is open (never block deploy health/port scan).
+  initDataStores().catch((err) => {
+    console.error('[boot] initDataStores failed:', err?.message || err);
+  });
+});
+
+server.on('error', (err) => {
+  console.error(`[boot] server.listen error on ${HOST}:${PORT}:`, err.message);
+  process.exit(1);
 });
