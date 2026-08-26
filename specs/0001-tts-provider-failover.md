@@ -45,7 +45,8 @@ usando um segundo provedor de voz — em vez de cair para texto puro.
 - [ ] Rota `GET /health/tts` com o estado de cada provedor (sem segredos).
 - [ ] `app/.../viewmodel/EliasViewModel.kt`: quando `reason` for `all_providers_failed`
       ou `*_auth_failed`, **não** tentar o fallback local de ElevenLabs (economiza 2 s).
-- [ ] Teste `backend_nodejs/test_tts_failover.js` + entrada em `npm run test:unit`.
+- [ ] Teste `backend_nodejs/test_tts_failover.js` + entrada em `npm run test:unit`,
+      incluindo a guarda de sincronia das env vars (E10).
 
 ### 2.1 Não-escopo (explícito)
 
@@ -69,6 +70,7 @@ usando um segundo provedor de voz — em vez de cair para texto puro.
 | D3 | Chamar a API do Cartesia com `fetch` nativo do Node 20, sem SDK. | `@cartesia/cartesia-js` | Uma requisição HTTP só; SDK adiciona dependência, superfície de update e peso no cold start do Render free. |
 | D4 | Cooldown de 10 min por provedor após erro de auth/cota (espelha `markClaudeUnavailable()` em `llmClient.js:41`). | Tentar ElevenLabs a cada turno | Evita 1-3 s de latência por turno enquanto a chave estiver morta, e o padrão já existe no projeto — o time (você) já sabe ler. |
 | D5 | O backend converte o áudio do Cartesia para o **mesmo formato** que já entra no encoder: PCM Int16 LE, e informa `sampleRate` no retorno. | Deixar o Android lidar com dois formatos | O Android já tem um caminho de áudio só. Duas taxas no cliente é onde nascem chiado e travada. |
+| D6 | **`ttsProvider.js` é a única fonte da verdade sobre "existe chave deste provedor?"**. Ele mantém a tabela de env vars de todos os provedores; `cartesiaClient.hasCartesiaKey()` re-exporta dela. A lista de aliases da ElevenLabs continua duplicada de `elevenLabsClient.apiKey()`, mas protegida por teste (E10 / A9), não por comentário. | (a) importar `elevenLabsClient` dentro do registro; (b) cada cliente resolve a sua e o registro pergunta | (a) puxa `ws` e o setup de módulo do cliente só para responder "existe chave?", e mata a testabilidade offline do registro — que é lógica pura; (b) inverte a dependência mas obriga o registro a carregar todos os clientes no boot. A duplicação só é aceitável porque um teste falha quando as duas listas divergem. |
 
 ---
 
@@ -100,18 +102,39 @@ export function isTtsAuthOrQuotaError(err: unknown): boolean
 /** Ordem de tentativa agora, já filtrando provedores em cooldown e sem chave. */
 export function preferredTtsProviderOrder(): ProviderName[]
 
+/**
+ * `cooldownMs` default = TTS_PROVIDER_COOLDOWN_MS (10 min).
+ * `cooldownMs <= 0` **limpa** o cooldown em vez de aplicar um — é como testes e um
+ * futuro endpoint de reset devolvem o provedor à fila sem uma sexta função pública.
+ */
 export function markProviderUnavailable(name: ProviderName, reason?: string, cooldownMs?: number): void
 export function isProviderAvailable(name: ProviderName): boolean
 
 /** Estado para /health/tts — nunca inclui a chave, só booleano + fonte. */
 export function ttsProviderStatus(): {
   order: ProviderName[],
-  providers: Array<{ name: ProviderName, hasKey: boolean, keySource: string|null, cooldownUntil: number|null }>
+  providers: Array<{
+    name: ProviderName,
+    hasKey: boolean,
+    keySource: string|null,
+    cooldownUntil: number|null,
+    state: 'ready'|'no_key'|'cooling_down'
+  }>
 }
+
+// ─── Superfície auxiliar (pública por necessidade, não por acaso) ───
+// Usada por ttsProviderStatus(), pelo /health/tts e pelos testes.
+export const PROVIDER_ELEVENLABS: 'elevenlabs'
+export const PROVIDER_CARTESIA: 'cartesia'
+
+/** Qual env var forneceu a chave — nunca o valor. `null` quando não há chave. */
+export function providerKeySource(name: ProviderName): string|null
+export function providerHasKey(name: ProviderName): boolean
 ~~~
 
 ~~~js
 // backend_nodejs/services/cartesiaClient.js
+/** Re-exporta de ttsProvider (D6) — não redefine a lista de env vars. */
 export function hasCartesiaKey(): boolean
 export function resolveCartesiaVoiceId(): string   // env CARTESIA_VOICE_ID, com default no código
 
@@ -127,7 +150,16 @@ export async function synthesizePcmRest(text: string, voiceId?: string):
 | Backend → Android | `tts_status` | `{ provider: 'elevenlabs'\|'cartesia', voiceId, fallback: boolean }` | Antes do primeiro `audio_chunk` de cada resposta |
 | Backend → Android | `tts_unavailable` | `{ reason, mode: 'text_only', clientFallback: boolean }` | Só quando **todos** os provedores falharam |
 | Backend → Android | `audio_chunk` | Base64 (frames Opus) — **inalterado** | Igual hoje, venha do provedor que vier |
-| HTTP | `GET /health/tts` | `{ ok, order, providers:[{name, hasKey, keySource, cooldownUntil}] }` | Diagnóstico manual |
+| HTTP | `GET /health/tts` | `{ ok, order, providers:[{name, hasKey, keySource, cooldownUntil, state}] }` | Diagnóstico manual |
+
+`state` é o campo que responde "por que o Elias está mudo" sem ambiguidade — `hasKey` + `cooldownUntil`
+sozinhos não distinguem *pronto* de *sem chave*, porque `cooldownUntil` é `null` nos dois casos:
+
+| `state` | Quando | O que fazer |
+|---|---|---|
+| `ready` | tem chave e não está em cooldown | nada |
+| `no_key` | nenhuma env var do provedor está setada | configurar a chave no painel do host |
+| `cooling_down` | falhou por auth/cota há menos de `TTS_PROVIDER_COOLDOWN_MS` | ver `cooldownUntil`; se repetir, a conta é o problema |
 
 **Taxonomia fechada de `reason`** (o Android decide o texto do toast a partir dela):
 
@@ -177,6 +209,7 @@ export async function synthesizePcmRest(text: string, voiceId?: string):
 | E7 | Os dois provedores em cooldown ao mesmo tempo | Pula direto para texto, sem tentar rede (latência zero de degradação) |
 | E8 | Processo reinicia (Render free dorme) | Cooldown é em memória e some — comportamento aceito e documentado |
 | E9 | `shadow_speak` (tela Echo) com primário morto | Mesma cadeia do chat: o failover mora em `ttsProvider.js`, não duplicado nos dois handlers |
+| E10 | Um alias de env é adicionado em `elevenLabsClient.apiKey()` e esquecido em `ttsProvider.KEY_ENV_NAMES` | Teste falha. O registro passaria a achar que não há chave enquanto o cliente acha que há — provedor pulado por engano, com o app mudo e o `/health/tts` mentindo |
 
 ---
 
@@ -196,12 +229,14 @@ export async function synthesizePcmRest(text: string, voiceId?: string):
 |---|---|---|
 | A1 | `node test_tts_failover.js` passa e cobre E1, E2, E5, E7 | `cd backend_nodejs; node test_tts_failover.js` |
 | A2 | `npm run test:unit` continua verde e inclui o novo teste | `cd backend_nodejs; npm run test:unit` |
-| A3 | `GET /health/tts` responde 200 com os dois provedores e **sem** nenhuma chave no corpo | `Invoke-RestMethod http://localhost:3000/health/tts \| ConvertTo-Json -Depth 5` |
+| A3 | `GET /health/tts` responde 200 com os dois provedores, cada um com `state`, e **sem** nenhuma chave no corpo | `Invoke-RestMethod http://localhost:3000/health/tts \| ConvertTo-Json -Depth 5` |
 | A4 | Com `ELEVENLABS_API_KEY="chave-invalida"` e Cartesia válida, o device toca áudio | Rodar backend local, falar uma frase no app, ouvir a resposta |
 | A5 | Sem nenhuma chave de TTS, o app mostra texto e não trava spinner | Subir backend sem as duas variáveis; mandar mensagem |
 | A6 | `git grep -nE "sk_\|xi-api-key: *['\"][A-Za-z0-9]" -- backend_nodejs` não retorna nada | comando |
 | A7 | Nenhum arquivo do pipeline de áudio mudou | `git diff --stat main -- backend_nodejs/audioEncoder.js app/src/main/java/com/roberto/eliasaitutor/audio/` vazio |
 | A8 | Barge-in continua cortando a fala em ≤ 500 ms com o provedor secundário ativo | Teste manual no device: falar por cima do Elias |
+| A9 | Um alias de env reconhecido por `elevenLabsClient.apiKey()` e ausente de `ttsProvider` faz o teste falhar (E10) | `cd backend_nodejs; node test_tts_failover.js` |
+| A10 | `ttsProviderStatus()` devolve `state` distinto para provedor pronto, sem chave e em cooldown | coberto por `test_tts_failover.js` |
 
 ---
 
@@ -210,3 +245,7 @@ export async function synthesizePcmRest(text: string, voiceId?: string):
 | Data | O que mudou | Origem |
 |---|---|---|
 | 2026-08-26 | Criação | Print do device com `authentication_error` na ElevenLabs |
+| 2026-08-26 | 5.1 documenta a superfície auxiliar real do módulo (`PROVIDER_*`, `providerHasKey`, `providerKeySource`) | Achado F1 do verificador, ciclo 1 |
+| 2026-08-26 | 5.1 documenta `cooldownMs <= 0` como "limpa o cooldown" | Anotação G3 do escritor, ciclo 1 |
+| 2026-08-26 | D6 define `ttsProvider.js` como fonte única da detecção de chave; E10 e A9 criam a guarda de sincronia | Anotação G1 do escritor, ciclo 1 |
+| 2026-08-26 | 5.2 ganha o campo `state` em `/health/tts`; A3 exige, A10 verifica | Anotação G2 do escritor, ciclo 1 |
