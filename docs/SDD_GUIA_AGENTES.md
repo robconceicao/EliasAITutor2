@@ -643,10 +643,15 @@ não encosta na sua árvore.
 
 ~~~powershell
 Set-Location $Elias
-git worktree add ..\elias-verify feat/0001-tts-provider-failover
+git worktree add --detach ..\elias-verify HEAD
 Set-Location ..\elias-verify
+git log --oneline -1                         # confirma que é o commit que você quer auditar
 Get-Content .\VERIFIER.md -TotalCount 5      # confirma que o contrato está lá
 ~~~
+
+O `--detach` não é detalhe: o git recusa duas worktrees na **mesma branch**, e o escritor está com ela
+aberta. `HEAD` destacado dá ao verificador exatamente o commit em revisão, e ainda o impede de "avançar"
+a branch por acidente.
 
 Agora suba o verificador **em modo somente-leitura**. Confirme a flag exata da sua versão
 com `--help` — os nomes mudam entre releases:
