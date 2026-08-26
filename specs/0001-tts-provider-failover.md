@@ -186,7 +186,15 @@ sozinhos não distinguem *pronto* de *sem chave*, porque `cooldownUntil` é `nul
 | `ELEVENLABS_API_KEY` | não (sem ela, primário é pulado) | — | `elevenLabsClient.apiKey()` |
 | `CARTESIA_API_KEY` | não (sem ela, secundário é pulado) | — | `cartesiaClient.hasCartesiaKey()` |
 | `CARTESIA_VOICE_ID` | não | id definido no código | `cartesiaClient.resolveCartesiaVoiceId()` |
+| `CARTESIA_API_URL` | não | endpoint REST no código | `cartesiaClient.js` |
+| `CARTESIA_API_VERSION` | não | valor no código | `cartesiaClient.js` — header de versão da API |
+| `CARTESIA_MODEL` | não | modelo no código | `cartesiaClient.js` |
+| `CARTESIA_SAMPLE_RATE` | não | `24000` | `cartesiaClient.js` |
 | `TTS_PROVIDER_COOLDOWN_MS` | não | `600000` | `ttsProvider.js` |
+
+As quatro variáveis de `CARTESIA_API_*` existem por causa de Q4: os defaults do contrato de rede
+não puderam ser verificados contra a documentação viva, então cada um é ajustável por ambiente
+sem tocar em código.
 
 > ⚠️ Só o **nome** das variáveis aparece aqui e no código. Os valores vivem no painel do
 > Render e no `local.properties`, que está no `.gitignore`.
@@ -227,6 +235,7 @@ sozinhos não distinguem *pronto* de *sem chave*, porque `cooldownUntil` é `nul
 | Q1 | O aviso "voz reserva" aparece como toast ou só como log? | não | |
 | Q2 | Cooldown de 10 min é bom para uso de 1 pessoa, ou 30 min como no Claude? | não | |
 | Q3 | Qual voz do Cartesia soa mais próxima do General American do Brian? | não (default no código, ajusta por env depois) | |
+| Q4 | O contrato de rede do Cartesia nos defaults do código (endpoint, header de versão, id do modelo, formato de saída) confere com a documentação atual? | **sim, antes de confiar em produção** | |
 
 ---
 
@@ -257,3 +266,4 @@ sozinhos não distinguem *pronto* de *sem chave*, porque `cooldownUntil` é `nul
 | 2026-08-26 | D6 define `ttsProvider.js` como fonte única da detecção de chave; E10 e A9 criam a guarda de sincronia | Anotação G1 do escritor, ciclo 1 |
 | 2026-08-26 | 5.2 ganha o campo `state` em `/health/tts`; A3 exige, A10 verifica | Anotação G2 do escritor, ciclo 1 |
 | 2026-08-26 | 5.1 expõe `providerKeyEnvNames()` — sem ela A9 não tem como ser mecanizada, só declarada | Ciclo 2, ao implementar a guarda de E10 |
+| 2026-08-26 | Q4 aberta e `CARTESIA_API_*` em 5.3: o contrato de rede do Cartesia não pôde ser verificado no ambiente do ciclo 2 (egress bloqueado para a doc do provedor) | Ciclo 2 |
