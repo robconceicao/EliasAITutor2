@@ -9,6 +9,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
+  hasCartesiaKey,
+  resolveCartesiaVoiceId,
+  synthesizePcmRest as cartesiaSynthesize,
+} from './services/cartesiaClient.js';
+import {
   PROVIDER_CARTESIA,
   PROVIDER_ELEVENLABS,
   isTtsAuthOrQuotaError,
@@ -31,6 +36,11 @@ const TOUCHED = [
   'ELEVEN_LABS_API_KEY',
   'ELEVENLABS_KEY',
   'CARTESIA_API_KEY',
+  'CARTESIA_VOICE_ID',
+  'CARTESIA_API_URL',
+  'CARTESIA_API_VERSION',
+  'CARTESIA_MODEL',
+  'CARTESIA_SAMPLE_RATE',
   'TTS_PROVIDER_COOLDOWN_MS',
 ];
 const ORIGINAL = Object.fromEntries(TOUCHED.map((k) => [k, process.env[k]]));
@@ -254,6 +264,130 @@ for (const envName of conhecidos) {
   );
 }
 
+// ─── cartesiaClient — lógica, sem rede ──────────────────────
+// O contrato de rede do provedor é Q4 (não verificado). O que se testa aqui é o que
+// NÃO depende dele: chave, classificação de erro, PCM e vazamento.
+const fetchReal = globalThis.fetch;
+const logReal = console.log;
+
+/** @param {{status?:number, body?:Buffer|string}} resposta */
+function fakeFetch(resposta, capturado = {}) {
+  return async (url, init) => {
+    capturado.url = url;
+    capturado.init = init;
+    const status = resposta.status ?? 200;
+    const corpo = resposta.body ?? Buffer.alloc(0);
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      async text() {
+        return Buffer.isBuffer(corpo) ? corpo.toString('utf8') : String(corpo);
+      },
+      async arrayBuffer() {
+        const b = Buffer.isBuffer(corpo) ? corpo : Buffer.from(String(corpo));
+        return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+      },
+    };
+  };
+}
+
+async function rejeitaCom(fn, teste, mensagem) {
+  try {
+    await fn();
+  } catch (e) {
+    assert.ok(teste(e), `${mensagem} — erro recebido: ${e.message}`);
+    return e;
+  }
+  assert.fail(`${mensagem} — não lançou`);
+}
+
+try {
+  console.log = () => {}; // o cliente loga sucesso por design; não polui a suíte
+
+  // Sem chave: falha antes de qualquer rede.
+  setKeys({ eleven: false, cartesia: false });
+  globalThis.fetch = () => assert.fail('não pode chamar a rede sem chave');
+  assert.strictEqual(hasCartesiaKey(), false);
+  await rejeitaCom(
+    () => cartesiaSynthesize('hello'),
+    (e) => e.message === 'cartesia_api_key_missing',
+    'sem chave, o cliente precisa falhar cedo'
+  );
+
+  setKeys({ eleven: false, cartesia: true });
+  assert.strictEqual(hasCartesiaKey(), true, 'D6: a detecção de chave vem do registro');
+
+  // Texto vazio também não vai à rede.
+  await rejeitaCom(
+    () => cartesiaSynthesize('   '),
+    (e) => e.message === 'empty_tts_text',
+    'texto vazio não pode virar requisição'
+  );
+
+  // Sucesso: PCM devolvido no mesmo formato do cliente da ElevenLabs (D5).
+  const capturado = {};
+  process.env.CARTESIA_VOICE_ID = 'voz-de-teste';
+  globalThis.fetch = fakeFetch({ status: 200, body: Buffer.alloc(4096, 7) }, capturado);
+  const ok = await cartesiaSynthesize('good morning');
+  assert.ok(Buffer.isBuffer(ok.pcm) && ok.pcm.length === 4096);
+  assert.strictEqual(ok.voiceId, 'voz-de-teste', 'CARTESIA_VOICE_ID precisa mandar');
+  assert.strictEqual(ok.sampleRate, 24000);
+  assert.deepStrictEqual(
+    Object.keys(ok).sort(),
+    ['pcm', 'sampleRate', 'voiceId'],
+    'D5: mesma forma de retorno de elevenLabsClient.synthesizePcmRest'
+  );
+
+  // R3 — a chave vai no header, jamais no corpo.
+  assert.ok(capturado.init.headers['X-API-Key'], 'a chave precisa ir no header');
+  assert.ok(
+    !capturado.init.body.includes('test-marker-not-a-key'),
+    'R3: a chave não pode aparecer no corpo da requisição'
+  );
+  assert.ok(capturado.init.body.includes('voz-de-teste'), 'o id da voz precisa ir no corpo');
+
+  // Corte de tamanho: texto gigante não vira requisição gigante.
+  globalThis.fetch = fakeFetch({ status: 200, body: Buffer.alloc(200, 1) }, capturado);
+  await cartesiaSynthesize('a'.repeat(9000));
+  assert.ok(
+    JSON.parse(capturado.init.body).transcript.length <= 2500,
+    'texto precisa ser cortado antes de ir para a rede'
+  );
+
+  // E1 no secundário — 401 precisa ser classificável como falha de conta.
+  globalThis.fetch = fakeFetch({ status: 401, body: '{"error":"unauthorized"}' });
+  const err401 = await rejeitaCom(
+    () => cartesiaSynthesize('hello'),
+    (e) => e.status === 401,
+    '401 precisa preservar o status no erro'
+  );
+  assert.strictEqual(
+    isTtsAuthOrQuotaError(err401),
+    true,
+    'E1: 401 do Cartesia precisa derrubar o provedor para cooldown'
+  );
+
+  // E5 no secundário — áudio vazio NÃO é falha de conta.
+  globalThis.fetch = fakeFetch({ status: 200, body: Buffer.alloc(10, 0) });
+  const errVazio = await rejeitaCom(
+    () => cartesiaSynthesize('hello'),
+    (e) => /empty audio/i.test(e.message),
+    'áudio curto demais precisa ser rejeitado'
+  );
+  assert.strictEqual(
+    isTtsAuthOrQuotaError(errVazio),
+    false,
+    'E5: áudio vazio não pode pôr o Cartesia de castigo por 10 minutos'
+  );
+
+  // Voz default quando não há env.
+  delete process.env.CARTESIA_VOICE_ID;
+  assert.ok(resolveCartesiaVoiceId().length > 10, 'precisa haver voz default no código');
+} finally {
+  globalThis.fetch = fetchReal;
+  console.log = logReal;
+}
+
 // ─── restaura o ambiente ────────────────────────────────────
 clearCooldowns();
 for (const k of TOUCHED) {
@@ -261,4 +395,4 @@ for (const k of TOUCHED) {
   else process.env[k] = ORIGINAL[k];
 }
 
-console.log('✅ tts provider failover tests passed (E1, E2, E5, E7, E10 + state)');
+console.log('✅ tts provider failover tests passed (E1, E2, E5, E7, E10 + state + cartesia)');
