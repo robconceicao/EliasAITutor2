@@ -5,6 +5,9 @@
  * Cobre os casos extremos E1, E2, E5 e E7 da spec.
  */
 import assert from 'assert';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   PROVIDER_CARTESIA,
   PROVIDER_ELEVENLABS,
@@ -13,9 +16,12 @@ import {
   markProviderUnavailable,
   preferredTtsProviderOrder,
   providerHasKey,
+  providerKeyEnvNames,
   providerKeySource,
   ttsProviderStatus,
 } from './services/ttsProvider.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── env sandbox ────────────────────────────────────────────
 const TOUCHED = [
@@ -170,6 +176,84 @@ process.env['My-English-Coach-Key'] = 'test-marker-not-a-key';
 assert.strictEqual(providerKeySource(PROVIDER_ELEVENLABS), 'My-English-Coach-Key');
 assert.strictEqual(providerHasKey(PROVIDER_ELEVENLABS), true);
 
+// ─── A10 — state distingue os três casos ────────────────────
+function stateOf(nome) {
+  return ttsProviderStatus().providers.find((p) => p.name === nome).state;
+}
+
+setKeys({ eleven: true, cartesia: false });
+clearCooldowns();
+assert.strictEqual(stateOf(PROVIDER_ELEVENLABS), 'ready', 'com chave e sem castigo → ready');
+assert.strictEqual(stateOf(PROVIDER_CARTESIA), 'no_key', 'sem chave → no_key, não ready');
+
+quiet(() => markProviderUnavailable(PROVIDER_ELEVENLABS, 'authentication_error'));
+assert.strictEqual(stateOf(PROVIDER_ELEVENLABS), 'cooling_down');
+
+// O ponto de G2: cooldownUntil sozinho não distingue "pronto" de "sem chave".
+const semCastigo = ttsProviderStatus().providers.filter((p) => p.cooldownUntil === null);
+assert.strictEqual(semCastigo.length, 1, 'só o Cartesia está fora de cooldown aqui');
+assert.strictEqual(
+  semCastigo[0].state,
+  'no_key',
+  'G2: cooldownUntil null NÃO pode ser lido como "pronto" — state é quem responde'
+);
+clearCooldowns();
+
+// ─── E10 / A9 — guarda de sincronia das env vars ────────────
+// D6 aceita a lista de aliases duplicada em ttsProvider APENAS porque este teste
+// falha quando ela diverge da lista que elevenLabsClient.apiKey() realmente lê.
+// Por isso a fonte é lida do arquivo: um alias novo lá aparece aqui sem ninguém lembrar.
+const fonteElevenLabs = fs.readFileSync(
+  path.join(__dirname, 'services', 'elevenLabsClient.js'),
+  'utf8'
+);
+const corpoApiKey = fonteElevenLabs.slice(
+  fonteElevenLabs.indexOf('export function apiKey()'),
+  fonteElevenLabs.indexOf('export function hasElevenLabsKey()')
+);
+assert.ok(
+  corpoApiKey.length > 50,
+  'não achei o corpo de apiKey() em elevenLabsClient.js — a guarda de E10 precisa ser reescrita'
+);
+
+const aliasesDoCliente = [
+  ...corpoApiKey.matchAll(/process\.env(?:\.([A-Za-z0-9_]+)|\['([^']+)'\])/g),
+].map((m) => m[1] || m[2]);
+
+assert.ok(aliasesDoCliente.length >= 3, 'esperava vários aliases em apiKey()');
+
+const conhecidos = providerKeyEnvNames(PROVIDER_ELEVENLABS);
+
+// A lista devolvida é cópia: mexer nela não pode reconfigurar o registro em produção.
+// O retrato é tirado ANTES do push — sem isso, se a função devolvesse o array interno,
+// os dois lados da comparação seriam o mesmo objeto mutado e o teste passaria cego.
+const retrato = [...conhecidos];
+providerKeyEnvNames(PROVIDER_ELEVENLABS).push('ENV_INVENTADA_PELO_CHAMADOR');
+assert.deepStrictEqual(
+  providerKeyEnvNames(PROVIDER_ELEVENLABS),
+  retrato,
+  'providerKeyEnvNames precisa devolver cópia — o chamador não pode mutar o registro'
+);
+
+const faltando = aliasesDoCliente.filter((a) => !conhecidos.includes(a));
+assert.deepStrictEqual(
+  faltando,
+  [],
+  `E10: elevenLabsClient.apiKey() lê ${faltando.join(', ')}, mas ttsProvider não reconhece. ` +
+    'O registro acharia que não há chave enquanto o cliente acha que há.'
+);
+
+// Direção inversa: cada alias que o registro reconhece de fato ativa o provedor.
+for (const envName of conhecidos) {
+  setKeys({ eleven: false, cartesia: false });
+  process.env[envName] = 'test-marker-not-a-key';
+  assert.strictEqual(
+    providerKeySource(PROVIDER_ELEVENLABS),
+    envName,
+    `alias ${envName} declarado mas não reconhecido por providerKeySource`
+  );
+}
+
 // ─── restaura o ambiente ────────────────────────────────────
 clearCooldowns();
 for (const k of TOUCHED) {
@@ -177,4 +261,4 @@ for (const k of TOUCHED) {
   else process.env[k] = ORIGINAL[k];
 }
 
-console.log('✅ tts provider failover tests passed (E1, E2, E5, E7)');
+console.log('✅ tts provider failover tests passed (E1, E2, E5, E7, E10 + state)');

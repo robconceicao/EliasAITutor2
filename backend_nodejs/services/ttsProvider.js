@@ -76,6 +76,20 @@ export function providerHasKey(name) {
 }
 
 /**
+ * Env var names this registry recognises for a provider.
+ *
+ * Exported so the divergence guard in test_tts_failover.js can compare this list with
+ * the aliases elevenLabsClient.apiKey() actually reads (SPEC-0001, E10/A9). Without it
+ * the sync obligation would be a comment, and comments do not fail builds.
+ *
+ * @param {ProviderName} name
+ * @returns {string[]} a copy — callers must not mutate the registry.
+ */
+export function providerKeyEnvNames(name) {
+  return [...(KEY_ENV_NAMES[name] || [])];
+}
+
+/**
  * Auth / quota failure — the provider itself is unusable for a while, so retrying it
  * this turn (or next turn) only costs latency.
  *
@@ -157,10 +171,28 @@ export function preferredTtsProviderOrder() {
 }
 
 /**
+ * Why a provider is or is not usable right now.
+ *
+ * hasKey + cooldownUntil alone cannot answer this: cooldownUntil is null both for a
+ * ready provider and for one with no key at all, which is exactly the ambiguity
+ * /health/tts exists to remove (SPEC-0001, 5.2).
+ *
+ * Module-private on purpose: the spec's public surface (5.1) exposes this only through
+ * ttsProviderStatus(). Exporting it would repeat finding F1 of cycle 1.
+ *
+ * @param {ProviderName} name
+ * @returns {'ready'|'no_key'|'cooling_down'}
+ */
+function providerState(name) {
+  if (!providerHasKey(name)) return 'no_key';
+  return Date.now() < cooldownUntil[name] ? 'cooling_down' : 'ready';
+}
+
+/**
  * Diagnostic snapshot for GET /health/tts.
  * Contains no key values — only which env name supplied each key (R3).
  *
- * @returns {{ order: ProviderName[], providers: Array<{ name: ProviderName, hasKey: boolean, keySource: string|null, cooldownUntil: number|null }> }}
+ * @returns {{ order: ProviderName[], providers: Array<{ name: ProviderName, hasKey: boolean, keySource: string|null, cooldownUntil: number|null, state: 'ready'|'no_key'|'cooling_down' }> }}
  */
 export function ttsProviderStatus() {
   const now = Date.now();
@@ -171,6 +203,7 @@ export function ttsProviderStatus() {
       hasKey: providerHasKey(name),
       keySource: providerKeySource(name),
       cooldownUntil: cooldownUntil[name] > now ? cooldownUntil[name] : null,
+      state: providerState(name),
     })),
   };
 }
