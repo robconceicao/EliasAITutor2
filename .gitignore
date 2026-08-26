@@ -39,3 +39,14 @@ backend_nodejs/node_modules/
 # Kotlin incremental / compiler caches
 .kotlin/
 
+
+# Secrets de backend (nunca versionar) — SDD Fase 0
+.env
+.env.*
+!.env.example
+backend_nodejs/.env
+backend_nodejs/.env.*
+backend_nodejs/data/program_state.json
+
+# SDD — anotações locais que não devem virar histórico do time
+specs/**/*.local.md

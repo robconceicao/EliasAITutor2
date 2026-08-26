@@ -1,0 +1,19 @@
+#!/bin/sh
+# Guardrail SDD — bloqueia push direto em main.
+# Instalar:  Copy-Item .\scripts\hooks\pre-push .\.git\hooks\pre-push -Force
+#
+# Motivo: durante sessões longas e não supervisionadas, main precisa continuar
+# publicável. Trabalho vai para branch feat/NNNN-*; main entra por revisão de diff.
+
+protegida="refs/heads/main"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "$protegida" ]; then
+    echo "❌ push direto em main bloqueado (guardrail SDD)."
+    echo "   Use uma branch de spec:  git checkout -b feat/NNNN-slug"
+    echo "   Para liberar conscientemente:  git push --no-verify"
+    exit 1
+  fi
+done
+
+exit 0
