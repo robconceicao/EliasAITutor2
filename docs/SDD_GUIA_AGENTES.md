@@ -104,12 +104,13 @@ Get-Content .\VERIFIER.md -TotalCount 12
 - `specs/METRICAS.md` — a planilha de M1 a M6 (seção Métricas).
 - `.claude/settings.json` — as permissões do escritor (Fase 2).
 - `scripts/hooks/pre-push` — o guardrail que bloqueia push em `main` (Fase 6).
+- `CLAUDE.md` e `AGENTS.md` — já editados: veja 0.4 e 0.5 e revise o diff dos dois.
 
 ### 0.4 `CLAUDE.md` — o contexto do escritor
 
 Seu `CLAUDE.md` já é bom: descreve stack, pipeline de áudio, eventos Socket.io, parâmetros
-críticos e uma seção "O que NÃO fazer". Falta só **plugar o SDD nele**. Acrescente este bloco
-ao final do arquivo (⚠️ revise o diff antes de aceitar):
+críticos e uma seção "O que NÃO fazer". Faltava **plugar o SDD nele** — este bloco já foi
+acrescentado ao final do arquivo (⚠️ revise o diff):
 
 ~~~markdown
 ## Modo Spec-Driven (SDD)
@@ -125,20 +126,25 @@ Antes de escrever código nesta sessão:
 
 ### 0.5 `AGENTS.md` — não sobrescreva, aponte
 
-`AGENTS.md` existe e está **desatualizado** (fala em Flutter/FastAPI; o projeto é Kotlin/Node.js).
-Vários CLIs leem `AGENTS.md` automaticamente, então ele não pode ficar mentindo. A correção
-mínima e segura é **acrescentar um aviso no topo**, sem apagar o histórico do arquivo:
+`AGENTS.md` existe e tem uma seção `## Flutter` (linha ~55) que não se aplica a um app Compose —
+o `CLAUDE.md` inclusive manda não usá-lo como referência de stack. Vários CLIs leem `AGENTS.md`
+automaticamente, então ele não pode ficar mentindo. A correção mínima e segura é **um aviso no topo**,
+sem apagar o histórico do arquivo — já aplicado:
 
 ~~~markdown
-> ⚠️ **Este arquivo está desatualizado quanto à stack.**
-> Stack real: Kotlin + Jetpack Compose (`app/`) e Node.js + Socket.io (`backend_nodejs/`).
-> Referência correta de arquitetura: `CLAUDE.md`.
-> Se você é o agente **verificador**, seu contrato é `VERIFIER.md`.
-> Se você é o agente **escritor**, seu contrato é `CLAUDE.md` + a spec ativa em `specs/`.
+> ⚠️ **Leia este aviso antes de usar o restante do arquivo.**
+> A seção `## Flutter` (linha ~55) não se aplica: a UI do Elias é **Jetpack Compose**, não Flutter.
+> Stack real: Kotlin + Jetpack Compose (`app/`) e Node.js + Socket.io, ES Modules (`backend_nodejs/`).
+> Referência correta de arquitetura, pipeline de áudio e parâmetros críticos: `CLAUDE.md`.
+>
+> Contratos por papel:
+> - agente **escritor** → `CLAUDE.md` + a spec ativa em `specs/`
+> - agente **verificador** → `VERIFIER.md`
+> - método de trabalho (SDD) → `docs/SDD_GUIA_AGENTES.md`
 ~~~
 
-⚠️ Faça essa edição você mesmo, no editor, e revise o diff. É um arquivo que todos os agentes leem;
-não vale a pena delegar.
+⚠️ São os dois arquivos que **todos** os agentes leem. Leia o diff dos dois antes de commitar —
+um erro aqui se propaga para todas as sessões futuras.
 
 ### 0.6 `.gitignore` — o degrau que faltava
 
@@ -161,7 +167,7 @@ Os quatro comandos abaixo passam:
 ~~~powershell
 Test-Path .\specs\TEMPLATE_SPEC.md, .\specs\decisions, .\specs\findings, .\VERIFIER.md
 Select-String -Path .\CLAUDE.md -Pattern "Modo Spec-Driven" -SimpleMatch
-Select-String -Path .\AGENTS.md  -Pattern "desatualizado"    -SimpleMatch
+Select-String -Path .\AGENTS.md  -Pattern "Leia este aviso" -SimpleMatch
 git ls-files | Select-String -Pattern "\.env|local\.properties"   # vazio
 ~~~
 

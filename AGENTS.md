@@ -1,3 +1,13 @@
+> ⚠️ **Leia este aviso antes de usar o restante do arquivo.**
+> A seção `## Flutter` (linha ~55) não se aplica: a UI do Elias é **Jetpack Compose**, não Flutter.
+> Stack real: Kotlin + Jetpack Compose (`app/`) e Node.js + Socket.io, ES Modules (`backend_nodejs/`).
+> Referência correta de arquitetura, pipeline de áudio e parâmetros críticos: `CLAUDE.md`.
+>
+> Contratos por papel:
+> - agente **escritor** → `CLAUDE.md` + a spec ativa em `specs/`
+> - agente **verificador** → `VERIFIER.md`
+> - método de trabalho (SDD) → `docs/SDD_GUIA_AGENTES.md`
+
 # Projeto: Elias AI Tutor
 
 ## Stack
