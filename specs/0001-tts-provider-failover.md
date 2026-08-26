@@ -130,6 +130,13 @@ export const PROVIDER_CARTESIA: 'cartesia'
 /** Qual env var forneceu a chave — nunca o valor. `null` quando não há chave. */
 export function providerKeySource(name: ProviderName): string|null
 export function providerHasKey(name: ProviderName): boolean
+
+/**
+ * Nomes de env var que este registro reconhece para o provedor. É o que torna E10/A9
+ * mecanizável: o teste compara esta lista com os aliases que `elevenLabsClient.apiKey()`
+ * realmente lê, e falha quando as duas divergem.
+ */
+export function providerKeyEnvNames(name: ProviderName): string[]
 ~~~
 
 ~~~js
@@ -249,3 +256,4 @@ sozinhos não distinguem *pronto* de *sem chave*, porque `cooldownUntil` é `nul
 | 2026-08-26 | 5.1 documenta `cooldownMs <= 0` como "limpa o cooldown" | Anotação G3 do escritor, ciclo 1 |
 | 2026-08-26 | D6 define `ttsProvider.js` como fonte única da detecção de chave; E10 e A9 criam a guarda de sincronia | Anotação G1 do escritor, ciclo 1 |
 | 2026-08-26 | 5.2 ganha o campo `state` em `/health/tts`; A3 exige, A10 verifica | Anotação G2 do escritor, ciclo 1 |
+| 2026-08-26 | 5.1 expõe `providerKeyEnvNames()` — sem ela A9 não tem como ser mecanizada, só declarada | Ciclo 2, ao implementar a guarda de E10 |
