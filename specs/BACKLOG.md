@@ -9,3 +9,6 @@ Se for importante de verdade, ele volta sozinho no próximo ciclo.
       (`backend_nodejs/server.js:573`) usa ElevenLabs e `@cartesia/cartesia-js` não está em
       `package.json` — a única menção no backend é um `@deprecated` em `audioEncoder.js:262`.
       Decidir se a doc está errada ou o código regrediu. (origem: leitura do repo, 2026-08-26)
+
+- [ ] `/health` diz `elevenLabsKey: true` quando existe chave, mesmo que a API a recuse — foi o que
+      escondeu o problema de 2026-08-26 por dois ciclos. Coberto agora pela SPEC-0002, A1.

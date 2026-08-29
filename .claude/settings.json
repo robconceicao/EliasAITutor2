@@ -10,7 +10,6 @@
       "Edit(./backend_nodejs/seeds/**)",
       "Edit(./.gitignore)",
       "Bash(git push:*)",
-      "Bash(git commit:*)",
       "Bash(git reset:*)",
       "Bash(git checkout:*)"
     ],

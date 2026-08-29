@@ -611,7 +611,7 @@ Permissões: o arquivo `.claude/settings.json` já foi criado neste repositório
       "Read(./.env)", "Read(./.env.*)", "Read(./backend_nodejs/.env)",
       "Read(./local.properties)", "Edit(./local.properties)",
       "Edit(./render.yaml)", "Edit(./backend_nodejs/seeds/**)", "Edit(./.gitignore)",
-      "Bash(git push:*)", "Bash(git commit:*)", "Bash(git reset:*)", "Bash(git checkout:*)"
+      "Bash(git push:*)", "Bash(git reset:*)", "Bash(git checkout:*)"
     ],
     "allow": [
       "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
@@ -621,9 +621,15 @@ Permissões: o arquivo `.claude/settings.json` já foi criado neste repositório
 }
 ~~~
 
-Leia a lista `deny` como uma frase: **o escritor não lê segredo, não mexe em infra e não decide
-o que entra na história do git — quem commita é você.** É a sua disciplina atual, escrita de um
-jeito que a máquina consegue cumprir mesmo às 2 da manhã.
+Leia a lista `deny` como uma frase: **o escritor não lê segredo, não mexe em infra e não empurra
+nada para o remoto — o push é seu.** É a sua disciplina atual, escrita de um jeito que a máquina
+consegue cumprir mesmo às 2 da manhã.
+
+`git commit` fica **fora** do `deny` de propósito. Bloquear os dois parece mais seguro e não é: o
+trabalho fica pendurado na árvore, um hook de fim de sessão cobra um commit que o agente não pode
+fazer, e você acaba liberando tudo no susto. Commit na branch é reversível e não sai da sua máquina;
+**push é o passo irreversível**, e é nele que o guardrail precisa estar. Se preferir a versão
+estrita, acrescente `"Bash(git commit:*)"` ao `deny` — sabendo que troca uma barreira por fricção.
 
 Abrir o escritor na branch da spec:
 
@@ -683,7 +689,8 @@ git worktree remove ..\elias-verify
 | Contexto | `CLAUDE.md` + spec ativa | `VERIFIER.md` + spec ativa |
 | Pasta | `$Elias` (sua árvore) | `..\elias-verify` (worktree) |
 | Pode escrever | código dentro do escopo da spec | **nada** além de `specs/findings/` |
-| Pode commitar | não | não |
+| Pode commitar | sim, na branch da spec | não |
+| Pode dar push | **não** | **não** |
 | Roda testes | sim | sim (só os da seção 9 da spec) |
 | Lê `.env` / `local.properties` | não | não |
 

@@ -1,6 +1,16 @@
 # SPEC-0001 — Failover de provedor de TTS quando a chave ElevenLabs falha
 
-> Status: `rascunho`
+> Status: `revogada` — 2026-08-26
+>
+> **Por que foi revogada:** decisão do Roberto de manter a ElevenLabs como única voz do Elias.
+> Um segundo provedor resolve o silêncio, mas ao custo de uma segunda conta, uma segunda fatura,
+> um segundo contrato de rede por verificar (Q4) e um timbre que muda no meio da aula. Com uma voz
+> só, o problema deixa de ser "substituir o provedor" e passa a ser "tornar o silêncio
+> diagnosticável" — o que vive em `specs/0002-silencio-diagnosticavel.md`.
+>
+> Reversão registrada em `specs/decisions/ADR-0002-elevenlabs-voz-unica.md`.
+> O que foi aproveitado: a classificação de erro de auth/cota e a taxonomia de `reason`.
+> O que foi removido: `cartesiaClient.js`, a seleção de provedor e o cooldown.
 > Autor: Roberto · Criada em: 2026-08-26 · Última atualização: 2026-08-26
 > Branch de trabalho: `feat/0001-tts-provider-failover`
 > ADRs relacionadas: `specs/decisions/ADR-0001-tts-provider-failover.md`
