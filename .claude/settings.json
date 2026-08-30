@@ -9,7 +9,6 @@
       "Edit(./render.yaml)",
       "Edit(./backend_nodejs/seeds/**)",
       "Edit(./.gitignore)",
-      "Bash(git push:*)",
       "Bash(git reset:*)",
       "Bash(git checkout:*)"
     ],

@@ -311,7 +311,7 @@ Método completo em `docs/SDD_GUIA_AGENTES.md`. Antes de escrever código nesta 
 2. Escreva apenas o que a seção **Escopo** da spec autoriza. A seção **Não-escopo** é proibição literal.
 3. Ao esbarrar numa **Questão em aberto** da spec, **pare e pergunte**. Não escolha por mim.
 4. Ao terminar, mostre `git diff --stat` e diga qual critério de aceitação cada arquivo atende.
-5. Pode commitar na branch da spec. **Nunca faça push** — o remoto é meu: eu reviso o diff e empurro.
+5. Pode commitar e dar push **na branch da spec**. Nunca em `main` — o hook `pre-push` bloqueia, e eu reviso o diff antes de qualquer merge.
 6. Nunca escreva valores de chave/token em código, teste, log ou commit — só nomes de variável de ambiente.
 
 O agente **verificador** é outro: contrato dele é `VERIFIER.md`, e ele não edita código.

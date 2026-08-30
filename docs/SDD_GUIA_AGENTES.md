@@ -611,7 +611,7 @@ Permissões: o arquivo `.claude/settings.json` já foi criado neste repositório
       "Read(./.env)", "Read(./.env.*)", "Read(./backend_nodejs/.env)",
       "Read(./local.properties)", "Edit(./local.properties)",
       "Edit(./render.yaml)", "Edit(./backend_nodejs/seeds/**)", "Edit(./.gitignore)",
-      "Bash(git push:*)", "Bash(git reset:*)", "Bash(git checkout:*)"
+      "Bash(git reset:*)", "Bash(git checkout:*)"
     ],
     "allow": [
       "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
@@ -621,15 +621,27 @@ Permissões: o arquivo `.claude/settings.json` já foi criado neste repositório
 }
 ~~~
 
-Leia a lista `deny` como uma frase: **o escritor não lê segredo, não mexe em infra e não empurra
-nada para o remoto — o push é seu.** É a sua disciplina atual, escrita de um jeito que a máquina
-consegue cumprir mesmo às 2 da manhã.
+Leia a lista `deny` como uma frase: **o escritor não lê segredo e não mexe em infra.** É a sua
+disciplina atual, escrita de um jeito que a máquina consegue cumprir mesmo às 2 da manhã.
 
-`git commit` fica **fora** do `deny` de propósito. Bloquear os dois parece mais seguro e não é: o
-trabalho fica pendurado na árvore, um hook de fim de sessão cobra um commit que o agente não pode
-fazer, e você acaba liberando tudo no susto. Commit na branch é reversível e não sai da sua máquina;
-**push é o passo irreversível**, e é nele que o guardrail precisa estar. Se preferir a versão
-estrita, acrescente `"Bash(git commit:*)"` ao `deny` — sabendo que troca uma barreira por fricção.
+### Onde fica a barreira do git — uma decisão sua
+
+Este repositório **não** bloqueia `git commit` nem `git push` do escritor. A razão é prática: em
+sessões remotas, um hook de fim de sessão cobra commit e push a cada parada, e um `deny` nos dois
+deixa o trabalho pendurado na árvore até você liberar no susto — o que é pior que não ter a regra.
+
+O que sobra protegendo você, e é o que realmente importa:
+
+| Camada | O que impede |
+|---|---|
+| Trabalho sempre em `feat/NNNN-*` | `main` nunca recebe commit do agente |
+| Hook `scripts/hooks/pre-push` | push direto em `main` falha, mesmo com a permissão liberada |
+| ⚠️ Sua revisão do diff antes do merge | é o único ponto que julga *conteúdo* |
+
+Repare no que mudou de natureza: com o `deny`, a barreira era **mecânica** — a máquina impedia.
+Sem ele, a barreira do push vira **processo** — você revisando antes do merge. Processo funciona
+enquanto a disciplina segura; foi por isso que a Fase 6 existe. Se um dia quiser a versão
+mecânica de volta, acrescente `"Bash(git push:*)"` ao `deny`, e o commit continua livre.
 
 Abrir o escritor na branch da spec:
 
@@ -690,7 +702,7 @@ git worktree remove ..\elias-verify
 | Pasta | `$Elias` (sua árvore) | `..\elias-verify` (worktree) |
 | Pode escrever | código dentro do escopo da spec | **nada** além de `specs/findings/` |
 | Pode commitar | sim, na branch da spec | não |
-| Pode dar push | **não** | **não** |
+| Pode dar push | sim, na branch da spec (nunca em `main`) | não |
 | Roda testes | sim | sim (só os da seção 9 da spec) |
 | Lê `.env` / `local.properties` | não | não |
 
