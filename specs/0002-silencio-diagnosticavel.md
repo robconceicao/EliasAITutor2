@@ -35,8 +35,18 @@ Quando o Elias emudecer, descobrir **por quê** em menos de um minuto, sem abrir
 
 ~~~js
 // backend_nodejs/services/elevenLabsClient.js  (adições)
-/** Sonda barata contra a API: a chave é aceita? Nunca lança; nunca loga a chave. */
-export async function verifyApiKey({ timeoutMs }): Promise<{ ok: boolean, status: number|null, error: string|null }>
+/**
+ * Sonda em duas camadas. Nunca lança; nunca loga a chave.
+ *   1. GET /v1/user — grátis e sem efeito colateral. 200 → chave plena, acabou.
+ *   2. Se 401/403, o resultado é INCONCLUSIVO: uma chave com escopo restrito a TTS
+ *      legitimamente não lê dados da conta. Só então faz uma síntese de 1 caractere,
+ *      que é a capacidade que o app realmente precisa.
+ * `method` diz qual camada respondeu, para o diagnóstico não virar adivinhação.
+ */
+export async function verifyApiKey({ timeoutMs }): Promise<{
+  ok: boolean, status: number|null, error: string|null,
+  method: 'account'|'tts'|'none'
+}>
 
 /** Mesma sonda, com cache curto (TTS_KEY_PROBE_CACHE_MS, default 60 s). */
 export async function verifyApiKeyCached(): Promise<{ ok, status, error, checkedAt: number, cached: boolean }>
@@ -75,6 +85,8 @@ achatado em `tts_failed`.
 |---|---|---|---|
 | D1 | A checagem de chave é **sob demanda com cache curto**, não a cada turno de fala. | Validar a chave em todo request de TTS | Uma chamada extra por fala é custo e latência no caminho feliz, para responder algo que muda raramente. |
 | D2 | O app decide a mensagem pela `reason`, nunca pelo texto cru da API. | Repassar `e.message` ao toast | O corpo do erro da ElevenLabs é para desenvolvedor. O usuário precisa saber se a culpa é do servidor ou da rede dele. |
+| D3 | A sonda **não** pode concluir "chave recusada" a partir de um 401 num endpoint de conta. | Sondar só `GET /v1/user` | Evidência de 2026-08-26: a chave de produção do Elias responde 401 em `/v1/user` e `/v1/voices`, e **funciona** para TTS — é uma chave com escopo restrito. Uma sonda que só olha a conta reprovaria a chave boa, e o diagnóstico mentiria na direção oposta ao problema que ele existe para resolver. |
+| D4 | A camada 2 gasta 1 caractere de cota por sonda, e só roda quando a camada 1 é inconclusiva. | Nunca gastar cota | Sem uma chamada de TTS de verdade não há como distinguir "chave morta" de "chave com escopo de TTS". 1 caractere a cada 60 s no pior caso é preço aceitável por um diagnóstico que não mente. |
 
 ---
 
@@ -105,6 +117,7 @@ achatado em `tts_failed`.
 |---|---|---|
 | A1 | Com `ELEVENLABS_API_KEY` inválida, `/health/tts` responde que a chave foi **recusada** | `Invoke-RestMethod http://localhost:3000/health/tts` |
 | A2 | Com chave válida, responde que está operacional | idem |
+| A6 | Chave com escopo restrito a TTS (401 na conta, TTS OK) é reportada como **operacional**, não como recusada | coberto por `test_tts_failover.js` |
 | A3 | Nenhuma resposta contém a chave nem fragmento dela | inspeção do corpo + teste |
 | A4 | O app distingue "voz recusada pelo servidor" de "sem conexão" | teste manual no device |
 | A5 | `npm run test:unit` verde | `cd backend_nodejs; npm run test:unit` |
@@ -118,3 +131,4 @@ achatado em `tts_failed`.
 | 2026-08-26 | Criação, substituindo a SPEC-0001 | Decisão de manter a ElevenLabs como única voz + app ainda mudo |
 | 2026-08-26 | 2.2 declara as interfaces (`verifyApiKey`, `verifyApiKeyCached`, payload de `/health/tts`) | Ciclo 3, antes de escrever o código |
 | 2026-08-26 | Q1 e Q2 respondidas com defaults provisórios e ajustáveis, em vez de bloquear a entrega | Ciclo 3 |
+| 2026-08-26 | D3/D4 e A6: sonda vira duas camadas — 401 na conta deixa de significar chave ruim | Evidência real do device: a chave de produção é TTS-scoped e a sonda de camada única a reprovava |
