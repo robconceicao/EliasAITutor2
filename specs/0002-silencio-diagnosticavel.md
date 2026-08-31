@@ -31,6 +31,30 @@ Quando o Elias emudecer, descobrir **por quê** em menos de um minuto, sem abrir
 - [ ] `EliasViewModel`: mensagem por `reason`, sem repetir o corpo cru do erro da API.
 - [ ] Log de boot: dizer se a chave presente foi aceita, não só se existe.
 
+### 2.2 Interfaces
+
+~~~js
+// backend_nodejs/services/elevenLabsClient.js  (adições)
+/** Sonda barata contra a API: a chave é aceita? Nunca lança; nunca loga a chave. */
+export async function verifyApiKey({ timeoutMs }): Promise<{ ok: boolean, status: number|null, error: string|null }>
+
+/** Mesma sonda, com cache curto (TTS_KEY_PROBE_CACHE_MS, default 60 s). */
+export async function verifyApiKeyCached(): Promise<{ ok, status, error, checkedAt: number, cached: boolean }>
+~~~
+
+~~~js
+// backend_nodejs/services/ttsProvider.js — já implementado, agora ligado ao server.js
+ttsFailureReason(err) · noteTtsFailure(err) · clearTtsFailure() · ttsStatus()
+~~~
+
+| Direção | Evento / rota | Payload |
+|---|---|---|
+| Backend → Android | `tts_unavailable` | `{ reason, mode:'text_only', clientFallback }` — `reason` **sempre** da taxonomia fechada, nunca o corpo do erro |
+| HTTP | `GET /health/tts` | `{ ok, hasKey, keySource, state, lastFailure, liveCheck:{ ok, status, checkedAt, cached } }` |
+
+Taxonomia fechada de `reason`: `no_key_configured` · `elevenlabs_auth_failed` ·
+`elevenlabs_quota_exceeded` · `tts_failed`.
+
 ### 2.1 Não-escopo
 
 - **Segundo provedor de TTS. Em nenhuma forma.** (ADR-0002)
@@ -65,8 +89,8 @@ Quando o Elias emudecer, descobrir **por quê** em menos de um minuto, sem abrir
 
 | # | Pergunta | Bloqueia? | Resposta |
 |---|---|---|---|
-| Q1 | Quanto tempo de cache para o resultado da checagem — 60 s? 5 min? | não | |
-| Q2 | A checagem entra também no `/health` geral, ou só em `/health/tts`? | não | |
+| Q1 | Quanto tempo de cache para o resultado da checagem — 60 s? 5 min? | não | **Provisório: 60 s**, ajustável por `TTS_KEY_PROBE_CACHE_MS`. Escolhi um default em vez de travar a entrega; troque o valor quando decidir. |
+| Q2 | A checagem entra também no `/health` geral, ou só em `/health/tts`? | não | **Provisório: só em `/health/tts`.** O `/health` é lido pelo health check do Render a cada poucos segundos; uma chamada de rede ali vira custo recorrente. |
 | Q3 | O app deve mostrar um aviso persistente enquanto a voz estiver fora, ou só o toast? | não | |
 
 ---
@@ -88,3 +112,5 @@ Quando o Elias emudecer, descobrir **por quê** em menos de um minuto, sem abrir
 | Data | O que mudou | Origem |
 |---|---|---|
 | 2026-08-26 | Criação, substituindo a SPEC-0001 | Decisão de manter a ElevenLabs como única voz + app ainda mudo |
+| 2026-08-26 | 2.2 declara as interfaces (`verifyApiKey`, `verifyApiKeyCached`, payload de `/health/tts`) | Ciclo 3, antes de escrever o código |
+| 2026-08-26 | Q1 e Q2 respondidas com defaults provisórios e ajustáveis, em vez de bloquear a entrega | Ciclo 3 |
