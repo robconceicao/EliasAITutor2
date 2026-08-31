@@ -16,6 +16,7 @@ import {
   verifyApiKeyCached,
 } from './services/elevenLabsClient.js';
 import {
+  deriveTtsState,
   clearTtsFailure,
   hasTtsKey,
   isTtsAuthOrQuotaError,
@@ -97,7 +98,20 @@ assert.strictEqual(ttsFailureReason({ status: 429 }), 'elevenlabs_quota_exceeded
 assert.strictEqual(
   ttsFailureReason(new Error('first_audio_byte_timeout')),
   'tts_failed',
-  'timeout não pode ser reportado como problema de chave'
+  'timeout não é problema de chave'
+);
+
+// A10 — o server.js NÃO pode passar esse rótulo por ttsFailureReason: ele já é da
+// taxonomia e seria achatado em tts_failed, e o app perderia a distinção (F1 do ciclo 3).
+// Este teste lê a fiação do server.js porque foi exatamente ali que o bug morava.
+const fonteServer = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+assert.ok(
+  /isTaxonomyLabel\(cause\) \? cause : ttsFailureReason\(err\)/.test(fonteServer),
+  'A10: goTextOnly precisa preservar rótulo da taxonomia em vez de reclassificar'
+);
+assert.ok(
+  /TTS_TAXONOMY_LABELS[\s\S]{0,300}first_audio_byte_timeout/.test(fonteServer),
+  'A10: first_audio_byte_timeout precisa estar na lista de rótulos preservados'
 );
 
 // ─── o estado que responde "por que está mudo" ──────────────
@@ -190,6 +204,39 @@ for (const envName of conhecidos) {
   assert.strictEqual(hasTtsKey(), true);
 }
 
+// ─── A9 — a sonda só prova o que sondou (D5) ────────────────
+const comChave = { hasKey: true, state: 'failing', lastFailure: { reason: 'elevenlabs_quota_exceeded' } };
+const limpo = { hasKey: true, state: 'ready', lastFailure: null };
+
+assert.strictEqual(deriveTtsState({ hasKey: false }, {}), 'no_key');
+
+// O caso F3: conta responde 200, mas houve falha de cota registrada. Antes, isto
+// devolvia 'ready' ao lado do lastFailure de cota — contradição no mesmo JSON.
+assert.strictEqual(
+  deriveTtsState(comChave, { ok: true, method: 'account' }),
+  'failing',
+  'A9: conta OK não refuta uma falha que ela não testou'
+);
+
+// Síntese provada agora, sim, refuta o histórico.
+assert.strictEqual(
+  deriveTtsState(comChave, { ok: true, method: 'tts' }),
+  'ready',
+  'A9: quem provou síntese pode dizer ready'
+);
+
+assert.strictEqual(deriveTtsState(limpo, { ok: true, method: 'account' }), 'ready');
+assert.strictEqual(deriveTtsState(limpo, { error: 'key_rejected' }), 'key_rejected');
+assert.strictEqual(deriveTtsState(limpo, { error: 'quota_exceeded' }), 'quota_exceeded');
+
+// shallow inconclusivo sem histórico: assume-se ignorância, não saúde.
+assert.strictEqual(
+  deriveTtsState(limpo, { error: 'inconclusive' }),
+  'unverified',
+  'A9: sem prova e sem histórico, o estado é "não verificado" — nunca "pronto"'
+);
+assert.strictEqual(deriveTtsState(comChave, { error: 'inconclusive' }), 'failing');
+
 // ─── sonda de chave em duas camadas (SPEC-0002, D3/D4) ─────
 // Sem rede: o fetch é trocado e conta quantas vezes cada camada foi chamada.
 const fetchOriginal = globalThis.fetch;
@@ -201,10 +248,17 @@ function fetchEmCamadas(plano, registro = { conta: 0, tts: 0 }) {
   return async (url) => {
     const camada = String(url).includes('/text-to-speech/') ? 'tts' : 'conta';
     registro[camada] += 1;
-    const status = plano[camada];
-    if (status === 'rede') throw new Error('getaddrinfo ENOTFOUND');
-    if (status === undefined) assert.fail(`camada ${camada} não deveria ser chamada`);
-    return { ok: status >= 200 && status < 300, status };
+    const bruto = plano[camada];
+    if (bruto === 'rede') throw new Error('getaddrinfo ENOTFOUND');
+    if (bruto === undefined) assert.fail(`camada ${camada} não deveria ser chamada`);
+    const status = typeof bruto === 'object' ? bruto.status : bruto;
+    const detail = typeof bruto === 'object' ? bruto.type : undefined;
+    const res = {
+      ok: status >= 200 && status < 300,
+      status,
+      clone: () => ({ json: async () => ({ detail: { type: detail } }) }),
+    };
+    return res;
   };
 }
 
@@ -306,6 +360,59 @@ try {
   const p3 = await verifyApiKeyCached();
   assert.strictEqual(idas, 2, 'chave nova precisa forçar nova sonda');
   assert.strictEqual(p3.cached, false);
+  // ── A11 — 400 com authentication_error é chave recusada, não http_400 ──
+  // É o status exato do incidente que originou a spec.
+  resetKeyProbeCache();
+  globalThis.fetch = fetchEmCamadas({ conta: 401, tts: { status: 400, type: 'authentication_error' } });
+  const quatrocentos = await verifyApiKey();
+  assert.strictEqual(
+    quatrocentos.error,
+    'key_rejected',
+    'A11: 400 com authentication_error é o caso do print — não pode virar http_400'
+  );
+
+  // 400 genérico continua sendo 400: não inventamos veredito sobre a chave.
+  resetKeyProbeCache();
+  globalThis.fetch = fetchEmCamadas({ conta: 401, tts: { status: 400, type: 'invalid_voice_id' } });
+  assert.strictEqual((await verifyApiKey()).error, 'http_400');
+
+  // ── A7 — shallow nunca toca o endpoint de TTS (boot não gasta cota) ──
+  resetKeyProbeCache();
+  reg = { conta: 0, tts: 0 };
+  globalThis.fetch = fetchEmCamadas({ conta: 401 }, reg);
+  const raso = await verifyApiKey({ depth: 'shallow' });
+  assert.strictEqual(raso.error, 'inconclusive', 'shallow não conclui, e diz isso');
+  assert.strictEqual(raso.ok, false);
+  assert.strictEqual(reg.tts, 0, 'A7: shallow não pode gastar cota');
+
+  // ── A8 — deep sonda a camada 2 mesmo com a conta OK ──
+  // É a única forma de detectar cota esgotada em chave de acesso pleno (F3).
+  resetKeyProbeCache();
+  reg = { conta: 0, tts: 0 };
+  globalThis.fetch = fetchEmCamadas({ conta: 200, tts: 429 }, reg);
+  const fundo = await verifyApiKey({ depth: 'deep' });
+  assert.strictEqual(reg.tts, 1, 'A8: deep precisa provar a síntese');
+  assert.strictEqual(
+    fundo.error,
+    'quota_exceeded',
+    'A8: conta OK + síntese recusada por cota — auto diria ready e mentiria'
+  );
+
+  // auto, no mesmo cenário, para na camada 1 e não vê a cota. É o custo consciente da D4.
+  resetKeyProbeCache();
+  reg = { conta: 0, tts: 0 };
+  globalThis.fetch = fetchEmCamadas({ conta: 200 }, reg);
+  assert.strictEqual((await verifyApiKey({ depth: 'auto' })).ok, true);
+  assert.strictEqual(reg.tts, 0);
+
+  // Cache é por profundidade: um shallow inconclusivo não pode servir a um deep.
+  resetKeyProbeCache();
+  reg = { conta: 0, tts: 0 };
+  globalThis.fetch = fetchEmCamadas({ conta: 401, tts: 200 }, reg);
+  await verifyApiKeyCached({ depth: 'shallow' });
+  const depoisDeep = await verifyApiKeyCached({ depth: 'deep' });
+  assert.strictEqual(depoisDeep.cached, false, 'cache não pode cruzar profundidades');
+  assert.strictEqual(depoisDeep.ok, true);
 } finally {
   globalThis.fetch = fetchOriginal;
   resetKeyProbeCache();
@@ -318,4 +425,4 @@ for (const k of TOUCHED) {
   else process.env[k] = ORIGINAL[k];
 }
 
-console.log('✅ tts key state + failure classification + key probe tests passed');
+console.log('✅ tts: estado da chave, classificação, sonda em camadas e profundidade');

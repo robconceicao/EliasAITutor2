@@ -56,8 +56,15 @@ export async function verifyApiKeyCached(): Promise<{ ok, status, error, checked
 ~~~
 
 ~~~js
-// backend_nodejs/services/ttsProvider.js — já implementado, agora ligado ao server.js
+// backend_nodejs/services/ttsProvider.js
 ttsFailureReason(err) · noteTtsFailure(err) · clearTtsFailure() · ttsStatus()
+
+/**
+ * Deriva o estado final de /health/tts a partir do observado e da sonda (D5).
+ * Mora aqui, e não na rota, porque é lógica de estado — e porque na rota A9 não
+ * teria como ser testada.
+ */
+export function deriveTtsState(observed, liveCheck): 'ready'|'no_key'|'key_rejected'|'quota_exceeded'|'failing'|'unverified'
 ~~~
 
 | Direção | Evento / rota | Payload |
@@ -95,7 +102,7 @@ achatado em `tts_failed`.
 | D3 | A sonda **não** pode concluir "chave recusada" a partir de um 401 num endpoint de conta. | Sondar só `GET /v1/user` | Evidência de 2026-08-26: a chave de produção do Elias responde 401 em `/v1/user` e `/v1/voices`, e **funciona** para TTS — é uma chave com escopo restrito. Uma sonda que só olha a conta reprovaria a chave boa, e o diagnóstico mentiria na direção oposta ao problema que ele existe para resolver. |
 | D4 | A camada 2 gasta 1 caractere de cota por sonda, e só roda quando a camada 1 é inconclusiva. | Nunca gastar cota | Sem uma chamada de TTS de verdade não há como distinguir "chave morta" de "chave com escopo de TTS". 1 caractere a cada 60 s no pior caso é preço aceitável por um diagnóstico que não mente. |
 | D5 | **A sonda só prova o que sondou.** Um `200` na camada 1 diz que a conta responde — não diz que a síntese funciona. Logo `state: 'ready'` só é afirmado quando (a) a camada 2 provou síntese, ou (b) a camada 1 respondeu OK **e** não há falha real registrada. Uma falha observada nunca é apagada por uma sonda que não a testou. | Deixar `liveCheck.ok` sobrepor tudo | Achado F3 do ciclo 3: o payload podia sair com `state:'ready'` ao lado de `lastFailure:{reason:'elevenlabs_quota_exceeded'}` — contradizendo a si mesmo no mesmo JSON. |
-| D6 | A profundidade da sonda é explícita: `shallow` (só camada 1), `auto` (camada 2 se a 1 for inconclusiva) e `deep` (sempre as duas). Boot usa `shallow`; `/health/tts` usa `auto`; `/health/tts?deep=1` usa `deep`. | Uma profundidade só | Achado F4: `keyProbeCache` vive na memória do processo, e no plano free do Render cada cold start gastava cota. Boot deixa de gastar; quem quiser a prova de síntese pede `deep` e sabe que está pagando por ela. Também fecha F3: `deep` é como se detecta cota esgotada em chave de acesso pleno. |
+| D6 | A profundidade da sonda é explícita: `shallow` (só camada 1), `auto` (camada 2 se a 1 for inconclusiva) e `deep` (sempre as duas). **Boot e `/health/tts` usam `auto`**; `/health/tts?deep=1` usa `deep`. Fecha F3: `deep` é como se detecta cota esgotada em chave de acesso pleno. | Boot em `shallow` | F4 mostrou que o modelo de custo do D4 estava errado: o cache é em memória e no plano free cada cold start reinicia o processo, então o custo real é 1 caractere **por cold start**, não por 60 s. Mas a conta muda o veredito: 1 caractere contra 347.920 créditos/mês — mil reinícios custam 0,3% da cota. Trocar a linha mais útil do log de deploy ("chave RECUSADA") por essa economia seria mau negócio. F4 exigia **corrigir o modelo de custo**, não remover a capacidade. `shallow` fica disponível para quem tiver restrição real. |
 
 ---
 
@@ -147,5 +154,7 @@ achatado em `tts_failed`.
 | 2026-08-26 | Q1 e Q2 respondidas com defaults provisórios e ajustáveis, em vez de bloquear a entrega | Ciclo 3 |
 | 2026-08-26 | D3/D4 e A6: sonda vira duas camadas — 401 na conta deixa de significar chave ruim | Evidência real do device: a chave de produção é TTS-scoped e a sonda de camada única a reprovava |
 | 2026-08-31 | D5 e A9: sonda só prova o que sondou; `ready` deixa de apagar falha registrada | Achado F3 do verificador, ciclo 3 |
-| 2026-08-31 | D6, A7 e A8: profundidade explícita (`shallow`/`auto`/`deep`); boot para de gastar cota | Achados F3 e F4 do verificador, ciclo 3 |
+| 2026-08-31 | D6, A7 e A8: profundidade explícita (`shallow`/`auto`/`deep`) | Achados F3 e F4 do verificador, ciclo 3 |
+| 2026-08-31 | D6 revisto: boot volta a `auto`. A primeira correção de F4 trocou o diagnóstico mais útil do deploy por 0,3% de cota — corrigir o modelo de custo não era o mesmo que remover a capacidade | Revisão do próprio escritor, ainda no ciclo 3 |
 | 2026-08-31 | A10 e A11 formalizam o que já estava na taxonomia e o código não cumpria | Achados F1 e F2 (bugs de código) do ciclo 3 |
+| 2026-08-31 | `deriveTtsState` sai da rota e entra em `ttsProvider` | Sem isso A9 não teria teste — a suíte não alcança o `server.js` |

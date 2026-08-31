@@ -50,7 +50,18 @@ import {
   noteTtsFailure,
   clearTtsFailure,
   ttsStatus,
+  deriveTtsState,
 } from './services/ttsProvider.js';
+
+/** Rótulos que o servidor já emite prontos — não devem ser reclassificados (SPEC-0002, A10). */
+const TTS_TAXONOMY_LABELS = new Set([
+  'no_key_configured',
+  'elevenlabs_auth_failed',
+  'elevenlabs_quota_exceeded',
+  'first_audio_byte_timeout',
+  'tts_failed',
+]);
+const isTaxonomyLabel = (v) => typeof v === 'string' && TTS_TAXONOMY_LABELS.has(v);
 import programRoutes from './routes/programRoutes.js';
 import { translateToPtBr } from './services/translationService.js';
 import { scoreEchoAttempt } from './services/echoScoreService.js';
@@ -754,7 +765,10 @@ io.on('connection', (socket) => {
         firstByteWatchdog?.cancel();
         const err = cause instanceof Error ? cause : new Error(String(cause || 'tts_failed'));
         noteTtsFailure(err);
-        const reason = ttsFailureReason(err);
+        // F1 do ciclo 3: quem chama com um rótulo da taxonomia já sabe o que houve.
+        // Reclassificar aqui achatava `first_audio_byte_timeout` em `tts_failed` e o
+        // app perdia a distinção — exatamente o que a spec manda preservar.
+        const reason = isTaxonomyLabel(cause) ? cause : ttsFailureReason(err);
         // O detalhe cru fica no log do servidor, onde é útil e não vaza para o device.
         console.warn(`📝 TTS unavailable — text-only. reason=${reason} detalhe=${err.message}`);
         socket.emit('tts_unavailable', {
@@ -1433,21 +1447,19 @@ app.get('/health/tts', async (req, res) => {
   ensureElevenLabsKeyEnv();
   const observed = ttsStatus();
 
-  let liveCheck = { ok: null, status: null, error: null, checkedAt: null, cached: false };
+  // D6 — profundidade explícita. `auto` é barato; `deep` é a única que prova síntese.
+  const depth = req.query?.deep === '1' || req.query?.deep === 'true' ? 'deep' : 'auto';
+
+  let liveCheck = { ok: null, status: null, error: null, method: null, checkedAt: null, cached: false };
   if (observed.hasKey) {
     try {
-      liveCheck = await verifyApiKeyCached();
+      liveCheck = await verifyApiKeyCached({ depth });
     } catch (e) {
       liveCheck = { ok: false, status: null, error: 'probe_failed', checkedAt: Date.now(), cached: false };
     }
   }
 
-  // A sonda tem a última palavra: ela é agora, o estado observado é histórico.
-  let state = observed.state;
-  if (!observed.hasKey) state = 'no_key';
-  else if (liveCheck.ok === true) state = 'ready';
-  else if (liveCheck.error === 'key_rejected') state = 'key_rejected';
-  else if (liveCheck.error === 'quota_exceeded') state = 'quota_exceeded';
+  const state = deriveTtsState(observed, liveCheck);
 
   const hint = {
     no_key: 'Defina ELEVENLABS_API_KEY (ou My-English-Coach-Key) no ambiente do host (Render).',
@@ -1455,6 +1467,8 @@ app.get('/health/tts', async (req, res) => {
       'A chave existe mas foi recusada pela ElevenLabs. Gere uma nova no painel do provedor e atualize a env var. Confira também se a conta tem créditos.',
     quota_exceeded:
       'A chave é válida, mas a cota da conta acabou. Trocar a chave não resolve — adicione créditos ou espere a renovação do plano.',
+    unverified:
+      'Há chave, mas a camada barata da sonda não decidiu (a chave pode ter escopo restrito). Chame GET /health/tts?deep=1 para provar a síntese — gasta 1 caractere de cota.',
     failing: 'A chave é aceita, mas a última síntese falhou por outro motivo — ver lastFailure.',
     ready: undefined,
   }[state];
@@ -1517,7 +1531,11 @@ server.listen(PORT, HOST, () => {
     // que deixou o tutor mudo por dois ciclos (SPEC-0002). Uma sonda no boot põe a
     // resposta na primeira tela de log do deploy, sem esperar o usuário falar.
     // Não bloqueia o boot: a porta já está aberta.
-    verifyApiKeyCached()
+    // D6 — boot usa `auto`. F4 estava certo sobre o modelo de custo (cache em memória;
+    // no free tier o custo real é 1 caractere por cold start, não por 60 s), mas a conta
+    // não justifica desligar: 1 caractere contra 347 mil créditos. A linha
+    // "chave RECUSADA" no log de deploy vale muito mais que essa economia.
+    verifyApiKeyCached({ depth: 'auto' })
       .then((probe) => {
         if (probe.ok) {
           const escopo =
@@ -1528,6 +1546,10 @@ server.listen(PORT, HOST, () => {
         } else if (probe.error === 'key_rejected') {
           console.error(
             `[boot] ⚠️ chave ElevenLabs RECUSADA (HTTP ${probe.status}). O tutor ficará mudo até ela ser trocada no painel do host. Diagnóstico: GET /health/tts`
+          );
+        } else if (probe.error === 'inconclusive') {
+          console.log(
+            '[boot] chave ElevenLabs presente; a sonda barata não decidiu (escopo restrito é o caso comum). Para provar a síntese: GET /health/tts?deep=1'
           );
         } else {
           console.warn(

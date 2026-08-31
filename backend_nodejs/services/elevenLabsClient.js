@@ -584,11 +584,32 @@ export async function listVoices() {
  * @param {{ timeoutMs?: number }} [opts]
  * @returns {Promise<{ ok: boolean, status: number|null, error: string|null }>}
  */
-/** Rótulo derivado só do status. O corpo pode ecoar material da requisição. */
-function labelForStatus(status) {
+/**
+ * Rótulo derivado do status e, quando houver, do *tipo* de erro — nunca do corpo inteiro,
+ * que pode ecoar material da requisição.
+ *
+ * O 400 importa: o incidente que originou esta spec foi
+ * `ElevenLabs REST TTS 400: {"detail":{"type":"authentication_error"}}` — no mesmo endpoint
+ * que a camada 2 usa. Classificar isso como `http_400` deixaria a sonda cega para o caso
+ * que ela existe para diagnosticar (F2 do ciclo 3).
+ */
+function labelForStatus(status, errorType = '') {
   if (status === 401 || status === 403) return 'key_rejected';
   if (status === 429) return 'quota_exceeded';
+  const tipo = String(errorType).toLowerCase();
+  if (tipo.includes('authentication') || tipo.includes('invalid_api_key')) return 'key_rejected';
+  if (tipo.includes('quota') || tipo.includes('limit')) return 'quota_exceeded';
   return `http_${status}`;
+}
+
+/** Só o campo `detail.type` da resposta — nunca o corpo inteiro (R2). */
+async function errorTypeOf(res) {
+  try {
+    const body = await res.clone().json();
+    return String(body?.detail?.type || body?.detail?.status || '');
+  } catch {
+    return '';
+  }
 }
 
 /** Uma requisição com timeout, que nunca lança. */
@@ -597,7 +618,8 @@ async function tryFetch(url, init, timeoutMs) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...init, signal: controller.signal });
-    return { reached: true, ok: res.ok, status: res.status };
+    const errorType = res.ok ? '' : await errorTypeOf(res);
+    return { reached: true, ok: res.ok, status: res.status, errorType };
   } catch (e) {
     return {
       reached: false,
@@ -626,7 +648,7 @@ async function tryFetch(url, init, timeoutMs) {
  * @param {{ timeoutMs?: number }} [opts]
  * @returns {Promise<{ ok: boolean, status: number|null, error: string|null, method: 'account'|'tts'|'none' }>}
  */
-export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
+export async function verifyApiKey({ timeoutMs = 5000, depth = 'auto' } = {}) {
   ensureElevenLabsKeyEnv();
   const key = apiKey();
   if (!key) {
@@ -643,14 +665,22 @@ export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
   if (!account.reached) {
     return { ok: false, status: null, error: account.error, method: 'none' };
   }
-  if (account.ok) return { ok: true, status: account.status, error: null, method: 'account' };
-  if (account.status !== 401 && account.status !== 403) {
+  // `deep` continua para a camada 2 mesmo com a conta OK: é a única forma de provar
+  // síntese — e, portanto, de detectar cota esgotada numa chave de acesso pleno (D6/F3).
+  if (account.ok && depth !== 'deep') {
+    return { ok: true, status: account.status, error: null, method: 'account' };
+  }
+  if (!account.ok && account.status !== 401 && account.status !== 403) {
     return {
       ok: false,
       status: account.status,
-      error: labelForStatus(account.status),
+      error: labelForStatus(account.status, account.errorType),
       method: 'account',
     };
+  }
+  // `shallow` para aqui de propósito: não gasta cota (D6/F4).
+  if (depth === 'shallow') {
+    return { ok: false, status: account.status, error: 'inconclusive', method: 'account' };
   }
 
   // ── Camada 2: a capacidade que importa ──
@@ -666,13 +696,19 @@ export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
   );
   if (!tts.reached) return { ok: false, status: null, error: tts.error, method: 'tts' };
   if (tts.ok) return { ok: true, status: tts.status, error: null, method: 'tts' };
-  return { ok: false, status: tts.status, error: labelForStatus(tts.status), method: 'tts' };
+  return {
+    ok: false,
+    status: tts.status,
+    error: labelForStatus(tts.status, tts.errorType),
+    method: 'tts',
+  };
 }
 
 /** Cache TTL for the probe. Q1 of SPEC-0002 — provisional 60 s, tune by env. */
 const KEY_PROBE_CACHE_MS = Number(process.env.TTS_KEY_PROBE_CACHE_MS) || 60_000;
 
-let keyProbeCache = null;
+/** Map fingerprint → { checkedAt, result }. A chave inclui a profundidade. */
+const keyProbeCache = new Map();
 
 /**
  * verifyApiKey() with a short cache, so /health/tts can be polled without turning
@@ -684,28 +720,27 @@ let keyProbeCache = null;
  *
  * @returns {Promise<{ ok: boolean, status: number|null, error: string|null, checkedAt: number, cached: boolean }>}
  */
-export async function verifyApiKeyCached() {
+export async function verifyApiKeyCached({ depth = 'auto' } = {}) {
   // Hash, não fatia da chave: um pedaço do segredo em memória é segredo em memória (R2).
-  const fingerprint = `${resolveApiKeySource()}:${createHash('sha256')
+  // A profundidade entra na chave do cache: um resultado `shallow` inconclusivo não
+  // pode ser servido para quem pediu `deep`, e vice-versa.
+  const fingerprint = `${depth}:${resolveApiKeySource()}:${createHash('sha256')
     .update(apiKey())
     .digest('hex')
     .slice(0, 12)}`;
   const now = Date.now();
 
-  if (
-    keyProbeCache &&
-    keyProbeCache.fingerprint === fingerprint &&
-    now - keyProbeCache.checkedAt < KEY_PROBE_CACHE_MS
-  ) {
-    return { ...keyProbeCache.result, checkedAt: keyProbeCache.checkedAt, cached: true };
+  const hit = keyProbeCache.get(fingerprint);
+  if (hit && now - hit.checkedAt < KEY_PROBE_CACHE_MS) {
+    return { ...hit.result, checkedAt: hit.checkedAt, cached: true };
   }
 
-  const result = await verifyApiKey();
-  keyProbeCache = { fingerprint, checkedAt: now, result };
+  const result = await verifyApiKey({ depth });
+  keyProbeCache.set(fingerprint, { checkedAt: now, result });
   return { ...result, checkedAt: now, cached: false };
 }
 
 /** Drop the cached probe — call after the key env changes. */
 export function resetKeyProbeCache() {
-  keyProbeCache = null;
+  keyProbeCache.clear();
 }

@@ -149,3 +149,35 @@ export function ttsStatus() {
     lastFailure: lastFailure ? { ...lastFailure } : null,
   };
 }
+
+/**
+ * Estado final para GET /health/tts, a partir do que foi observado em uso real e do
+ * que a sonda acabou de provar (SPEC-0002, D5).
+ *
+ * A regra que importa: **a sonda só prova o que sondou**. Um 200 na camada de conta
+ * diz que a conta responde — não diz que a síntese funciona — e por isso não pode
+ * apagar uma falha real já registrada. Sem isso, o payload se contradizia: `ready`
+ * ao lado de um `lastFailure` de cota (achado F3 do ciclo 3).
+ *
+ * @param {{hasKey:boolean, state:string, lastFailure:{reason:string}|null}} observed
+ * @param {{ok:boolean|null, error:string|null, method:string|null}} liveCheck
+ * @returns {'ready'|'no_key'|'key_rejected'|'quota_exceeded'|'failing'|'unverified'}
+ */
+export function deriveTtsState(observed, liveCheck = {}) {
+  if (!observed?.hasKey) return 'no_key';
+  if (liveCheck.error === 'key_rejected') return 'key_rejected';
+  if (liveCheck.error === 'quota_exceeded') return 'quota_exceeded';
+
+  // Camada barata não decidiu e ninguém pediu prova de síntese.
+  if (liveCheck.error === 'inconclusive') {
+    return observed.lastFailure ? observed.state : 'unverified';
+  }
+
+  if (liveCheck.ok === true) {
+    // Síntese provada agora refuta o histórico; conta respondendo, não.
+    if (liveCheck.method === 'tts') return 'ready';
+    return observed.lastFailure ? observed.state : 'ready';
+  }
+
+  return observed.state;
+}
