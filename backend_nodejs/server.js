@@ -43,7 +43,14 @@ import {
   hasElevenLabsKey,
   resolveApiKeySource,
   synthesizePcmRest,
+  verifyApiKeyCached,
 } from './services/elevenLabsClient.js';
+import {
+  ttsFailureReason,
+  noteTtsFailure,
+  clearTtsFailure,
+  ttsStatus,
+} from './services/ttsProvider.js';
 import programRoutes from './routes/programRoutes.js';
 import { translateToPtBr } from './services/translationService.js';
 import { scoreEchoAttempt } from './services/echoScoreService.js';
@@ -580,11 +587,9 @@ io.on('connection', (socket) => {
 
       // No key at all → client may use local ElevenLabs fallback
       if (!hasElevenLabsKey() || (tts.textOnly && !tts.restOk)) {
-        socket.emit('tts_unavailable', {
-          reason: tts.error || 'elevenlabs_api_key_missing',
-          mode: 'text_only',
-          clientFallback: true,
-        });
+        const reason = ttsFailureReason(new Error(tts.error || 'elevenlabs_api_key_missing'));
+        noteTtsFailure(new Error(tts.error || 'elevenlabs_api_key_missing'));
+        socket.emit('tts_unavailable', { reason, mode: 'text_only', clientFallback: true });
         return;
       }
 
@@ -597,8 +602,9 @@ io.on('connection', (socket) => {
           return;
         } catch (restErr) {
           console.error('[shadow_speak] REST fallback failed:', restErr.message);
+          noteTtsFailure(restErr);
           socket.emit('tts_unavailable', {
-            reason: restErr.message || 'voice_open_failed',
+            reason: ttsFailureReason(restErr),
             mode: 'text_only',
             clientFallback: true,
           });
@@ -670,8 +676,10 @@ io.on('connection', (socket) => {
       }
     } catch (e) {
       console.error("Erro no shadow_speak:", e);
+      noteTtsFailure(e);
+      // Nunca `e.message`: o corpo cru da API virava o texto do toast no device.
       socket.emit('tts_unavailable', {
-        reason: e.message,
+        reason: ttsFailureReason(e),
         mode: 'text_only',
         clientFallback: true,
       });
@@ -733,16 +741,24 @@ io.on('connection', (socket) => {
         if (elevenSocket === ws) elevenSocket = null;
       };
 
-      const goTextOnly = (reason, { clientFallback = true } = {}) => {
+      /**
+       * @param {unknown} cause — Error ou string. Classificado antes de sair daqui:
+       *   o cliente recebe sempre um rótulo da taxonomia, nunca o corpo da API (D2).
+       */
+      const goTextOnly = (cause, { clientFallback = true } = {}) => {
         textOnlyMode = true;
         restFallbackMode = false;
         ttsStreamGen += 1;
         elevenSocket = null;
         estadoGeracao.elevenSocket = null;
         firstByteWatchdog?.cancel();
-        console.warn(`📝 TTS unavailable — text-only mode. reason=${reason}`);
+        const err = cause instanceof Error ? cause : new Error(String(cause || 'tts_failed'));
+        noteTtsFailure(err);
+        const reason = ttsFailureReason(err);
+        // O detalhe cru fica no log do servidor, onde é útil e não vaza para o device.
+        console.warn(`📝 TTS unavailable — text-only. reason=${reason} detalhe=${err.message}`);
         socket.emit('tts_unavailable', {
-          reason: reason || 'voice_open_failed',
+          reason,
           mode: 'text_only',
           timeoutMs: FIRST_AUDIO_BYTE_TIMEOUT_MS,
           clientFallback,
@@ -758,7 +774,10 @@ io.on('connection', (socket) => {
         escutarRetornoElevenLabs(ws, socket, estadoGeracao, seqTracker, {
           onAudioMessage: (msg) => {
             firstByteWatchdog?.noteMessage(msg);
-            if (msg?.audio) audioEmitted = true;
+            if (msg?.audio) {
+              audioEmitted = true;
+              clearTtsFailure(); // saiu áudio: o estado anterior de falha não vale mais
+            }
           },
           // Discard late primary audio after fallback/text-only switch
           isActive: () =>
@@ -1171,10 +1190,11 @@ io.on('connection', (socket) => {
               voiceId: activeTtsVoice || sessionVoiceId,
             });
             audioEmitted = true;
+            clearTtsFailure();
           } catch (restErr) {
             console.error('[tts] REST complete failed:', restErr.message);
             if (!audioEmitted) {
-              goTextOnly(restErr.message || 'rest_tts_failed');
+              goTextOnly(restErr);
             }
           }
         }
@@ -1400,6 +1420,45 @@ app.get('/', (req, res) => {
 });
 
 /** Lightweight health — no secrets. Used to verify deploy + TTS env. */
+/**
+ * Diagnóstico de voz (SPEC-0002).
+ *
+ * O //health geral só diz se existe chave — uma chave recusada aparece lá igual a uma
+ * boa. Esta rota responde a outra metade: a chave é aceita agora? Combina a sonda ao
+ * vivo (cache curto) com o que as falhas reais já mostraram.
+ *
+ * Nunca devolve a chave nem fragmento dela: só o nome da env var (R3).
+ */
+app.get('/health/tts', async (req, res) => {
+  ensureElevenLabsKeyEnv();
+  const observed = ttsStatus();
+
+  let liveCheck = { ok: null, status: null, error: null, checkedAt: null, cached: false };
+  if (observed.hasKey) {
+    try {
+      liveCheck = await verifyApiKeyCached();
+    } catch (e) {
+      liveCheck = { ok: false, status: null, error: 'probe_failed', checkedAt: Date.now(), cached: false };
+    }
+  }
+
+  // A sonda tem a última palavra: ela é agora, o estado observado é histórico.
+  let state = observed.state;
+  if (!observed.hasKey) state = 'no_key';
+  else if (liveCheck.ok === true) state = 'ready';
+  else if (liveCheck.error === 'key_rejected') state = 'key_rejected';
+
+  const hint = {
+    no_key: 'Defina ELEVENLABS_API_KEY (ou My-English-Coach-Key) no ambiente do host (Render).',
+    key_rejected:
+      'A chave existe mas foi recusada pela ElevenLabs. Gere uma nova no painel do provedor e atualize a env var. Confira também se a conta tem créditos.',
+    failing: 'A chave é aceita, mas a última síntese falhou por outro motivo — ver lastFailure.',
+    ready: undefined,
+  }[state];
+
+  res.json({ ok: true, ...observed, state, liveCheck, hint });
+});
+
 app.get('/health', (req, res) => {
   ensureElevenLabsKeyEnv();
   let opusBackend = 'unknown';
@@ -1446,6 +1505,28 @@ server.listen(PORT, HOST, () => {
     console.error(
       '[boot] ⚠️ ELEVENLABS_API_KEY missing — set it (or My-English-Coach-Key) on Render Environment. TTS will stay silent until fixed.'
     );
+  } else {
+    // A chave existir não é a mesma coisa que a chave funcionar — foi essa confusão
+    // que deixou o tutor mudo por dois ciclos (SPEC-0002). Uma sonda no boot põe a
+    // resposta na primeira tela de log do deploy, sem esperar o usuário falar.
+    // Não bloqueia o boot: a porta já está aberta.
+    verifyApiKeyCached()
+      .then((probe) => {
+        if (probe.ok) {
+          console.log('[boot] ✅ chave ElevenLabs aceita pela API — voz operacional');
+        } else if (probe.error === 'key_rejected') {
+          console.error(
+            `[boot] ⚠️ chave ElevenLabs RECUSADA (HTTP ${probe.status}). O tutor ficará mudo até ela ser trocada no painel do host. Diagnóstico: GET /health/tts`
+          );
+        } else {
+          console.warn(
+            `[boot] chave ElevenLabs não pôde ser verificada agora (${probe.error}). Isso não acusa a chave — pode ser rede. Ver /health/tts`
+          );
+        }
+      })
+      .catch(() => {
+        console.warn('[boot] sonda da chave ElevenLabs falhou; ver /health/tts');
+      });
   }
 
   // Seed + optional Mongo after the port is open (never block deploy health/port scan).

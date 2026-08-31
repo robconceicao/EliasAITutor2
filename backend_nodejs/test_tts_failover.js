@@ -11,6 +11,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
+  resetKeyProbeCache,
+  verifyApiKey,
+  verifyApiKeyCached,
+} from './services/elevenLabsClient.js';
+import {
   clearTtsFailure,
   hasTtsKey,
   isTtsAuthOrQuotaError,
@@ -185,6 +190,91 @@ for (const envName of conhecidos) {
   assert.strictEqual(hasTtsKey(), true);
 }
 
+// ─── sonda de chave (SPEC-0002) ─────────────────────────────
+// Sem rede: o fetch é trocado. O que se testa é a classificação, que é o que
+// /health/tts usa para dizer "existe chave" versus "a chave foi recusada".
+const fetchOriginal = globalThis.fetch;
+
+function fetchQueRetorna(status) {
+  return async () => ({ ok: status >= 200 && status < 300, status });
+}
+
+try {
+  setKey(false);
+  resetKeyProbeCache();
+  globalThis.fetch = () => assert.fail('não pode ir à rede sem chave');
+  assert.deepStrictEqual(await verifyApiKey(), {
+    ok: false,
+    status: null,
+    error: 'elevenlabs_api_key_missing',
+  });
+
+  setKey(true);
+
+  resetKeyProbeCache();
+  globalThis.fetch = fetchQueRetorna(200);
+  const boa = await verifyApiKey();
+  assert.strictEqual(boa.ok, true);
+  assert.strictEqual(boa.error, null);
+
+  // 401 e 403 são o caso do print: chave presente e recusada.
+  for (const status of [401, 403]) {
+    globalThis.fetch = fetchQueRetorna(status);
+    const r = await verifyApiKey();
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.error, 'key_rejected', `${status} precisa virar key_rejected`);
+  }
+
+  // Erro de servidor NÃO é chave recusada — o conserto é outro.
+  globalThis.fetch = fetchQueRetorna(500);
+  const r500 = await verifyApiKey();
+  assert.strictEqual(r500.error, 'http_500');
+  assert.notStrictEqual(r500.error, 'key_rejected');
+
+  // Rede fora também não acusa a chave.
+  globalThis.fetch = async () => {
+    throw new Error('getaddrinfo ENOTFOUND');
+  };
+  assert.strictEqual((await verifyApiKey()).error, 'probe_network_error');
+
+  globalThis.fetch = async () => {
+    const e = new Error('aborted');
+    e.name = 'AbortError';
+    throw e;
+  };
+  assert.strictEqual((await verifyApiKey()).error, 'probe_timeout');
+
+  // R2 — nenhum resultado da sonda pode carregar a chave.
+  globalThis.fetch = fetchQueRetorna(401);
+  assert.ok(
+    !JSON.stringify(await verifyApiKey()).includes('test-marker-not-a-key'),
+    'R2: o resultado da sonda não pode conter a chave'
+  );
+
+  // Cache: a segunda chamada não vai à rede…
+  resetKeyProbeCache();
+  let idas = 0;
+  globalThis.fetch = async () => {
+    idas += 1;
+    return { ok: false, status: 401 };
+  };
+  const p1 = await verifyApiKeyCached();
+  const p2 = await verifyApiKeyCached();
+  assert.strictEqual(idas, 1, 'a segunda chamada precisa vir do cache');
+  assert.strictEqual(p1.cached, false);
+  assert.strictEqual(p2.cached, true);
+
+  // …mas trocar a chave invalida o cache na hora. Sem isso, um "recusada" velho
+  // sobreviveria à correção da chave no painel — e o diagnóstico mentiria.
+  process.env.ELEVENLABS_API_KEY = 'test-marker-not-a-key-DIFERENTE';
+  const p3 = await verifyApiKeyCached();
+  assert.strictEqual(idas, 2, 'chave nova precisa forçar nova sonda');
+  assert.strictEqual(p3.cached, false);
+} finally {
+  globalThis.fetch = fetchOriginal;
+  resetKeyProbeCache();
+}
+
 // ─── restaura o ambiente ────────────────────────────────────
 clearTtsFailure();
 for (const k of TOUCHED) {
@@ -192,4 +282,4 @@ for (const k of TOUCHED) {
   else process.env[k] = ORIGINAL[k];
 }
 
-console.log('✅ tts key state + failure classification tests passed');
+console.log('✅ tts key state + failure classification + key probe tests passed');

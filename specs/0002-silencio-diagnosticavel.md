@@ -53,7 +53,11 @@ ttsFailureReason(err) · noteTtsFailure(err) · clearTtsFailure() · ttsStatus()
 | HTTP | `GET /health/tts` | `{ ok, hasKey, keySource, state, lastFailure, liveCheck:{ ok, status, checkedAt, cached } }` |
 
 Taxonomia fechada de `reason`: `no_key_configured` · `elevenlabs_auth_failed` ·
-`elevenlabs_quota_exceeded` · `tts_failed`.
+`elevenlabs_quota_exceeded` · `first_audio_byte_timeout` · `tts_failed`.
+
+`first_audio_byte_timeout` já era emitido pelo watchdog antes desta spec e é informação
+útil (a chave está boa, o áudio é que não veio) — entra na taxonomia em vez de ser
+achatado em `tts_failed`.
 
 ### 2.1 Não-escopo
 

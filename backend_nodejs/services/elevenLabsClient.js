@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import ws from 'ws';
+import { createHash } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = path.resolve(__dirname, '../cache/chunks');
@@ -567,4 +568,90 @@ export async function listVoices() {
   if (!res.ok) return [];
   const data = await res.json();
   return data.voices || [];
+}
+
+// ─── Key probe (SPEC-0002) ──────────────────────────────────
+
+/**
+ * Cheap authenticated GET: is the key accepted right now?
+ *
+ * `/health` can only say a key *exists*; a rejected key looks identical to a good
+ * one there, which is what hid the 2026-08-26 outage for two cycles. This answers
+ * the other half without waiting for the user to speak.
+ *
+ * Never throws and never logs the key — the caller gets a plain result object.
+ *
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ ok: boolean, status: number|null, error: string|null }>}
+ */
+export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
+  ensureElevenLabsKeyEnv();
+  const key = apiKey();
+  if (!key) return { ok: false, status: null, error: 'elevenlabs_api_key_missing' };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch('https://api.elevenlabs.io/v1/user', {
+      method: 'GET',
+      headers: { 'xi-api-key': key },
+      signal: controller.signal,
+    });
+    if (res.ok) return { ok: true, status: res.status, error: null };
+    // Body may echo request material; keep only the status-derived label.
+    return {
+      ok: false,
+      status: res.status,
+      error: res.status === 401 || res.status === 403 ? 'key_rejected' : `http_${res.status}`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      status: null,
+      error: e?.name === 'AbortError' ? 'probe_timeout' : 'probe_network_error',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Cache TTL for the probe. Q1 of SPEC-0002 — provisional 60 s, tune by env. */
+const KEY_PROBE_CACHE_MS = Number(process.env.TTS_KEY_PROBE_CACHE_MS) || 60_000;
+
+let keyProbeCache = null;
+
+/**
+ * verifyApiKey() with a short cache, so /health/tts can be polled without turning
+ * a diagnostic into a recurring cost (SPEC-0002, D1).
+ *
+ * The cache is keyed on the env var that supplied the key: rotating the key in the
+ * host panel changes the source or the value, and a stale "rejected" must not
+ * outlive the fix.
+ *
+ * @returns {Promise<{ ok: boolean, status: number|null, error: string|null, checkedAt: number, cached: boolean }>}
+ */
+export async function verifyApiKeyCached() {
+  // Hash, não fatia da chave: um pedaço do segredo em memória é segredo em memória (R2).
+  const fingerprint = `${resolveApiKeySource()}:${createHash('sha256')
+    .update(apiKey())
+    .digest('hex')
+    .slice(0, 12)}`;
+  const now = Date.now();
+
+  if (
+    keyProbeCache &&
+    keyProbeCache.fingerprint === fingerprint &&
+    now - keyProbeCache.checkedAt < KEY_PROBE_CACHE_MS
+  ) {
+    return { ...keyProbeCache.result, checkedAt: keyProbeCache.checkedAt, cached: true };
+  }
+
+  const result = await verifyApiKey();
+  keyProbeCache = { fingerprint, checkedAt: now, result };
+  return { ...result, checkedAt: now, cached: false };
+}
+
+/** Drop the cached probe — call after the key env changes. */
+export function resetKeyProbeCache() {
+  keyProbeCache = null;
 }
