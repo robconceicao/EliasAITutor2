@@ -1447,14 +1447,21 @@ app.get('/health/tts', async (req, res) => {
   if (!observed.hasKey) state = 'no_key';
   else if (liveCheck.ok === true) state = 'ready';
   else if (liveCheck.error === 'key_rejected') state = 'key_rejected';
+  else if (liveCheck.error === 'quota_exceeded') state = 'quota_exceeded';
 
   const hint = {
     no_key: 'Defina ELEVENLABS_API_KEY (ou My-English-Coach-Key) no ambiente do host (Render).',
     key_rejected:
       'A chave existe mas foi recusada pela ElevenLabs. Gere uma nova no painel do provedor e atualize a env var. Confira também se a conta tem créditos.',
+    quota_exceeded:
+      'A chave é válida, mas a cota da conta acabou. Trocar a chave não resolve — adicione créditos ou espere a renovação do plano.',
     failing: 'A chave é aceita, mas a última síntese falhou por outro motivo — ver lastFailure.',
     ready: undefined,
   }[state];
+
+  // `method` diz qual camada da sonda decidiu: 'account' (chave plena) ou 'tts'
+  // (chave com escopo restrito, que só se prova sintetizando).
+  
 
   res.json({ ok: true, ...observed, state, liveCheck, hint });
 });
@@ -1513,7 +1520,11 @@ server.listen(PORT, HOST, () => {
     verifyApiKeyCached()
       .then((probe) => {
         if (probe.ok) {
-          console.log('[boot] ✅ chave ElevenLabs aceita pela API — voz operacional');
+          const escopo =
+            probe.method === 'tts'
+              ? ' (chave com escopo restrito a TTS — não lê dados da conta, e não precisa)'
+              : '';
+          console.log(`[boot] ✅ chave ElevenLabs aceita pela API — voz operacional${escopo}`);
         } else if (probe.error === 'key_rejected') {
           console.error(
             `[boot] ⚠️ chave ElevenLabs RECUSADA (HTTP ${probe.status}). O tutor ficará mudo até ela ser trocada no painel do host. Diagnóstico: GET /health/tts`

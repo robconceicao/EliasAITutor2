@@ -190,53 +190,88 @@ for (const envName of conhecidos) {
   assert.strictEqual(hasTtsKey(), true);
 }
 
-// ─── sonda de chave (SPEC-0002) ─────────────────────────────
-// Sem rede: o fetch é trocado. O que se testa é a classificação, que é o que
-// /health/tts usa para dizer "existe chave" versus "a chave foi recusada".
+// ─── sonda de chave em duas camadas (SPEC-0002, D3/D4) ─────
+// Sem rede: o fetch é trocado e conta quantas vezes cada camada foi chamada.
 const fetchOriginal = globalThis.fetch;
 
-function fetchQueRetorna(status) {
-  return async () => ({ ok: status >= 200 && status < 300, status });
+/**
+ * @param {{conta:number|'rede', tts?:number|'rede'}} plano status por camada
+ */
+function fetchEmCamadas(plano, registro = { conta: 0, tts: 0 }) {
+  return async (url) => {
+    const camada = String(url).includes('/text-to-speech/') ? 'tts' : 'conta';
+    registro[camada] += 1;
+    const status = plano[camada];
+    if (status === 'rede') throw new Error('getaddrinfo ENOTFOUND');
+    if (status === undefined) assert.fail(`camada ${camada} não deveria ser chamada`);
+    return { ok: status >= 200 && status < 300, status };
+  };
 }
 
 try {
   setKey(false);
   resetKeyProbeCache();
   globalThis.fetch = () => assert.fail('não pode ir à rede sem chave');
-  assert.deepStrictEqual(await verifyApiKey(), {
-    ok: false,
-    status: null,
-    error: 'elevenlabs_api_key_missing',
-  });
+  const semChave = await verifyApiKey();
+  assert.strictEqual(semChave.error, 'elevenlabs_api_key_missing');
+  assert.strictEqual(semChave.method, 'none');
 
   setKey(true);
 
+  // Chave plena: a camada 1 resolve e a camada 2 NÃO roda — não gasta cota (D4).
   resetKeyProbeCache();
-  globalThis.fetch = fetchQueRetorna(200);
-  const boa = await verifyApiKey();
-  assert.strictEqual(boa.ok, true);
-  assert.strictEqual(boa.error, null);
+  let reg = { conta: 0, tts: 0 };
+  globalThis.fetch = fetchEmCamadas({ conta: 200 }, reg);
+  const plena = await verifyApiKey();
+  assert.strictEqual(plena.ok, true);
+  assert.strictEqual(plena.method, 'account');
+  assert.strictEqual(reg.tts, 0, 'D4: chave plena não pode gastar cota na sonda');
 
-  // 401 e 403 são o caso do print: chave presente e recusada.
-  for (const status of [401, 403]) {
-    globalThis.fetch = fetchQueRetorna(status);
-    const r = await verifyApiKey();
-    assert.strictEqual(r.ok, false);
-    assert.strictEqual(r.error, 'key_rejected', `${status} precisa virar key_rejected`);
+  // A6 — O CASO REAL: 401 na conta, TTS funciona. É chave boa, não recusada.
+  // Sem isto, o diagnóstico reprovaria a chave de produção do Elias.
+  for (const statusConta of [401, 403]) {
+    resetKeyProbeCache();
+    reg = { conta: 0, tts: 0 };
+    globalThis.fetch = fetchEmCamadas({ conta: statusConta, tts: 200 }, reg);
+    const restrita = await verifyApiKey();
+    assert.strictEqual(
+      restrita.ok,
+      true,
+      `A6: ${statusConta} na conta + TTS OK é chave com escopo restrito, não chave morta`
+    );
+    assert.strictEqual(restrita.method, 'tts');
+    assert.strictEqual(reg.tts, 1, 'a camada 2 precisa ter sido consultada');
   }
 
-  // Erro de servidor NÃO é chave recusada — o conserto é outro.
-  globalThis.fetch = fetchQueRetorna(500);
-  const r500 = await verifyApiKey();
-  assert.strictEqual(r500.error, 'http_500');
-  assert.notStrictEqual(r500.error, 'key_rejected');
+  // Chave realmente morta: as duas camadas recusam.
+  resetKeyProbeCache();
+  globalThis.fetch = fetchEmCamadas({ conta: 401, tts: 401 });
+  const morta = await verifyApiKey();
+  assert.strictEqual(morta.ok, false);
+  assert.strictEqual(morta.error, 'key_rejected');
+  assert.strictEqual(morta.method, 'tts');
 
-  // Rede fora também não acusa a chave.
-  globalThis.fetch = async () => {
-    throw new Error('getaddrinfo ENOTFOUND');
-  };
+  // Cota estourada não pode ser confundida com chave ruim: o conserto é outro.
+  resetKeyProbeCache();
+  globalThis.fetch = fetchEmCamadas({ conta: 401, tts: 429 });
+  const cota = await verifyApiKey();
+  assert.strictEqual(cota.error, 'quota_exceeded');
+  assert.notStrictEqual(cota.error, 'key_rejected');
+
+  // Erro de servidor na camada 1 encerra ali — não faz sentido gastar cota.
+  resetKeyProbeCache();
+  reg = { conta: 0, tts: 0 };
+  globalThis.fetch = fetchEmCamadas({ conta: 500 }, reg);
+  const erro500 = await verifyApiKey();
+  assert.strictEqual(erro500.error, 'http_500');
+  assert.strictEqual(reg.tts, 0, '500 não é problema de chave — não sonda TTS');
+
+  // Rede fora não acusa a chave.
+  resetKeyProbeCache();
+  globalThis.fetch = fetchEmCamadas({ conta: 'rede' });
   assert.strictEqual((await verifyApiKey()).error, 'probe_network_error');
 
+  resetKeyProbeCache();
   globalThis.fetch = async () => {
     const e = new Error('aborted');
     e.name = 'AbortError';
@@ -245,7 +280,8 @@ try {
   assert.strictEqual((await verifyApiKey()).error, 'probe_timeout');
 
   // R2 — nenhum resultado da sonda pode carregar a chave.
-  globalThis.fetch = fetchQueRetorna(401);
+  resetKeyProbeCache();
+  globalThis.fetch = fetchEmCamadas({ conta: 401, tts: 401 });
   assert.ok(
     !JSON.stringify(await verifyApiKey()).includes('test-marker-not-a-key'),
     'R2: o resultado da sonda não pode conter a chave'
@@ -256,7 +292,7 @@ try {
   let idas = 0;
   globalThis.fetch = async () => {
     idas += 1;
-    return { ok: false, status: 401 };
+    return { ok: true, status: 200 };
   };
   const p1 = await verifyApiKeyCached();
   const p2 = await verifyApiKeyCached();

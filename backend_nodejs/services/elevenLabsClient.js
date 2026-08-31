@@ -584,28 +584,23 @@ export async function listVoices() {
  * @param {{ timeoutMs?: number }} [opts]
  * @returns {Promise<{ ok: boolean, status: number|null, error: string|null }>}
  */
-export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
-  ensureElevenLabsKeyEnv();
-  const key = apiKey();
-  if (!key) return { ok: false, status: null, error: 'elevenlabs_api_key_missing' };
+/** Rótulo derivado só do status. O corpo pode ecoar material da requisição. */
+function labelForStatus(status) {
+  if (status === 401 || status === 403) return 'key_rejected';
+  if (status === 429) return 'quota_exceeded';
+  return `http_${status}`;
+}
 
+/** Uma requisição com timeout, que nunca lança. */
+async function tryFetch(url, init, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch('https://api.elevenlabs.io/v1/user', {
-      method: 'GET',
-      headers: { 'xi-api-key': key },
-      signal: controller.signal,
-    });
-    if (res.ok) return { ok: true, status: res.status, error: null };
-    // Body may echo request material; keep only the status-derived label.
-    return {
-      ok: false,
-      status: res.status,
-      error: res.status === 401 || res.status === 403 ? 'key_rejected' : `http_${res.status}`,
-    };
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    return { reached: true, ok: res.ok, status: res.status };
   } catch (e) {
     return {
+      reached: false,
       ok: false,
       status: null,
       error: e?.name === 'AbortError' ? 'probe_timeout' : 'probe_network_error',
@@ -613,6 +608,65 @@ export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * A chave é aceita agora? Duas camadas, porque uma só mente (SPEC-0002, D3).
+ *
+ *   1. GET /v1/user — grátis, sem efeito colateral. 200 encerra: chave plena.
+ *   2. 401/403 ali é **inconclusivo**: uma chave com escopo restrito a TTS não lê
+ *      dados da conta e mesmo assim fala. Só então sintetiza 1 caractere, que é a
+ *      capacidade que o app de fato precisa.
+ *
+ * Evidência que motivou isso: a chave de produção do Elias responde 401 em
+ * /v1/user e /v1/voices e funciona para TTS. A sonda de camada única a reprovava.
+ *
+ * Nunca lança e nunca loga a chave.
+ *
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ ok: boolean, status: number|null, error: string|null, method: 'account'|'tts'|'none' }>}
+ */
+export async function verifyApiKey({ timeoutMs = 5000 } = {}) {
+  ensureElevenLabsKeyEnv();
+  const key = apiKey();
+  if (!key) {
+    return { ok: false, status: null, error: 'elevenlabs_api_key_missing', method: 'none' };
+  }
+  const headers = { 'xi-api-key': key };
+
+  // ── Camada 1: conta ──
+  const account = await tryFetch(
+    'https://api.elevenlabs.io/v1/user',
+    { method: 'GET', headers },
+    timeoutMs
+  );
+  if (!account.reached) {
+    return { ok: false, status: null, error: account.error, method: 'none' };
+  }
+  if (account.ok) return { ok: true, status: account.status, error: null, method: 'account' };
+  if (account.status !== 401 && account.status !== 403) {
+    return {
+      ok: false,
+      status: account.status,
+      error: labelForStatus(account.status),
+      method: 'account',
+    };
+  }
+
+  // ── Camada 2: a capacidade que importa ──
+  const tts = await tryFetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(resolveMainChatVoiceId())}`,
+    {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      // 1 caractere: o menor gasto de cota que ainda prova a capacidade (D4).
+      body: JSON.stringify({ text: '.', model_id: STREAM_MODEL_ID }),
+    },
+    timeoutMs
+  );
+  if (!tts.reached) return { ok: false, status: null, error: tts.error, method: 'tts' };
+  if (tts.ok) return { ok: true, status: tts.status, error: null, method: 'tts' };
+  return { ok: false, status: tts.status, error: labelForStatus(tts.status), method: 'tts' };
 }
 
 /** Cache TTL for the probe. Q1 of SPEC-0002 — provisional 60 s, tune by env. */
