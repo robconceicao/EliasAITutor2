@@ -15,6 +15,6 @@ Se for importante de verdade, ele volta sozinho no próximo ciclo.
 
 - [ ] `server.js:1212` e `:380` emitem `erro_backend` com `error.message` cru — mesmo problema de fundo
       da D2, num evento que a SPEC-0002 não cobriu. (achado do verificador, ciclo 3, fora de escopo)
-- [ ] Versionar o script de mutação. O verificador do ciclo 3 recusou, com razão, minhas afirmações de
-      "cinco mutações, cinco mortas": elas rodam em scratchpad e somem, então não são fato do
-      repositório. Se mutação faz parte do padrão de qualidade, precisa estar versionada e rodável.
+- [x] ~~Versionar o script de mutação.~~ Feito em 2026-08-31: `backend_nodejs/test_mutation_guard.js`,
+      rodável por `npm run test:mutation`. Dez mutações, cada uma um bug que já existiu ou que a spec
+      proíbe. O script recusa rodar com os arquivos-alvo sujos e confere a restauração byte a byte.
