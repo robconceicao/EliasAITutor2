@@ -43,10 +43,13 @@ Quando o Elias emudecer, descobrir **por quê** em menos de um minuto, sem abrir
  *      que é a capacidade que o app realmente precisa.
  * `method` diz qual camada respondeu, para o diagnóstico não virar adivinhação.
  */
-export async function verifyApiKey({ timeoutMs }): Promise<{
+export async function verifyApiKey({ timeoutMs, depth }): Promise<{
   ok: boolean, status: number|null, error: string|null,
   method: 'account'|'tts'|'none'
 }>
+// depth: 'shallow' → só camada 1; inconclusivo devolve error:'inconclusive'
+//        'auto'    → camada 2 só se a 1 for 401/403  (default)
+//        'deep'    → sempre as duas; é a única que prova síntese (D6)
 
 /** Mesma sonda, com cache curto (TTS_KEY_PROBE_CACHE_MS, default 60 s). */
 export async function verifyApiKeyCached(): Promise<{ ok, status, error, checkedAt: number, cached: boolean }>
@@ -60,7 +63,11 @@ ttsFailureReason(err) · noteTtsFailure(err) · clearTtsFailure() · ttsStatus()
 | Direção | Evento / rota | Payload |
 |---|---|---|
 | Backend → Android | `tts_unavailable` | `{ reason, mode:'text_only', clientFallback }` — `reason` **sempre** da taxonomia fechada, nunca o corpo do erro |
-| HTTP | `GET /health/tts` | `{ ok, hasKey, keySource, state, lastFailure, liveCheck:{ ok, status, checkedAt, cached } }` |
+| HTTP | `GET /health/tts` | `{ ok, hasKey, keySource, state, lastFailure, liveCheck:{ ok, status, error, method, checkedAt, cached } }` |
+| HTTP | `GET /health/tts?deep=1` | idem, forçando a camada 2 — gasta 1 caractere e é a única forma de provar síntese numa chave de acesso pleno |
+
+Estados possíveis: `ready` · `no_key` · `key_rejected` · `quota_exceeded` · `failing` ·
+`unverified` (há chave, a camada 1 não decidiu e ninguém pediu `deep`).
 
 Taxonomia fechada de `reason`: `no_key_configured` · `elevenlabs_auth_failed` ·
 `elevenlabs_quota_exceeded` · `first_audio_byte_timeout` · `tts_failed`.
@@ -87,6 +94,8 @@ achatado em `tts_failed`.
 | D2 | O app decide a mensagem pela `reason`, nunca pelo texto cru da API. | Repassar `e.message` ao toast | O corpo do erro da ElevenLabs é para desenvolvedor. O usuário precisa saber se a culpa é do servidor ou da rede dele. |
 | D3 | A sonda **não** pode concluir "chave recusada" a partir de um 401 num endpoint de conta. | Sondar só `GET /v1/user` | Evidência de 2026-08-26: a chave de produção do Elias responde 401 em `/v1/user` e `/v1/voices`, e **funciona** para TTS — é uma chave com escopo restrito. Uma sonda que só olha a conta reprovaria a chave boa, e o diagnóstico mentiria na direção oposta ao problema que ele existe para resolver. |
 | D4 | A camada 2 gasta 1 caractere de cota por sonda, e só roda quando a camada 1 é inconclusiva. | Nunca gastar cota | Sem uma chamada de TTS de verdade não há como distinguir "chave morta" de "chave com escopo de TTS". 1 caractere a cada 60 s no pior caso é preço aceitável por um diagnóstico que não mente. |
+| D5 | **A sonda só prova o que sondou.** Um `200` na camada 1 diz que a conta responde — não diz que a síntese funciona. Logo `state: 'ready'` só é afirmado quando (a) a camada 2 provou síntese, ou (b) a camada 1 respondeu OK **e** não há falha real registrada. Uma falha observada nunca é apagada por uma sonda que não a testou. | Deixar `liveCheck.ok` sobrepor tudo | Achado F3 do ciclo 3: o payload podia sair com `state:'ready'` ao lado de `lastFailure:{reason:'elevenlabs_quota_exceeded'}` — contradizendo a si mesmo no mesmo JSON. |
+| D6 | A profundidade da sonda é explícita: `shallow` (só camada 1), `auto` (camada 2 se a 1 for inconclusiva) e `deep` (sempre as duas). Boot usa `shallow`; `/health/tts` usa `auto`; `/health/tts?deep=1` usa `deep`. | Uma profundidade só | Achado F4: `keyProbeCache` vive na memória do processo, e no plano free do Render cada cold start gastava cota. Boot deixa de gastar; quem quiser a prova de síntese pede `deep` e sabe que está pagando por ela. Também fecha F3: `deep` é como se detecta cota esgotada em chave de acesso pleno. |
 
 ---
 
@@ -118,6 +127,11 @@ achatado em `tts_failed`.
 | A1 | Com `ELEVENLABS_API_KEY` inválida, `/health/tts` responde que a chave foi **recusada** | `Invoke-RestMethod http://localhost:3000/health/tts` |
 | A2 | Com chave válida, responde que está operacional | idem |
 | A6 | Chave com escopo restrito a TTS (401 na conta, TTS OK) é reportada como **operacional**, não como recusada | coberto por `test_tts_failover.js` |
+| A7 | `depth:'shallow'` nunca chama o endpoint de TTS — boot não gasta cota | `test_tts_failover.js` |
+| A8 | `depth:'deep'` chama a camada 2 mesmo com a camada 1 OK, e é o que detecta cota em chave plena | `test_tts_failover.js` |
+| A9 | `state` nunca é `ready` enquanto houver `lastFailure` de cota ou auth não refutada por síntese | `test_tts_failover.js` |
+| A10 | `first_audio_byte_timeout` chega ao app como ele mesmo, não achatado em `tts_failed` | `test_tts_failover.js` |
+| A11 | HTTP 400 na camada 2 é classificado como `key_rejected`, não `http_400` | `test_tts_failover.js` |
 | A3 | Nenhuma resposta contém a chave nem fragmento dela | inspeção do corpo + teste |
 | A4 | O app distingue "voz recusada pelo servidor" de "sem conexão" | teste manual no device |
 | A5 | `npm run test:unit` verde | `cd backend_nodejs; npm run test:unit` |
@@ -132,3 +146,6 @@ achatado em `tts_failed`.
 | 2026-08-26 | 2.2 declara as interfaces (`verifyApiKey`, `verifyApiKeyCached`, payload de `/health/tts`) | Ciclo 3, antes de escrever o código |
 | 2026-08-26 | Q1 e Q2 respondidas com defaults provisórios e ajustáveis, em vez de bloquear a entrega | Ciclo 3 |
 | 2026-08-26 | D3/D4 e A6: sonda vira duas camadas — 401 na conta deixa de significar chave ruim | Evidência real do device: a chave de produção é TTS-scoped e a sonda de camada única a reprovava |
+| 2026-08-31 | D5 e A9: sonda só prova o que sondou; `ready` deixa de apagar falha registrada | Achado F3 do verificador, ciclo 3 |
+| 2026-08-31 | D6, A7 e A8: profundidade explícita (`shallow`/`auto`/`deep`); boot para de gastar cota | Achados F3 e F4 do verificador, ciclo 3 |
+| 2026-08-31 | A10 e A11 formalizam o que já estava na taxonomia e o código não cumpria | Achados F1 e F2 (bugs de código) do ciclo 3 |
