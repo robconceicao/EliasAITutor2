@@ -14,15 +14,12 @@ if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
 
-// Prefer env (CI) over local.properties for signing secrets
 fun prop(name: String, default: String = ""): String =
     System.getenv(name)?.takeIf { it.isNotBlank() }
         ?: localProperties.getProperty(name, default)
 
-// Brian — clear American male for tutoring (never Adam — expires 2026-12-31)
 val defaultElevenLabsVoiceId = "nPczCjzI2devNBz1zQrb"
 
-/** ElevenLabs key: official name or project alias My-English-Coach-Key. */
 fun elevenLabsApiKey(): String =
     prop("ELEVENLABS_API_KEY")
         .ifBlank { prop("My-English-Coach-Key") }
@@ -31,7 +28,6 @@ fun elevenLabsApiKey(): String =
 
 android {
     signingConfigs {
-        // Only configured when a keystore file is present (local or CI-decoded).
         create("release") {
             val keystorePath = prop("KEYSTORE_FILE", "elias-release-key.jks")
             val keystoreFile = rootProject.file(keystorePath)
@@ -58,9 +54,7 @@ android {
         buildConfigField("String", "CLAUDE_API_KEY", "\"${prop("CLAUDE_API_KEY")}\"")
         buildConfigField("String", "DEEPSEEK_API_KEY", "\"${prop("DEEPSEEK_API_KEY")}\"")
         buildConfigField("String", "OPENAI_API_KEY", "\"${prop("OPENAI_API_KEY")}\"")
-        // Main chat TTS is backend-first; client key is emergency fallback when Render has no key.
         buildConfigField("String", "ELEVENLABS_API_KEY", "\"${elevenLabsApiKey()}\"")
-        // Optional client-side TTS; main chat TTS uses backend MAIN_CHAT_VOICE_ID.
         buildConfigField(
             "String",
             "ELEVENLABS_VOICE_ID",
@@ -76,12 +70,20 @@ android {
             "BACKEND_URL",
             "\"${prop("BACKEND_URL", "http://10.0.2.2:3000")}\""
         )
+
+        // Licenciamento comercial Tadeu Apps. Todas são configurações públicas.
+        buildConfigField(
+            "String",
+            "TADEU_APPS_URL",
+            "\"${prop("TADEU_APPS_URL", "https://tadeu-apps-core-test2.vercel.app")}\""
+        )
+        buildConfigField("String", "TADEU_APPS_SUPABASE_URL", "\"${prop("TADEU_APPS_SUPABASE_URL")}\"")
+        buildConfigField("String", "TADEU_APPS_SUPABASE_ANON_KEY", "\"${prop("TADEU_APPS_SUPABASE_ANON_KEY")}\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Sign with release keystore when available; otherwise debug key so CI can build.
             val releaseKeystore = rootProject.file(prop("KEYSTORE_FILE", "elias-release-key.jks"))
             signingConfig = if (releaseKeystore.exists()) {
                 signingConfigs.getByName("release")
@@ -117,7 +119,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // Ícones do Material Design (Email, Person, Star, ShoppingCart)
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.datastore)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -130,20 +131,17 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // APIs e Motores de Rede
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.socket:socket.io-client:2.1.1")
 
-    // Supabase e Ktor (Necessários para persistência de dados)
     implementation("io.github.jan-tennert.supabase:supabase-kt:2.5.0")
     implementation("io.github.jan-tennert.supabase:postgrest-kt:2.5.0")
     implementation("io.github.jan-tennert.supabase:gotrue-kt:2.5.0")
     implementation("io.ktor:ktor-client-android:2.3.11")
 
-    // Serialização Kotlin (Para converter as conversas em JSON)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // RNNoise (Noise Suppression)
