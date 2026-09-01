@@ -71,14 +71,22 @@ android {
             "\"${prop("BACKEND_URL", "http://10.0.2.2:3000")}\""
         )
 
-        // Licenciamento comercial Tadeu Apps. Todas são configurações públicas.
+        // Licenciamento comercial Tadeu Apps. URL e publishable key são públicas.
         buildConfigField(
             "String",
             "TADEU_APPS_URL",
             "\"${prop("TADEU_APPS_URL", "https://tadeu-apps-core-test2.vercel.app")}\""
         )
-        buildConfigField("String", "TADEU_APPS_SUPABASE_URL", "\"${prop("TADEU_APPS_SUPABASE_URL")}\"")
-        buildConfigField("String", "TADEU_APPS_SUPABASE_ANON_KEY", "\"${prop("TADEU_APPS_SUPABASE_ANON_KEY")}\"")
+        buildConfigField(
+            "String",
+            "TADEU_APPS_SUPABASE_URL",
+            "\"${prop("TADEU_APPS_SUPABASE_URL", "https://chpcviinqqdjfsczvrvf.supabase.co")}\""
+        )
+        buildConfigField(
+            "String",
+            "TADEU_APPS_SUPABASE_ANON_KEY",
+            "\"${prop("TADEU_APPS_SUPABASE_ANON_KEY", "sb_publishable_HGw-TdmBFPq4Lg8VvO_AOA_LygQWV01")}\""
+        )
     }
 
     buildTypes {
