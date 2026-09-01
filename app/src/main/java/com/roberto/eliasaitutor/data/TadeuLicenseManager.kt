@@ -53,6 +53,14 @@ class TadeuLicenseManager(private val context: Context) {
             BuildConfig.TADEU_APPS_SUPABASE_URL.isNotBlank() &&
             BuildConfig.TADEU_APPS_SUPABASE_ANON_KEY.isNotBlank()
 
+    /**
+     * Token público de sessão do próprio usuário para autenticar o handshake
+     * Socket.IO no backend do Elias. Nunca expõe refresh token ou segredo de servidor.
+     */
+    fun currentAccessToken(): String? = prefs
+        .getString(ACCESS_TOKEN, null)
+        ?.takeIf { it.isNotBlank() }
+
     suspend fun signIn(email: String, password: String): TadeuLicense = withContext(Dispatchers.IO) {
         ensureConfigured()
         val body = JSONObject()
