@@ -1,15 +1,16 @@
 package com.roberto.eliasaitutor
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
-import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Store
@@ -18,14 +19,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.roberto.eliasaitutor.data.TadeuLicense
+import com.roberto.eliasaitutor.data.TadeuLicenseManager
 import com.roberto.eliasaitutor.program.ProgramViewModel
 import com.roberto.eliasaitutor.ui.screens.*
 import com.roberto.eliasaitutor.viewmodel.EliasViewModel
@@ -41,9 +43,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // O Programa é a tela inicial: sessão do dia em no máximo 2 toques (F2).
         setContent {
-            EliasApp(eliasVm, programVm, initialTab = 0)
+            val licenseManager = remember { TadeuLicenseManager(applicationContext) }
+            TadeuLicenseGate(manager = licenseManager) { license ->
+                EliasApp(eliasVm, programVm, license = license, initialTab = 0)
+            }
         }
     }
 
@@ -57,10 +61,11 @@ class MainActivity : ComponentActivity() {
 fun EliasApp(
     vm: EliasViewModel,
     programVm: ProgramViewModel,
+    license: TadeuLicense? = null,
     initialTab: Int = 1,
 ) {
     var currentTab by remember { mutableIntStateOf(initialTab) }
-    var programSubScreen by remember { mutableStateOf("home") } // home | progress | placement
+    var programSubScreen by remember { mutableStateOf("home") }
     var showEndSessionConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toastMsg by vm.toastMessage.collectAsState()
@@ -69,7 +74,6 @@ fun EliasApp(
     val bubbles by vm.chatBubbles.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // D1 — pause timer when app backgrounds
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, event ->
             when (event) {
@@ -98,6 +102,18 @@ fun EliasApp(
         TabItem("Loja", Icons.Default.Store)
     )
 
+    fun requiredFeatureForTab(index: Int): String? = when (index) {
+        1 -> "immersion"
+        2 -> "main_voice_chat"
+        3 -> "shadowing"
+        else -> null
+    }
+
+    fun canOpenTab(index: Int): Boolean {
+        val required = requiredFeatureForTab(index) ?: return true
+        return license == null || license.hasFeature(required)
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -106,13 +122,19 @@ fun EliasApp(
                 tonalElevation = 0.dp,
             ) {
                 tabs.forEachIndexed { index, tab ->
+                    val locked = !canOpenTab(index)
                     NavigationBarItem(
                         selected = currentTab == index,
                         onClick = {
-                            // Leaving Chat during free mode is fine; PROGRAM session
-                            // stays active until Encerrar (timer continues on other tabs).
-                            // If user opens Chat while no practice is running but context
-                            // is still PROGRAM, reset to FREE so level chips work again.
+                            if (locked) {
+                                Toast.makeText(
+                                    context,
+                                    "${tab.title} não está incluído no plano ${license?.plan?.uppercase() ?: "atual"}. Faça upgrade na Tadeu Apps.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                return@NavigationBarItem
+                            }
+
                             if (index == 2 && practice == null &&
                                 vm.chatContext.value.type ==
                                 com.roberto.eliasaitutor.model.ChatType.PROGRAM
@@ -122,13 +144,21 @@ fun EliasApp(
                             currentTab = index
                             if (index == 0) programSubScreen = "home"
                         },
-                        icon = { Icon(tab.icon, contentDescription = tab.title) },
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (locked) Badge { Text("🔒", fontSize = 8.sp) }
+                                }
+                            ) {
+                                Icon(tab.icon, contentDescription = tab.title)
+                            }
+                        },
                         label = { Text(tab.title, fontSize = 9.sp, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent,
                             selectedTextColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent,
-                            unselectedIconColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
-                            unselectedTextColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                            unselectedIconColor = if (locked) Color(0xFF4B5563) else com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
+                            unselectedTextColor = if (locked) Color(0xFF4B5563) else com.roberto.eliasaitutor.ui.theme.EliasTokens.Muted,
                             indicatorColor = com.roberto.eliasaitutor.ui.theme.EliasTokens.Accent.copy(alpha = 0.12f)
                         )
                     )
@@ -140,8 +170,6 @@ fun EliasApp(
         Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (currentTab) {
                 0 -> {
-                    // Enquanto não houver nivelamento, a home pede o teste:
-                    // a semana inicial não é fixa na Semana 1.
                     val programUi by programVm.ui.collectAsState()
                     val needsPlacement =
                         !programUi.loading && !programUi.offline && !programUi.state.placementDone
@@ -155,6 +183,10 @@ fun EliasApp(
                             programVm = programVm,
                             userId = profile.userId.ifBlank { "local_user" },
                             onStartChat = { week, title, lexis, grammar, phase, sessionType, _, level ->
+                                if (!canOpenTab(2)) {
+                                    Toast.makeText(context, "Chat de voz não incluído no seu plano.", Toast.LENGTH_LONG).show()
+                                    return@ProgramHomeScreen
+                                }
                                 val uid = profile.userId.ifBlank { "local_user" }
                                 vm.beginProgramSession(
                                     week = week,
@@ -179,7 +211,6 @@ fun EliasApp(
                 5 -> StoreScreen(vm)
             }
 
-            // F4 — session timer overlay on chat when program practice is active
             if (practice != null && currentTab == 2) {
                 ProgramSessionTimerBar(
                     elapsedSeconds = practice!!.elapsedSeconds,
@@ -213,7 +244,7 @@ fun EliasApp(
                                 programVm.endConversationSession(transcript) {
                                     vm.endProgramSession()
                                 }
-                                currentTab = 0 // back to Programa for feedback report
+                                currentTab = 0
                             }
                         ) { Text("Encerrar", color = Color(0xFFEF4444)) }
                     },

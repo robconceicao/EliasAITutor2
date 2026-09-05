@@ -10,6 +10,7 @@ import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import com.roberto.eliasaitutor.BuildConfig
+import com.roberto.eliasaitutor.data.TadeuLicenseManager
 import com.roberto.eliasaitutor.model.MistakeEntry
 import com.roberto.eliasaitutor.model.UiChatBubble
 import io.socket.client.IO
@@ -187,11 +188,16 @@ object SocketClient {
             ConnectionState.CONNECTING else ConnectionState.RECONNECTING
         _connectionStatus.value = false
 
-        val options = IO.Options.builder()
+        val tadeuToken = appContext?.let { TadeuLicenseManager(it).currentAccessToken() }
+        val builder = IO.Options.builder()
             .setReconnection(false)    // Gerenciamos reconexão manualmente
             .setTimeout(10_000)
             .setTransports(arrayOf("websocket"))
-            .build()
+
+        if (!tadeuToken.isNullOrBlank()) {
+            builder.setAuth(mapOf("tadeuToken" to tadeuToken))
+        }
+        val options = builder.build()
 
         try {
             socket = IO.socket(URI.create(BuildConfig.BACKEND_URL), options).apply {
