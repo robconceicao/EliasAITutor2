@@ -681,17 +681,26 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                 backendTtsFailed = true
                 // Backend already falls back to text-only; surface once, never hang spinner
                 clearResponseTimeout()
+                // Taxonomia fechada vinda do backend (SPEC-0002). O corpo cru do erro da
+                // API nunca chega aqui — era o que produzia toasts como
+                // "Voz indisponível (ElevenLabs REST TTS 400: {"detail":...".
+                // O usuário precisa saber se a culpa é do servidor ou da rede dele.
                 val friendly = when {
-                    reason.contains("api_key_missing", ignoreCase = true) ||
-                        reason.contains("ELEVENLABS_API_KEY", ignoreCase = true) ->
-                        "Voz: chave ElevenLabs ausente no servidor — tentando fallback local"
-                    reason.contains("voice_open_failed", ignoreCase = true) ->
-                        "Voz indisponível no servidor — tentando fallback local"
+                    reason.contains("auth_failed", ignoreCase = true) ->
+                        "Voz recusada pelo servidor — a chave precisa ser renovada. Texto mantido."
+                    reason.contains("quota_exceeded", ignoreCase = true) ->
+                        "Cota de voz esgotada no servidor — texto mantido."
+                    reason.contains("no_key_configured", ignoreCase = true) ||
+                        reason.contains("api_key_missing", ignoreCase = true) ->
+                        "Voz não configurada no servidor — texto mantido."
                     reason.contains("first_audio", ignoreCase = true) ||
                         reason.contains("timeout", ignoreCase = true) ->
                         "Voz demorou demais — tentando fallback local"
+                    // Compatibilidade com backend anterior à SPEC-0002.
+                    reason.contains("voice_open_failed", ignoreCase = true) ->
+                        "Voz indisponível no servidor — tentando fallback local"
                     else ->
-                        "Voz indisponível (${reason.ifBlank { "erro" }}) — texto mantido"
+                        "Voz indisponível — texto mantido."
                 }
                 if (_isLoading.value && _chatBubbles.value.none { !it.isUser }) {
                     // Still waiting for text — keep loading until texto_chunk or response timeout

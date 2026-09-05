@@ -17,8 +17,9 @@
     "test:voice": "node test_voice_config.js",
     "test:audio": "node test_audio_encoder.js",
     "test:echo": "node test_echo_score.js",
+    "test:mutation": "node test_mutation_guard.js",
     "test:tadeu": "node test_tadeu_metering.js",
-    "test:unit": "node test_voice_config.js && node test_audio_encoder.js && node test_echo_score.js && node test_placement.js && node test_mongo_path.js && node test_evaluate_readiness.js && node test_session_feedback_parse.js && node test_llm_failover.js && node test_translation_service.js && node test_tadeu_metering.js",
+    "test:unit": "node test_voice_config.js && node test_audio_encoder.js && node test_echo_score.js && node test_placement.js && node test_mongo_path.js && node test_evaluate_readiness.js && node test_session_feedback_parse.js && node test_llm_failover.js && node test_tts_failover.js && node test_translation_service.js && node test_tadeu_metering.js",
     "test": "node test_program_api.js"
   },
   "keywords": [],

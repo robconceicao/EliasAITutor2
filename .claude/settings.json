@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./backend_nodejs/.env)",
+      "Read(./local.properties)",
+      "Edit(./local.properties)",
+      "Edit(./render.yaml)",
+      "Edit(./backend_nodejs/seeds/**)",
+      "Edit(./.gitignore)",
+      "Bash(git reset:*)",
+      "Bash(git checkout:*)"
+    ],
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(node backend_nodejs/test_*.js)",
+      "Bash(npm run test:unit)"
+    ]
+  }
+}
