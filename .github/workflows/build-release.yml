@@ -140,9 +140,17 @@ jobs:
           APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort | tail -1)
           [ -n "$APKSIGNER" ] || { echo "::error::apksigner nao encontrado no Android SDK."; exit 1; }
           "$APKSIGNER" verify --print-certs "$APK"
+
+          # Hard-fail only when a release keystore was supposed to be used.
+          # Without KEYSTORE_BASE64 the debug fallback is the documented
+          # behaviour of build.gradle.kts, so failing there would turn every
+          # push to main red for anyone without the secret.
           if "$APKSIGNER" verify --print-certs "$APK" | grep -q 'CN=Android Debug'; then
-            echo "::error::APK assinada com o keystore de DEBUG, nao com a chave de release."
-            exit 1
+            if [ -n "$KEYSTORE_BASE64" ]; then
+              echo "::error::KEYSTORE_BASE64 esta definido, mas a APK saiu assinada com o keystore de DEBUG."
+              exit 1
+            fi
+            echo "::warning::APK assinada com o keystore de debug (KEYSTORE_BASE64 nao definido). Nao distribua esta APK."
           fi
 
       - name: Upload APK como Artifact
