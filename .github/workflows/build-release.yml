@@ -69,11 +69,81 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > elias-release-key.jks
           ls -la elias-release-key.jks
 
+      # A signing password never contains a line break. A secret pasted from a
+      # Windows terminal can carry a trailing CR/LF, and Gradle reads the raw
+      # env var (prop() prefers System.getenv over local.properties), so the CR
+      # would reach the keystore decryption and fail as "password incorrect".
+      - name: Normalizar segredos de assinatura
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          {
+            printf 'KEYSTORE_PASSWORD=%s\n' "$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '\r\n')"
+            printf 'KEY_PASSWORD=%s\n'      "$(printf '%s' "$KEY_PASSWORD"      | tr -d '\r\n')"
+            printf 'KEY_ALIAS=%s\n'         "$(printf '%s' "$KEY_ALIAS"         | tr -d '\r\n')"
+          } >> "$GITHUB_ENV"
+
+      # Fail in seconds with a named cause instead of 4 minutes of Gradle
+      # stacktrace. Never echoes any password value.
+      - name: Validar keystore, alias e senhas
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          KS=elias-release-key.jks
+          fail() { echo "::error::$1"; exit 1; }
+
+          [ -s "$KS" ] || fail "Keystore vazio ou ausente apos decodificar KEYSTORE_BASE64."
+          [ -n "$KEYSTORE_PASSWORD" ] || fail "Secret KEYSTORE_PASSWORD nao esta definido."
+          [ -n "$KEY_PASSWORD" ] || fail "Secret KEY_PASSWORD nao esta definido."
+
+          if ! keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            fail "KEYSTORE_PASSWORD nao abre o keystore. Os bytes do .jks estao integros; a senha do store e que nao confere."
+          fi
+          echo "Senha do store: OK"
+
+          if ! keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            echo "Aliases presentes no keystore:"
+            keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | grep -i 'PrivateKeyEntry\|trustedCertEntry' || true
+            fail "KEY_ALIAS nao existe neste keystore."
+          fi
+          echo "Alias: OK"
+
+          # Reads the private key with KEY_PASSWORD into a throwaway store.
+          # Non-destructive: the source keystore is only read.
+          if ! keytool -importkeystore -noprompt \
+                 -srckeystore "$KS" -srcstorepass "$KEYSTORE_PASSWORD" \
+                 -srcalias "$KEY_ALIAS" -srckeypass "$KEY_PASSWORD" \
+                 -destkeystore "$RUNNER_TEMP/probe.p12" -deststoretype PKCS12 \
+                 -deststorepass probe-only-not-a-secret \
+                 -destkeypass probe-only-not-a-secret >/dev/null 2>&1; then
+            fail "KEY_PASSWORD nao abre a chave privada do alias."
+          fi
+          rm -f "$RUNNER_TEMP/probe.p12"
+          echo "Senha da chave: OK"
+
+          # Printed in the same shape apksigner uses (lowercase, no colons),
+          # so the two outputs can be compared character by character.
+          FP=$(keytool -list -v -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" \
+               | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ':' | tr 'A-Z' 'a-z')
+          echo "SHA-256 do certificado que vai assinar esta APK: $FP"
+
       - name: Permissão de execução no gradlew
         run: chmod +x gradlew
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      # Makes every release build declare, in the CI log, which certificate
+      # actually signed it. Catches the silent fallback to the debug keystore.
+      - name: Verificar assinatura da APK
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          [ -n "$APK" ] || { echo "::error::Nenhuma APK encontrada em app/build/outputs/apk/release."; exit 1; }
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort | tail -1)
+          [ -n "$APKSIGNER" ] || { echo "::error::apksigner nao encontrado no Android SDK."; exit 1; }
+          "$APKSIGNER" verify --print-certs "$APK"
+          if "$APKSIGNER" verify --print-certs "$APK" | grep -q 'CN=Android Debug'; then
+            echo "::error::APK assinada com o keystore de DEBUG, nao com a chave de release."
+            exit 1
+          fi
 
       - name: Upload APK como Artifact
         uses: actions/upload-artifact@v4
