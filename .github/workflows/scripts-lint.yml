@@ -1,0 +1,69 @@
+name: Scripts Lint
+
+# The authoring environment for these scripts has no PowerShell, so a syntax
+# error ships undetected — that is exactly how sync-github-secrets.ps1 first
+# reached a user's machine broken. GitHub's runners do have pwsh, so the parse
+# happens here instead of on trust.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/scripts-lint.yml'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/scripts-lint.yml'
+  workflow_dispatch:
+
+jobs:
+  powershell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pwsh is PowerShell 7 and reads UTF-8 regardless of BOM, so this catches
+      # syntax but NOT the encoding trap below. Both checks are needed.
+      - name: Parsear scripts PowerShell
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Path scripts -Filter *.ps1 -Recurse | ForEach-Object {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref] $null, [ref] $errors)
+            if ($errors) {
+              $failed = $true
+              foreach ($e in $errors) {
+                Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+              }
+            } else {
+              Write-Host "OK  $($_.Name)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+      # Windows PowerShell 5.1 — still the default on Windows — reads a .ps1
+      # without a BOM as Windows-1252. A UTF-8 em dash (E2 80 94) then decodes
+      # to three characters whose last byte, 0x94, is a closing double quote in
+      # CP1252: the parser treats it as a string delimiter and the file stops
+      # compiling. ASCII-only plus a BOM makes the file read identically under
+      # 5.1 and 7.
+      - name: Verificar encoding (ASCII + BOM UTF-8)
+        run: |
+          status=0
+          while IFS= read -r f; do
+            # od, not xxd: xxd ships with vim and is absent from minimal images.
+            if [ "$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')" != "efbbbf" ]; then
+              echo "::error file=$f::Falta BOM UTF-8. Windows PowerShell 5.1 leria este arquivo como Windows-1252."
+              status=1
+            fi
+            # Byte-level scan of everything after the BOM.
+            if tail -c +4 "$f" | LC_ALL=C grep -qP '[\x80-\xFF]'; then
+              echo "::error file=$f::Contem bytes nao-ASCII. Use apenas ASCII (nada de acentos ou travessoes)."
+              tail -c +4 "$f" | LC_ALL=C grep -nP '[\x80-\xFF]' | head -5
+              status=1
+            fi
+            [ $status -eq 0 ] && echo "OK  $f"
+          done < <(find scripts -name '*.ps1')
+          exit $status
