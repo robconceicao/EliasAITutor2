@@ -40,6 +40,25 @@ jobs:
       - name: Configurar Android SDK
         uses: android-actions/setup-android@v3
 
+      # No secret here legitimately contains a line break, but a value piped
+      # into `gh secret set` from a shell carries a trailing newline, and one
+      # pasted from a Windows terminal can carry a CR. Both paths break:
+      # build.gradle.kts prefers System.getenv over local.properties, and
+      # buildConfigField injects the value verbatim into a string literal, so a
+      # newline produces an unterminated literal and the Kotlin build fails. For
+      # the signing secrets the same CR reaches keystore decryption and reads as
+      # a wrong password. Normalizing once, before anything consumes them,
+      # covers every consumer downstream.
+      - name: Normalizar segredos
+        run: |
+          for name in CLAUDE_API_KEY DEEPSEEK_API_KEY OPENAI_API_KEY \
+                      ELEVENLABS_API_KEY ELEVENLABS_VOICE_ID \
+                      SUPABASE_URL SUPABASE_KEY GEMINI_API_KEY GROQ_API_KEY \
+                      CARTESIA_API_KEY BACKEND_URL \
+                      KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            printf '%s=%s\n' "$name" "$(printf '%s' "${!name}" | tr -d '\r\n')"
+          done >> "$GITHUB_ENV"
+
       - name: Criar local.properties
         run: |
           # No leading spaces — Properties loader is whitespace-sensitive
@@ -69,25 +88,15 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > elias-release-key.jks
           ls -la elias-release-key.jks
 
-      # A signing password never contains a line break. A secret pasted from a
-      # Windows terminal can carry a trailing CR/LF, and Gradle reads the raw
-      # env var (prop() prefers System.getenv over local.properties), so the CR
-      # would reach the keystore decryption and fail as "password incorrect".
-      - name: Normalizar segredos de assinatura
-        if: env.KEYSTORE_BASE64 != ''
-        run: |
-          {
-            printf 'KEYSTORE_PASSWORD=%s\n' "$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '\r\n')"
-            printf 'KEY_PASSWORD=%s\n'      "$(printf '%s' "$KEY_PASSWORD"      | tr -d '\r\n')"
-            printf 'KEY_ALIAS=%s\n'         "$(printf '%s' "$KEY_ALIAS"         | tr -d '\r\n')"
-          } >> "$GITHUB_ENV"
-
       # Fail in seconds with a named cause instead of 4 minutes of Gradle
       # stacktrace. Never echoes any password value.
       - name: Validar keystore, alias e senhas
         if: env.KEYSTORE_BASE64 != ''
         run: |
           KS=elias-release-key.jks
+          # Same default build.gradle.kts applies, so the check tests what
+          # Gradle will actually use rather than an empty alias.
+          KEY_ALIAS="${KEY_ALIAS:-elias-key}"
           fail() { echo "::error::$1"; exit 1; }
 
           [ -s "$KS" ] || fail "Keystore vazio ou ausente apos decodificar KEYSTORE_BASE64."
