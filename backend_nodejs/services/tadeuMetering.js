@@ -1,10 +1,11 @@
+import { licenseBypass } from './licenseEnvironment.js';
+const TEST_LICENSE_BYPASS = licenseBypass();
+
 const TADEU_APPS_URL = (
   process.env.TADEU_APPS_URL || 'https://tadeu-apps-core-test2.vercel.app'
 ).replace(/\/$/, '');
 
-const TADEU_LICENSE_ENFORCED = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.TADEU_LICENSE_ENFORCED || 'false').toLowerCase()
-);
+const TADEU_LICENSE_ENFORCED = !TEST_LICENSE_BYPASS;
 
 export const ELIAS_VOICE_FEATURE = 'voice_minutes_monthly';
 
@@ -19,6 +20,7 @@ export class TadeuMeteringError extends Error {
 }
 
 function requireToken(token) {
+  if (TEST_LICENSE_BYPASS) return false;
   if (token) return true;
   if (TADEU_LICENSE_ENFORCED) {
     throw new TadeuMeteringError(

@@ -49,6 +49,8 @@ android {
         versionCode = 6
         versionName = "1.3.1"
 
+        buildConfigField("boolean", "TEST_LICENSE_BYPASS", "false")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "CLAUDE_API_KEY", "\"${prop("CLAUDE_API_KEY")}\"")
@@ -90,6 +92,13 @@ android {
     }
 
     buildTypes {
+        create("homologation") {
+            initWith(getByName("debug"))
+            matchingFallbacks += listOf("debug")
+            applicationIdSuffix = ".homologation"
+            versionNameSuffix = "-homologation"
+            buildConfigField("boolean", "TEST_LICENSE_BYPASS", (System.getenv("TEST_LICENSE_BYPASS") == "true").toString())
+        }
         release {
             isMinifyEnabled = false
             val releaseKeystore = rootProject.file(prop("KEYSTORE_FILE", "elias-release-key.jks"))

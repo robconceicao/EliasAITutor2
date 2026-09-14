@@ -34,9 +34,9 @@ data class TadeuLicense(
     val offline: Boolean = false,
 ) {
     fun hasFeature(key: String): Boolean =
-        plan == "legacy" || features.any { it.key == key }
+        BuildConfig.TEST_LICENSE_BYPASS || plan == "legacy" || features.any { it.key == key }
 
-    fun limit(key: String): Int? = features.firstOrNull { it.key == key }?.limitValue
+    fun limit(key: String): Int? = if (BuildConfig.TEST_LICENSE_BYPASS) null else features.firstOrNull { it.key == key }?.limitValue
 }
 
 class TadeuLicenseException(message: String) : Exception(message)
@@ -186,6 +186,7 @@ class TadeuLicenseManager(private val context: Context) {
         val raw = prefs.getString(LICENSE_CACHE, null) ?: return null
         return try {
             val license = parseLicense(JSONObject(raw), offline = true)
+            if (license.plan == "homologation") return null
             if (license.expiresAtMillis != null && license.expiresAtMillis <= System.currentTimeMillis()) null else license
         } catch (_: Exception) {
             null
