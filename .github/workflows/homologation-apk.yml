@@ -27,6 +27,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
       - name: Build QA APK and verify production flag remains off
         run: |
           chmod +x gradlew
