@@ -13,7 +13,7 @@ jobs:
       TEST_LICENSE_BYPASS: 'true'
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      BACKEND_URL: ${{ secrets.BACKEND_URL || 'https://eliasaitutor2.onrender.com' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

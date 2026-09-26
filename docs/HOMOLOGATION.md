@@ -11,6 +11,8 @@ O código de licenciamento e os planos continuam presentes. A autorização temp
 - Elias: TEST_LICENSE_BYPASS=true e tarefa assembleHomologation. A variante usa applicationId com sufixo .homologation e assinatura de debug; a variante release compila a flag false mesmo se a variável externa for true.
 - InfOper Smart: APP_ENV=homologation TEST_LICENSE_BYPASS=true npm run build. O produto é Web/PWA, sem projeto Android/APK neste repositório.
 
+O CI do Elias usa `BACKEND_URL` quando configurada e, na ausência, o endereço existente documentado em `DEPLOY_RENDER.md`: `https://eliasaitutor2.onrender.com`, igual ao fallback do workflow de release. O teste da variante homologation confere a URL realmente compilada e rejeita HTTP/localhost/emulador no CI. O default local `10.0.2.2` continua disponível para desenvolvimento no emulador. A URL do servidor não ativa seu bypass: as flags da instância Render ainda precisam ser configuradas separadamente.
+
 ## Servidores de AION e Elias
 
 Configure APP_ENV=homologation e TEST_LICENSE_BYPASS=true somente na instância de teste. Isso dispensa gate/cotas comerciais, inclusive com token comercial antigo, sem consumir cotas ou conceder direitos no banco. A flag antiga TADEU_LICENSE_ENFORCED=false não é mais um bypass. Sem a nova flag, o servidor exige token/licença; falhas de rede não liberam acesso. Nenhum backend foi automaticamente reconfigurado por este arquivo.
