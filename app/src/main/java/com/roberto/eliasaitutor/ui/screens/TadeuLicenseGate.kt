@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.roberto.eliasaitutor.BuildConfig
 import com.roberto.eliasaitutor.data.TadeuLicense
 import com.roberto.eliasaitutor.data.TadeuLicenseManager
 import kotlinx.coroutines.launch
@@ -18,10 +19,9 @@ fun TadeuLicenseGate(
     manager: TadeuLicenseManager,
     content: @Composable (TadeuLicense?) -> Unit,
 ) {
-    if (!manager.configured) {
-        // Transição de homologação: o build atual não é bloqueado até as variáveis
-        // públicas da Tadeu Apps serem configuradas no CI/local.properties.
-        content(null)
+    if (BuildConfig.TEST_LICENSE_BYPASS) {
+        // In-memory QA license; no commercial license or auth token is persisted.
+        content(TadeuLicense("homologation", emptyList(), null))
         return
     }
 
