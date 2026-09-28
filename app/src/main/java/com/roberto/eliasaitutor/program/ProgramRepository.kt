@@ -5,7 +5,13 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.core.DataStore
+import com.roberto.eliasaitutor.network.BackendSession
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -16,7 +22,17 @@ import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-private val Context.programDataStore by preferencesDataStore(name = "elias_program")
+private object ProgramStores {
+    private val stores = ConcurrentHashMap<String, DataStore<Preferences>>()
+    @Synchronized
+    fun forOwner(context: Context, owner: String): DataStore<Preferences> {
+        val name = "elias_program_" + MessageDigest.getInstance("SHA-256")
+            .digest(owner.toByteArray()).joinToString("") { "%02x".format(it) }
+        return stores.getOrPut(name) {
+            PreferenceDataStoreFactory.create { context.applicationContext.preferencesDataStoreFile(name) }
+        }
+    }
+}
 
 /**
  * Cache-first program repository (F2 offline home banner).
@@ -25,7 +41,9 @@ private val Context.programDataStore by preferencesDataStore(name = "elias_progr
 class ProgramRepository(private val context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val api get() = ProgramApiClient.api
+    private val ownerId = BackendSession.currentOwnerId()
+    private val programDataStore = ProgramStores.forOwner(context, ownerId)
+    private val api: ProgramApi = ProgramApiClient.forOwner(ownerId)
 
     private object Keys {
         val START_DATE = stringPreferencesKey("start_date")
@@ -48,7 +66,7 @@ class ProgramRepository(private val context: Context) {
         val PLACEMENT_LEVEL = stringPreferencesKey("placement_level")
     }
 
-    val cachedState: Flow<UserProgramState> = context.programDataStore.data
+    val cachedState: Flow<UserProgramState> = programDataStore.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
         .map { p ->
             val deficient = p[Keys.DEFICIENT_JSON]?.let { raw ->
@@ -71,12 +89,12 @@ class ProgramRepository(private val context: Context) {
             ).let { resolveWeekLocally(it) }
         }
 
-    val isOnboarded: Flow<Boolean> = context.programDataStore.data
+    val isOnboarded: Flow<Boolean> = programDataStore.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
         .map { it[Keys.ONBOARDED] ?: false }
 
     suspend fun getCachedWeeks(): List<ProgramWeek> {
-        val raw = context.programDataStore.data.first()[Keys.WEEKS_JSON] ?: return emptyList()
+        val raw = programDataStore.data.first()[Keys.WEEKS_JSON] ?: return emptyList()
         return runCatching { json.decodeFromString<List<ProgramWeek>>(raw) }.getOrDefault(emptyList())
     }
 
@@ -85,56 +103,16 @@ class ProgramRepository(private val context: Context) {
             val remote = api.getState()
             val weeks = api.getWeeks()
 
-            // Rede de segurança: se o backend reiniciou sem persistência, ele
-            // devolve um estado virgem (Semana 1, sem nivelamento, início hoje).
-            // Nesse caso o cache local é mais confiável — restauramos o progresso
-            // no servidor em vez de deixá-lo apagar semanas de estudo.
-            val local = cachedState.first()
-            val state = if (looksVirgin(remote) && hasRealProgress(local)) {
-                restoreRemoteFromLocal(local) ?: local
-            } else {
-                remote
-            }
+            // Server is authoritative; ownerless legacy cache is never restored into an account.
+            val state = remote
 
             persistState(state)
-            context.programDataStore.edit {
+            programDataStore.edit {
                 it[Keys.WEEKS_JSON] = json.encodeToString(weeks)
                 it[Keys.ONBOARDED] = true
             }
             resolveWeekLocally(state) to weeks
         }
-    }
-
-    /** Estado recém-inicializado pelo backend (nada foi feito ainda). */
-    private fun looksVirgin(s: UserProgramState): Boolean =
-        !s.placementDone &&
-            s.startWeek <= 1 &&
-            s.masteryClearedWeek == 0 &&
-            s.startDate == LocalDate.now().toString()
-
-    /** Cache local tem progresso que vale a pena preservar. */
-    private fun hasRealProgress(s: UserProgramState): Boolean =
-        s.placementDone || s.masteryClearedWeek > 0 || s.startWeek > 1 ||
-            (s.startDate.isNotBlank() && s.startDate != LocalDate.now().toString())
-
-    private suspend fun restoreRemoteFromLocal(local: UserProgramState): UserProgramState? {
-        return runCatching {
-            api.updateState(
-                mapOf(
-                    "start_date" to local.startDate,
-                    "week_mode" to local.weekMode,
-                    "current_week" to local.currentWeek,
-                    "daily_goal_minutes" to local.dailyGoalMinutes,
-                    "reminder_time" to local.reminderTime,
-                    "total_paused_days" to local.totalPausedDays,
-                    "held_back" to local.heldBack,
-                    "mastery_cleared_week" to local.masteryClearedWeek,
-                    "start_week" to local.startWeek,
-                    "placement_done" to local.placementDone,
-                    "placement_level" to local.placementLevel,
-                )
-            )
-        }.getOrNull()
     }
 
     suspend fun getWeek(n: Int): ProgramWeek? {
@@ -181,7 +159,7 @@ class ProgramRepository(private val context: Context) {
                 "daily_goal_minutes" to 30,
             )
         ).also {
-            context.programDataStore.edit { it[Keys.ONBOARDED] = true }
+            programDataStore.edit { it[Keys.ONBOARDED] = true }
         }
     }
 
@@ -223,9 +201,9 @@ class ProgramRepository(private val context: Context) {
     suspend fun getProgress(): ProgressSummary {
         return runCatching { api.getProgress(30) }.getOrElse {
             ProgressSummary(
-                todayMinutes = context.programDataStore.data.first()[Keys.TODAY_MINUTES] ?: 0,
+                todayMinutes = programDataStore.data.first()[Keys.TODAY_MINUTES] ?: 0,
                 goal = cachedState.first().dailyGoalMinutes,
-                streak = context.programDataStore.data.first()[Keys.STREAK] ?: 0,
+                streak = programDataStore.data.first()[Keys.STREAK] ?: 0,
                 currentWeek = cachedState.first().currentWeek,
             )
         }
@@ -233,7 +211,7 @@ class ProgramRepository(private val context: Context) {
 
     suspend fun addLocalPracticeMinutes(minutes: Int) {
         val today = LocalDate.now().toString()
-        context.programDataStore.edit { p ->
+        programDataStore.edit { p ->
             val storedDate = p[Keys.TODAY_DATE]
             val current = if (storedDate == today) p[Keys.TODAY_MINUTES] ?: 0 else 0
             p[Keys.TODAY_DATE] = today
@@ -276,7 +254,7 @@ class ProgramRepository(private val context: Context) {
         }?.also { result ->
             result.state?.let {
                 persistState(it)
-                context.programDataStore.edit { prefs -> prefs[Keys.ONBOARDED] = true }
+                programDataStore.edit { prefs -> prefs[Keys.ONBOARDED] = true }
             }
         }
     }
@@ -296,7 +274,7 @@ class ProgramRepository(private val context: Context) {
     }
 
     private suspend fun persistState(state: UserProgramState) {
-        context.programDataStore.edit {
+        programDataStore.edit {
             it[Keys.START_DATE] = state.startDate
             it[Keys.CURRENT_WEEK] = state.currentWeek
             it[Keys.WEEK_MODE] = state.weekMode

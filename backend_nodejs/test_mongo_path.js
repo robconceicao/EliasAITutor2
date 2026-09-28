@@ -14,6 +14,7 @@
  * Rodar: node test_mongo_path.js
  */
 import assert from 'assert';
+import { runAsUser } from './services/userContext.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,6 +27,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+await runAsUser('test-owner', async () => {
 // ── Fake store validado pelo schema real ───────────────────────
 const collections = new Map();
 const validationErrors = [];
@@ -297,3 +299,5 @@ console.log(
     .map(([k, v]) => `${k}=${v.length}`)
     .join(' · ')}`
 );
+
+});

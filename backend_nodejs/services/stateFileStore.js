@@ -10,13 +10,18 @@
  * a instância), mas cobre o caso comum: reinício do processo no mesmo host.
  */
 import fs from 'fs';
+import { createHash } from 'node:crypto';
+import { currentUserId } from './userContext.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DATA_DIR = process.env.PROGRAM_STATE_DIR || path.resolve(__dirname, '../data');
-const STATE_FILE = path.join(DATA_DIR, 'program_state.json');
+function ownerFile() {
+  const hash = createHash('sha256').update(currentUserId()).digest('hex');
+  return path.join(DATA_DIR, 'program_state_' + hash + '.json');
+}
 
 let enabled = true;
 
@@ -30,12 +35,13 @@ export function isFileStoreEnabled() {
 }
 
 export function stateFilePath() {
-  return STATE_FILE;
+  return ownerFile();
 }
 
 /** @returns {{state:object|null, sessions:object[]}|null} */
 export function readSnapshot() {
   if (!enabled) return null;
+  const STATE_FILE = ownerFile();
   try {
     if (!fs.existsSync(STATE_FILE)) return null;
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -46,7 +52,7 @@ export function readSnapshot() {
     };
   } catch (e) {
     console.warn('[stateFile] leitura falhou:', e.message);
-    return null;
+    throw new Error('program_snapshot_read_failed', { cause: e });
   }
 }
 
@@ -56,6 +62,7 @@ export function readSnapshot() {
  */
 export function writeSnapshot({ state, sessions }) {
   if (!enabled) return false;
+  const STATE_FILE = ownerFile();
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const payload = JSON.stringify(
@@ -69,6 +76,6 @@ export function writeSnapshot({ state, sessions }) {
     return true;
   } catch (e) {
     console.warn('[stateFile] gravação falhou:', e.message);
-    return false;
+    throw new Error('program_snapshot_write_failed', { cause: e });
   }
 }

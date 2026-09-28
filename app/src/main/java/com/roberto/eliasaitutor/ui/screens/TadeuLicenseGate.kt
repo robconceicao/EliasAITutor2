@@ -19,12 +19,6 @@ fun TadeuLicenseGate(
     manager: TadeuLicenseManager,
     content: @Composable (TadeuLicense?) -> Unit,
 ) {
-    if (BuildConfig.TEST_LICENSE_BYPASS) {
-        // In-memory QA license; no commercial license or auth token is persisted.
-        content(TadeuLicense("homologation", emptyList(), null))
-        return
-    }
-
     var license by remember { mutableStateOf<TadeuLicense?>(null) }
     var loading by remember { mutableStateOf(true) }
     var needsLogin by remember { mutableStateOf(false) }
@@ -52,7 +46,7 @@ fun TadeuLicenseGate(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(12.dp))
-                Text("Validando licença Tadeu Apps…", color = Color(0xFF7A8099))
+                Text("Validando sua sessão…", color = Color(0xFF7A8099))
             }
         }
         needsLogin -> Box(
@@ -63,10 +57,10 @@ fun TadeuLicenseGate(
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text("TADEU APPS", color = Color(0xFF4F8EF7), fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text("Ativar licença do Elias AI Tutor", style = MaterialTheme.typography.headlineSmall)
+                    Text(if (BuildConfig.TEST_LICENSE_BYPASS) "Entrar no Elias — homologação" else "Ativar licença do Elias AI Tutor", style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Use a mesma conta da Tadeu Apps em que você ativou Gratuito, Pro ou Premium.",
+                        if (BuildConfig.TEST_LICENSE_BYPASS) "Entre com sua conta de teste. Nenhuma assinatura é necessária." else "Use a mesma conta da Tadeu Apps em que você ativou Gratuito, Pro ou Premium.",
                         color = Color(0xFF7A8099),
                     )
                     Spacer(Modifier.height(20.dp))
@@ -117,11 +111,11 @@ fun TadeuLicenseGate(
                         enabled = !loading,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (loading) "VALIDANDO…" else "VALIDAR LICENÇA")
+                        Text(if (loading) "VALIDANDO…" else if (BuildConfig.TEST_LICENSE_BYPASS) "ENTRAR" else "VALIDAR LICENÇA")
                     }
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Após uma validação online, a licença pode ser reutilizada por até 24 horas sem conexão.",
+                        if (BuildConfig.TEST_LICENSE_BYPASS) "Ambiente de homologação. Seu progresso pertence à sua conta." else "Após uma validação online, a licença pode ser reutilizada por até 24 horas sem conexão.",
                         color = Color(0xFF7A8099),
                         fontSize = 12.sp,
                     )

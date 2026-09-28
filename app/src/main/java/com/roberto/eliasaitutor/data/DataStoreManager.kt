@@ -3,7 +3,10 @@ package com.roberto.eliasaitutor.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
-import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.preferencesDataStoreFile
+import com.roberto.eliasaitutor.network.BackendSession
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import com.roberto.eliasaitutor.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -12,9 +15,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "elias_profile")
+private object ProfileStores {
+    private val stores = ConcurrentHashMap<String, DataStore<Preferences>>()
+    @Synchronized
+    fun forOwner(context: Context, owner: String): DataStore<Preferences> {
+        val name = "elias_profile_" + MessageDigest.getInstance("SHA-256")
+            .digest(owner.toByteArray()).joinToString("") { "%02x".format(it) }
+        return stores.getOrPut(name) {
+            PreferenceDataStoreFactory.create { context.applicationContext.preferencesDataStoreFile(name) }
+        }
+    }
+}
 
 class DataStoreManager(private val context: Context) {
+    private val ownerId = BackendSession.currentOwnerId()
+    private val dataStore = ProfileStores.forOwner(context, ownerId)
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -40,10 +55,10 @@ class DataStoreManager(private val context: Context) {
         val KEY_FLASH_DATE      = stringPreferencesKey("flash_offer_date")
     }
 
-    val profileFlow: Flow<UserProfile> = context.dataStore.data
+    val profileFlow: Flow<UserProfile> = dataStore.data
         .catch { emit(emptyPreferences()) }
         .map { prefs ->
-            val userId = prefs[KEY_USER_ID] ?: ""
+            val userId = ownerId
             val errorLog = prefs[KEY_ERROR_LOG]?.let {
                 runCatching { json.decodeFromString<List<ErrorEntry>>(it) }.getOrDefault(emptyList())
             } ?: emptyList()
@@ -79,8 +94,8 @@ class DataStoreManager(private val context: Context) {
         }
 
     suspend fun save(profile: UserProfile) {
-        context.dataStore.edit { prefs ->
-            prefs[KEY_USER_ID]      = profile.userId
+        dataStore.edit { prefs ->
+            prefs[KEY_USER_ID]      = ownerId
             prefs[KEY_XP]           = profile.xp
             prefs[KEY_COINS]        = profile.coins
             prefs[KEY_LEVEL]        = profile.level
@@ -101,14 +116,14 @@ class DataStoreManager(private val context: Context) {
     }
 
     suspend fun saveFlashOffer(offerJson: String, date: String) {
-        context.dataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[KEY_FLASH_OFFER] = offerJson
             prefs[KEY_FLASH_DATE]  = date
         }
     }
 
     suspend fun loadFlashOffer(): Pair<String, String> {
-        val prefs = context.dataStore.data.catch { emit(emptyPreferences()) }.first()
+        val prefs = dataStore.data.catch { emit(emptyPreferences()) }.first()
         val offer = prefs[KEY_FLASH_OFFER] ?: ""
         val date  = prefs[KEY_FLASH_DATE]  ?: ""
         return offer to date
