@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -27,13 +28,23 @@ private object ProfileStores {
     }
 }
 
-class DataStoreManager(private val context: Context) {
-    private val ownerId = BackendSession.currentOwnerId()
-    private val dataStore = ProfileStores.forOwner(context, ownerId)
+@kotlinx.serialization.Serializable
+data class ProfileSyncSnapshot(val profile: UserProfile, val localRevision: Long, val acknowledgedRevision: Long, val remoteRevision: Long, val deviceId: String) {
+    val dirty: Boolean get() = localRevision > acknowledgedRevision
+    val mutationId: String get() = java.util.UUID.nameUUIDFromBytes("$deviceId:$localRevision".toByteArray()).toString()
+}
+
+class DataStoreManager internal constructor(private val ownerId: String, private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context, owner: String = BackendSession.currentOwnerId()) : this(owner, ProfileStores.forOwner(context, owner))
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     companion object {
+        val KEY_PENDING_UPLOAD = stringPreferencesKey("profile_pending_upload")
+        val KEY_LOCAL_REVISION = longPreferencesKey("profile_local_revision")
+        val KEY_ACK_REVISION = longPreferencesKey("profile_ack_revision")
+        val KEY_REMOTE_REVISION = longPreferencesKey("profile_remote_revision")
+        val KEY_DEVICE_ID = stringPreferencesKey("profile_sync_device")
         val KEY_USER_ID         = stringPreferencesKey("user_id")
         val KEY_XP              = intPreferencesKey("xp")
         val KEY_COINS           = intPreferencesKey("coins")
@@ -55,9 +66,7 @@ class DataStoreManager(private val context: Context) {
         val KEY_FLASH_DATE      = stringPreferencesKey("flash_offer_date")
     }
 
-    val profileFlow: Flow<UserProfile> = dataStore.data
-        .catch { emit(emptyPreferences()) }
-        .map { prefs ->
+    private fun decodeProfile(prefs: Preferences): UserProfile {
             val userId = ownerId
             val errorLog = prefs[KEY_ERROR_LOG]?.let {
                 runCatching { json.decodeFromString<List<ErrorEntry>>(it) }.getOrDefault(emptyList())
@@ -72,7 +81,7 @@ class DataStoreManager(private val context: Context) {
                 runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList())
             } ?: emptyList()
 
-            UserProfile(
+            return UserProfile(
                 userId           = userId,
                 xp               = prefs[KEY_XP]           ?: 0,
                 coins            = prefs[KEY_COINS]         ?: 0,
@@ -91,10 +100,60 @@ class DataStoreManager(private val context: Context) {
                 sentimentHistory = sentHist,
                 unlockedScenarios= unlockedScn,
             )
-        }
+    }
+    val profileFlow: Flow<UserProfile> = dataStore.data.map(::decodeProfile).distinctUntilChanged()
 
-    suspend fun save(profile: UserProfile) {
+    private fun localRevision(prefs: Preferences): Long = prefs[KEY_LOCAL_REVISION] ?: if (prefs.contains(KEY_USER_ID)) 1L else 0L
+
+    suspend fun syncSnapshot(): ProfileSyncSnapshot {
+        val prefs = dataStore.edit { if (!it.contains(KEY_DEVICE_ID)) it[KEY_DEVICE_ID] = java.util.UUID.randomUUID().toString() }
+        return ProfileSyncSnapshot(decodeProfile(prefs), localRevision(prefs), prefs[KEY_ACK_REVISION] ?: 0L, prefs[KEY_REMOTE_REVISION] ?: 0L, prefs[KEY_DEVICE_ID]!!)
+    }
+
+    /** Persist the exact in-flight payload before POST, even if newer local edits arrive. */
+    suspend fun beginUpload(): ProfileSyncSnapshot? {
+        var pending: ProfileSyncSnapshot? = null
         dataStore.edit { prefs ->
+            val encoded = prefs[KEY_PENDING_UPLOAD]
+            if (encoded != null) {
+                pending = json.decodeFromString<ProfileSyncSnapshot>(encoded)
+                require(pending!!.profile.userId == ownerId) { "Operação de outra conta recusada" }
+            } else if (localRevision(prefs) > (prefs[KEY_ACK_REVISION] ?: 0L)) {
+                val device = prefs[KEY_DEVICE_ID] ?: java.util.UUID.randomUUID().toString().also { prefs[KEY_DEVICE_ID] = it }
+                pending = ProfileSyncSnapshot(decodeProfile(prefs), localRevision(prefs), prefs[KEY_ACK_REVISION] ?: 0L, prefs[KEY_REMOTE_REVISION] ?: 0L, device)
+                prefs[KEY_PENDING_UPLOAD] = json.encodeToString(pending!!)
+            }
+        }
+        return pending
+    }
+
+    suspend fun acknowledgeUpload(upload: ProfileSyncSnapshot, remoteRevision: Long) {
+        require(remoteRevision == upload.remoteRevision + 1) { "Revisão remota inválida" }
+        dataStore.edit { prefs ->
+            val pending = prefs[KEY_PENDING_UPLOAD]?.let { json.decodeFromString<ProfileSyncSnapshot>(it) }
+            require(pending == upload && upload.profile.userId == ownerId) { "Confirmação de operação divergente" }
+            prefs[KEY_ACK_REVISION] = upload.localRevision
+            prefs[KEY_REMOTE_REVISION] = remoteRevision
+            prefs.remove(KEY_PENDING_UPLOAD)
+        }
+    }
+
+    suspend fun acceptRemote(profile: UserProfile, remoteRevision: Long, expectedLocalRevision: Long): Boolean {
+        var accepted = false
+        dataStore.edit { prefs ->
+            if (localRevision(prefs) == expectedLocalRevision && localRevision(prefs) == (prefs[KEY_ACK_REVISION] ?: 0L)) {
+                writeFields(prefs, profile)
+                prefs[KEY_LOCAL_REVISION] = expectedLocalRevision
+                prefs[KEY_ACK_REVISION] = expectedLocalRevision
+                prefs[KEY_REMOTE_REVISION] = remoteRevision
+                accepted = true
+            }
+        }
+        return accepted
+    }
+
+    private fun writeFields(prefs: MutablePreferences, profile: UserProfile) {
+        require(profile.userId == ownerId) { "Perfil de outra conta recusado" }
             prefs[KEY_USER_ID]      = ownerId
             prefs[KEY_XP]           = profile.xp
             prefs[KEY_COINS]        = profile.coins
@@ -112,6 +171,13 @@ class DataStoreManager(private val context: Context) {
             prefs[KEY_XP_HISTORY]   = json.encodeToString(profile.xpHistory.takeLast(200))
             prefs[KEY_SENTIMENT_HIST] = json.encodeToString(profile.sentimentHistory.takeLast(50))
             prefs[KEY_UNLOCKED_SCN] = json.encodeToString(profile.unlockedScenarios)
+    }
+
+    suspend fun save(profile: UserProfile) {
+        dataStore.edit { prefs ->
+            val revision = Math.addExact(localRevision(prefs), 1L)
+            writeFields(prefs, profile)
+            prefs[KEY_LOCAL_REVISION] = revision
         }
     }
 

@@ -46,8 +46,8 @@ android {
         applicationId = "com.roberto.eliasaitutor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.3.1"
+        versionCode = 7
+        versionName = "1.3.2"
 
         buildConfigField("boolean", "TEST_LICENSE_BYPASS", "false")
 
@@ -73,7 +73,7 @@ android {
             "\"${prop("BACKEND_URL", "http://10.0.2.2:3000")}\""
         )
 
-        // Licenciamento comercial Tadeu Apps. URL e publishable key são públicas.
+        // Licenciamento comercial Tadeu Apps. URL e publishable key sÃ£o pÃºblicas.
         buildConfigField(
             "String",
             "TADEU_APPS_URL",

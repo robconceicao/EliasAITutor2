@@ -24,3 +24,15 @@ Configure APP_ENV=homologation e TEST_LICENSE_BYPASS=true somente na instância 
 3. Nos servidores, remover TEST_LICENSE_BYPASS e fixar APP_ENV=production. Validar conta sem licença, expirada, cancelada, offline e com limite esgotado.
 4. Confirmar assinatura Android oficial, applicationId e canal de distribuição production. Testar instalação e atualização em aparelho real.
 5. Billing permanece BILLING_MODE=test e BILLING_PROVIDER=mock durante esta entrega. A ativação financeira real é uma etapa posterior explícita.
+
+## Perfil autenticado — 2026-10-01
+
+Versão de homologação 1.3.2 (7). Perfil e ofertas usam a identidade do login
+operacional; o bypass comercial não remove autenticação. Snapshot de upload
+é persistido antes do POST; reinício/resposta perdida repetem exatamente a mesma
+mutação e só depois enviam alterações posteriores. Conflitos preservam a cópia local.
+Cinco testes JVM/DataStore passaram e a compilação homologation passou.
+A migration `20260928190238_elias_authenticated_profile_storage.sql` do core-test
+precisa estar aplicada antes da entrega. Ver relatório consolidado para status remoto.
+Produção exige TEST_LICENSE_BYPASS=false, backend autenticado compatível,
+validação de voz em aparelho e decisão comercial explícita.
