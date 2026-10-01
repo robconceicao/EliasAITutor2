@@ -87,7 +87,14 @@ object ProgramApiClient {
     /** D9 / A.5: program data fetches must not hang forever (default 10s). */
     private const val PROGRAM_TIMEOUT_SEC = 10L
 
-    private val http = OkHttpClient.Builder()
+    private fun httpForOwner(owner: String) = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val session = com.roberto.eliasaitutor.network.BackendSession
+            if (session.currentOwnerId() != owner) throw java.io.IOException("Conta alterada")
+            val token = session.token()
+            if (session.currentOwnerId() != owner) throw java.io.IOException("Conta alterada")
+            chain.proceed(chain.request().newBuilder().header("Authorization", "Bearer $token").build())
+        }
         .connectTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
         .readTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
         .writeTimeout(PROGRAM_TIMEOUT_SEC, TimeUnit.SECONDS)
@@ -99,12 +106,12 @@ object ProgramApiClient {
         return if (raw.endsWith("/")) raw else "$raw/"
     }
 
-    val api: ProgramApi by lazy {
+    val api: ProgramApi get() = forOwner(com.roberto.eliasaitutor.network.BackendSession.currentOwnerId())
+    fun forOwner(owner: String): ProgramApi =
         Retrofit.Builder()
             .baseUrl(baseUrl())
-            .client(http)
+            .client(httpForOwner(owner))
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ProgramApi::class.java)
-    }
 }

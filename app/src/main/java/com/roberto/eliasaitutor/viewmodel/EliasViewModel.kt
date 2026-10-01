@@ -849,66 +849,44 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             initSpeechRecognizer()
         }
         audioCaptureManager.startCapture()
-        viewModelScope.launch { 
-            val initial = profile.first()
-            if (initial.userId.isEmpty()) {
-                ds.save(initial.copy(userId = java.util.UUID.randomUUID().toString()))
-                profile.first { it.userId.isNotEmpty() }
-            }
-            syncProfileFromSupabase()
-            checkAndUpdateStreak() 
+        viewModelScope.launch {
+            // The first persisted emission is authoritative; StateFlow's placeholder is not.
+            ds.profileFlow.first()
+            synchronizeProfile()
+            checkAndUpdateStreak()
+            ds.profileFlow.collect { synchronizeProfile() }
         }
         viewModelScope.launch { loadFlashOffer() }
-        
-        // Listen to profile changes and sync to Supabase
-        viewModelScope.launch {
-            profile.drop(1).collect { p ->
-                syncProfileToSupabase(p)
+    }
+
+    private suspend fun synchronizeProfile() {
+        try {
+            var uploaded = false
+            repeat(4) {
+                val pending = ds.beginUpload()
+                if (pending == null) {
+                    if (!uploaded) {
+                        val snapshot = ds.syncSnapshot()
+                        val remote = SupabaseManager.loadProfile(snapshot.profile.userId) ?: return
+                        ds.acceptRemote(remote.profile, remote.revision, snapshot.localRevision)
+                    }
+                    return
+                }
+                val revision = SupabaseManager.saveProfile(pending)
+                ds.acknowledgeUpload(pending, revision)
+                uploaded = true
             }
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            _toastMessage.value = "Progresso preservado neste aparelho. Sincronização pendente; conflito entre dispositivos exige conferência."
         }
-    }
-
-    private suspend fun syncProfileFromSupabase() {
-        val current = profile.first()
-        val sp = SupabaseManager.loadProfile(current.userId) ?: return
-        ds.save(current.copy(
-            userId = sp.userId,
-            xp = sp.xp,
-            coins = sp.coins,
-            level = sp.level,
-            britishUnlocked = sp.britishUnlocked,
-            messagesCount = sp.messagesSent,
-            errorLog = sp.errorLog,
-            confidence = sp.softSkills.confidence,
-            clarity = sp.softSkills.clarity,
-            posture = sp.softSkills.posture,
-            softSkillsSummary = sp.softSkills.summary,
-            sentimentHistory = sp.sentimentHistory,
-            xpHistory = sp.xpHistory
-        ))
-    }
-
-    private suspend fun syncProfileToSupabase(p: UserProfile) {
-        val sp = SupabaseProfile(
-            userId = p.userId,
-            xp = p.xp,
-            coins = p.coins,
-            level = p.level,
-            britishUnlocked = p.britishUnlocked,
-            messagesSent = p.messagesCount,
-            errorLog = p.errorLog,
-            softSkills = SoftSkills(p.confidence, p.clarity, p.posture, p.softSkillsSummary),
-            sentimentHistory = p.sentimentHistory,
-            xpHistory = p.xpHistory
-        )
-        SupabaseManager.upsertProfile(sp)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // STREAK
     // ─────────────────────────────────────────────────────────────────────────
     private suspend fun checkAndUpdateStreak() {
-        val p = profile.first()
+        val p = ds.profileFlow.first()
         val today     = LocalDate.now().toString()
         val yesterday = LocalDate.now().minusDays(1).toString()
         if (p.lastActiveDate == today) return
@@ -1358,7 +1336,11 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
     // ─────────────────────────────────────────────────────────────────────────
     private suspend fun loadFlashOffer() {
         val today = LocalDate.now().toString()
-        val supabaseOffer = SupabaseManager.loadFlashOffer(today)
+        val ownerId = ds.profileFlow.first().userId
+        val supabaseOffer = try { SupabaseManager.loadFlashOffer(ownerId, today) } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            null
+        }
         if (supabaseOffer != null) {
             val offer = FlashOffer(
                 title = supabaseOffer.title,
@@ -1430,7 +1412,7 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
             )
             _flashOffer.value = offer
             ds.saveFlashOffer(raw, today)
-            SupabaseManager.saveFlashOffer(SupabaseFlashOffer(
+            try { SupabaseManager.saveFlashOffer(ownerId, SupabaseFlashOffer(
                 offerDate = today,
                 title = offer.title,
                 description = offer.description,
@@ -1438,7 +1420,10 @@ class EliasViewModel(app: Application) : AndroidViewModel(app) {
                 target = offer.target,
                 priceOriginal = offer.priceOriginal,
                 priceFinal = offer.priceFinal
-            ))
+            )) } catch (syncError: Exception) {
+                if (syncError is kotlinx.coroutines.CancellationException) throw syncError
+                _toastMessage.value = "Oferta mantida no aparelho; sincronização pendente."
+            }
         } catch (e: Exception) {
             _flashOffer.value = FlashOffer(
                 title = "⚡ 50% OFF British Accent — Today Only!",

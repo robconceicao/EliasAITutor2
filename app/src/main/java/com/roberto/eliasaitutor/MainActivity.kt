@@ -1,10 +1,12 @@
 package com.roberto.eliasaitutor
 
 import android.os.Bundle
+import androidx.lifecycle.ViewModelProvider
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -38,15 +40,28 @@ private val Accent  = Color(0xFF4f8ef7)
 private val Muted   = Color(0xFF7a8099)
 
 class MainActivity : ComponentActivity() {
-    private val eliasVm: EliasViewModel by viewModels { EliasViewModel.Factory(application) }
-    private val programVm: ProgramViewModel by viewModels { ProgramViewModel.Factory(application) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.roberto.eliasaitutor.network.BackendSession.configure(applicationContext)
         setContent {
             val licenseManager = remember { TadeuLicenseManager(applicationContext) }
             TadeuLicenseGate(manager = licenseManager) { license ->
-                EliasApp(eliasVm, programVm, license = license, initialTab = 0)
+                val owner = com.roberto.eliasaitutor.network.BackendSession.currentOwnerId()
+                val models = remember(owner) { mutableStateOf<Pair<EliasViewModel, ProgramViewModel>?>(null) }
+                // Dispose old collectors before creating the next account's socket/view models.
+                DisposableEffect(owner) {
+                    val storeOwner = object : ViewModelStoreOwner {
+                        override val viewModelStore = ViewModelStore()
+                    }
+                    val elias = ViewModelProvider(storeOwner, EliasViewModel.Factory(application))[EliasViewModel::class.java]
+                    val program = ViewModelProvider(storeOwner, ProgramViewModel.Factory(application))[ProgramViewModel::class.java]
+                    models.value = elias to program
+                    onDispose { storeOwner.viewModelStore.clear() }
+                }
+                models.value?.let { (elias, program) ->
+                    key(owner) { EliasApp(elias, program, license = license, initialTab = 0) }
+                }
             }
         }
     }

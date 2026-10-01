@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class UserProfile(
-    val userId: String        = "local_user",
+    @kotlinx.serialization.SerialName("user_id") val userId: String        = "local_user",
     val xp: Int               = 0,
     val coins: Int            = 0,
     val level: Int            = 1,

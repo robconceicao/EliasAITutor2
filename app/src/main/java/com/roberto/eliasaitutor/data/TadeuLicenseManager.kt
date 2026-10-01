@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 private const val APP_SLUG = "elias-ai-tutor"
 private const val PREFS = "tadeu_apps_license"
 private const val ACCESS_TOKEN = "access_token"
+private const val USER_ID = "authenticated_user_id"
 private const val REFRESH_TOKEN = "refresh_token"
 private const val TOKEN_EXPIRES_AT = "token_expires_at"
 private const val LICENSE_CACHE = "license_cache"
@@ -34,9 +35,9 @@ data class TadeuLicense(
     val offline: Boolean = false,
 ) {
     fun hasFeature(key: String): Boolean =
-        plan == "legacy" || features.any { it.key == key }
+        BuildConfig.TEST_LICENSE_BYPASS || plan == "legacy" || features.any { it.key == key }
 
-    fun limit(key: String): Int? = features.firstOrNull { it.key == key }?.limitValue
+    fun limit(key: String): Int? = if (BuildConfig.TEST_LICENSE_BYPASS) null else features.firstOrNull { it.key == key }?.limitValue
 }
 
 class TadeuLicenseException(message: String) : Exception(message)
@@ -99,23 +100,35 @@ class TadeuLicenseManager(private val context: Context) {
         if (!configured) throw TadeuLicenseException("TADEU_NOT_CONFIGURED")
     }
 
+    fun currentUserId(): String? = prefs.getString(USER_ID, null)?.takeIf { it.isNotBlank() }
+
     private fun saveAuth(payload: JSONObject) {
+        val userId = payload.optJSONObject("user")?.optString("id").orEmpty()
+        if (userId.isBlank()) throw TadeuLicenseException("TADEU_AUTH_INVALID_RESPONSE")
         val access = payload.optString("access_token")
         val refresh = payload.optString("refresh_token")
         val expiresIn = payload.optLong("expires_in", 3600L)
         if (access.isBlank() || refresh.isBlank()) throw TadeuLicenseException("TADEU_AUTH_INVALID_RESPONSE")
 
         prefs.edit()
+            .putString(USER_ID, userId)
             .putString(ACCESS_TOKEN, access)
             .putString(REFRESH_TOKEN, refresh)
             .putLong(TOKEN_EXPIRES_AT, System.currentTimeMillis() + expiresIn * 1000L - 60_000L)
             .apply()
     }
 
+    /** Call only from an IO worker. Refreshes the operational session, independent of licensing. */
+    fun validAccessTokenBlocking(): String {
+        ensureConfigured()
+        ensureValidAccessToken()
+        return currentAccessToken() ?: throw TadeuLicenseException("TADEU_AUTH_REQUIRED")
+    }
+
     private fun ensureValidAccessToken() {
         val token = prefs.getString(ACCESS_TOKEN, null)
         val expiresAt = prefs.getLong(TOKEN_EXPIRES_AT, 0L)
-        if (!token.isNullOrBlank() && expiresAt > System.currentTimeMillis()) return
+        if (!token.isNullOrBlank() && currentUserId() != null && expiresAt > System.currentTimeMillis()) return
         refreshSession()
     }
 
@@ -145,6 +158,10 @@ class TadeuLicenseManager(private val context: Context) {
     }
 
     private fun fetchLicenseInternal(allowOfflineCache: Boolean): TadeuLicense {
+        if (BuildConfig.TEST_LICENSE_BYPASS) {
+            ensureValidAccessToken()
+            return TadeuLicense("homologation", emptyList(), null)
+        }
         val token = prefs.getString(ACCESS_TOKEN, null)
             ?: throw TadeuLicenseException("TADEU_AUTH_REQUIRED")
         val request = Request.Builder()
@@ -186,6 +203,7 @@ class TadeuLicenseManager(private val context: Context) {
         val raw = prefs.getString(LICENSE_CACHE, null) ?: return null
         return try {
             val license = parseLicense(JSONObject(raw), offline = true)
+            if (license.plan == "homologation") return null
             if (license.expiresAtMillis != null && license.expiresAtMillis <= System.currentTimeMillis()) null else license
         } catch (_: Exception) {
             null

@@ -15,6 +15,11 @@ import com.roberto.eliasaitutor.model.MistakeEntry
 import com.roberto.eliasaitutor.model.UiChatBubble
 import io.socket.client.IO
 import io.socket.client.Socket
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +55,8 @@ object SocketClient {
 
     private var socket: Socket? = null
     private var currentSession: ChatSession? = null
+    private var sessionOwner: String? = null
+    private var connectionGeneration = 0
     private var reconnectAttempts = 0
     private val mainHandler = Handler(Looper.getMainLooper())
     private var heartbeatRunnable: Runnable? = null
@@ -174,6 +181,15 @@ object SocketClient {
     }
 
     fun connect() {
+        val owner = BackendSession.currentOwnerId()
+        if (sessionOwner != owner) {
+            socket?.off()
+            socket?.disconnect()
+            socket = null
+            currentSession = null
+            reconnectAttempts = 0
+            sessionOwner = owner
+        }
         isIntentionalDisconnect = false
         if (currentSession == null) {
             currentSession = ChatSession(generateSessionId())
@@ -181,14 +197,34 @@ object SocketClient {
         establishConnection()
     }
 
+    private val connectionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private fun establishConnection() {
+        val owner = sessionOwner ?: return
+        val generation = ++connectionGeneration
+        connectionScope.launch {
+            try {
+                val token = withContext(Dispatchers.IO) { BackendSession.token() }
+                if (!isIntentionalDisconnect && generation == connectionGeneration &&
+                    owner == sessionOwner && owner == BackendSession.currentOwnerId()) {
+                    establishAuthenticatedConnection(token)
+                }
+            } catch (_: Exception) {
+                if (generation != connectionGeneration) return@launch
+                _connectionState.value = ConnectionState.DISCONNECTED
+                _connectionStatus.value = false
+                _erroFlow.tryEmit("Sessão expirada. Entre novamente na sua conta.")
+            }
+        }
+    }
+
+    private fun establishAuthenticatedConnection(tadeuToken: String) {
+        socket?.off()
         socket?.disconnect()
 
         _connectionState.value = if (reconnectAttempts == 0)
             ConnectionState.CONNECTING else ConnectionState.RECONNECTING
         _connectionStatus.value = false
 
-        val tadeuToken = appContext?.let { TadeuLicenseManager(it).currentAccessToken() }
         val builder = IO.Options.builder()
             .setReconnection(false)    // Gerenciamos reconexão manualmente
             .setTimeout(10_000)
@@ -605,6 +641,9 @@ object SocketClient {
 
     fun disconnect() {
         isIntentionalDisconnect = true
+        connectionGeneration++
+        currentSession = null
+        sessionOwner = null
         stopHeartbeat()
         mainHandler.removeCallbacksAndMessages(null)
         val context = appContext
@@ -612,8 +651,10 @@ object SocketClient {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             runCatching { cm.unregisterNetworkCallback(networkCallback) }
         }
+        socket?.off()
         socket?.disconnect()
         socket = null
+        appContext = null
         _connectionState.value = ConnectionState.DISCONNECTED
         _connectionStatus.value = false
     }

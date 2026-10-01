@@ -2,6 +2,7 @@
  * Program data store: MongoDB when available, in-memory fallback otherwise.
  */
 import { randomUUID } from 'crypto';
+import { currentUserId } from './userContext.js';
 import {
   ProgramWeek,
   UserProgramState,
@@ -17,7 +18,7 @@ import {
 /** @type {Map<number, object>} */
 const memoryWeeks = new Map();
 /** @type {object|null} */
-let memoryState = null;
+const memoryStates = new Map();
 /** @type {Map<string, object>} */
 const memorySessions = new Map();
 /** @type {Map<number, object>} week → quiz doc */
@@ -26,7 +27,7 @@ const memoryQuizzes = new Map();
 let mongoEnabled = false;
 
 /** Snapshot em arquivo já restaurado nesta execução? */
-let snapshotRestored = false;
+const restoredOwners = new Set();
 
 export function setMongoEnabled(flag) {
   mongoEnabled = !!flag;
@@ -43,13 +44,14 @@ export function isMongoEnabled() {
  * Chamado preguiçosamente na primeira leitura de estado.
  */
 function restoreFromFileOnce() {
-  if (snapshotRestored || mongoEnabled) return;
-  snapshotRestored = true;
+  const owner = currentUserId();
+  if (restoredOwners.has(owner) || mongoEnabled) return;
   const snap = readSnapshot();
+  restoredOwners.add(owner);
   if (!snap) return;
-  if (snap.state) memoryState = snap.state;
+  if (snap.state?.key === owner) memoryStates.set(owner, snap.state);
   for (const s of snap.sessions || []) {
-    if (s?.id) memorySessions.set(s.id, s);
+    if (s?.id && s.user_id === owner) memorySessions.set(s.id, s);
   }
   console.log(
     `💾 Estado do programa restaurado do disco (semana ${snap.state?.current_week ?? '?'}, ${
@@ -62,8 +64,8 @@ function restoreFromFileOnce() {
 function persistSnapshot() {
   if (mongoEnabled) return;
   writeSnapshot({
-    state: memoryState,
-    sessions: Array.from(memorySessions.values()),
+    state: memoryStates.get(currentUserId()) || null,
+    sessions: Array.from(memorySessions.values()).filter(s => s.user_id === currentUserId()),
   });
 }
 
@@ -102,7 +104,7 @@ export function computeEffectiveWeek(
 
 function defaultState() {
   return {
-    key: 'default',
+    key: currentUserId(),
     start_date: todayISO(),
     current_week: 1,
     week_mode: 'auto',
@@ -343,14 +345,14 @@ export async function getProgramState() {
   restoreFromFileOnce();
   let state;
   if (mongoEnabled) {
-    state = await UserProgramState.findOne({ key: 'default' }).lean();
+    state = await UserProgramState.findOne({ key: currentUserId() }).lean();
   }
-  if (!state) state = memoryState;
+  if (!state) state = memoryStates.get(currentUserId());
   if (!state) {
     state = defaultState();
-    memoryState = { ...state };
+    memoryStates.set(currentUserId(), structuredClone(state));
     if (mongoEnabled) {
-      await UserProgramState.findOneAndUpdate({ key: 'default' }, state, {
+      await UserProgramState.findOneAndUpdate({ key: currentUserId() }, state, {
         upsert: true,
         new: true,
       });
@@ -361,15 +363,15 @@ export async function getProgramState() {
   const beforePause = next.total_paused_days;
   next = applyDailyPauseIncrement(next);
   if (next.total_paused_days !== beforePause || next.last_pause_increment_date !== state.last_pause_increment_date) {
-    memoryState = { ...next };
+    memoryStates.set(currentUserId(), structuredClone(next));
     if (mongoEnabled) {
-      await UserProgramState.findOneAndUpdate({ key: 'default' }, next, {
+      await UserProgramState.findOneAndUpdate({ key: currentUserId() }, next, {
         upsert: true,
         new: true,
       });
     }
   } else {
-    memoryState = { ...next };
+    memoryStates.set(currentUserId(), structuredClone(next));
   }
   persistSnapshot();
 
@@ -379,7 +381,7 @@ export async function getProgramState() {
 export async function updateProgramState(patch) {
   const current = await getProgramState();
   const next = normalizeState({
-    key: 'default',
+    key: currentUserId(),
     start_date: patch.start_date ?? current.start_date,
     current_week: patch.current_week ?? current.current_week,
     week_mode: patch.week_mode ?? current.week_mode,
@@ -441,9 +443,9 @@ export async function updateProgramState(patch) {
     next.current_week = resolveWeek(next);
   }
 
-  memoryState = { ...next };
+  memoryStates.set(currentUserId(), structuredClone(next));
   if (mongoEnabled) {
-    await UserProgramState.findOneAndUpdate({ key: 'default' }, next, {
+    await UserProgramState.findOneAndUpdate({ key: currentUserId() }, next, {
       upsert: true,
       new: true,
     });
@@ -775,9 +777,11 @@ export async function runCheckpoint() {
 // ─── Practice sessions ──────────────────────────────────────
 
 export async function createSession({ week, type, started_at }) {
+  restoreFromFileOnce();
   const id = randomUUID();
   const doc = {
     id,
+    user_id: currentUserId(),
     week: Number(week),
     type,
     started_at: started_at ? new Date(started_at) : new Date(),
@@ -816,7 +820,7 @@ export async function endSession(id, { ended_at, duration_seconds, feedback_json
   const updated = { ...existing, ...patch };
   memorySessions.set(id, updated);
   if (mongoEnabled) {
-    await PracticeSession.findOneAndUpdate({ id }, patch, { new: true });
+    await PracticeSession.findOneAndUpdate({ id, user_id: currentUserId() }, patch, { new: true });
   }
   persistSnapshot();
   return updated;
@@ -825,10 +829,11 @@ export async function endSession(id, { ended_at, duration_seconds, feedback_json
 export async function getSession(id) {
   restoreFromFileOnce();
   if (mongoEnabled) {
-    const row = await PracticeSession.findOne({ id }).lean();
+    const row = await PracticeSession.findOne({ id, user_id: currentUserId() }).lean();
     if (row) return row;
   }
-  return memorySessions.get(id) || null;
+  const session = memorySessions.get(id);
+  return session?.user_id === currentUserId() ? structuredClone(session) : null;
 }
 
 export async function updateSessionFeedback(id, feedback_json, feedback_status) {
@@ -838,7 +843,7 @@ export async function updateSessionFeedback(id, feedback_json, feedback_status) 
   const updated = { ...s, ...patch };
   memorySessions.set(id, updated);
   if (mongoEnabled) {
-    await PracticeSession.findOneAndUpdate({ id }, patch);
+    await PracticeSession.findOneAndUpdate({ id, user_id: currentUserId() }, patch);
   }
   persistSnapshot();
   return updated;
@@ -847,10 +852,10 @@ export async function updateSessionFeedback(id, feedback_json, feedback_status) 
 export async function listSessions() {
   restoreFromFileOnce();
   if (mongoEnabled) {
-    const rows = await PracticeSession.find({}).lean();
+    const rows = await PracticeSession.find({ user_id: currentUserId() }).lean();
     if (rows.length) return rows;
   }
-  return Array.from(memorySessions.values());
+  return Array.from(memorySessions.values()).filter(s => s.user_id === currentUserId()).map(s => structuredClone(s));
 }
 
 /**

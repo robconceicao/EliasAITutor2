@@ -1,4 +1,6 @@
 import express from 'express';
+import { createHttpAuth, createSocketAuth } from './services/operationalAuth.js';
+import { installSocketMetering } from './services/socketMetering.js';
 import http from 'http';
 import { Server } from 'socket.io';
 import Anthropic from '@anthropic-ai/sdk';
@@ -107,12 +109,15 @@ global.WebSocket = ws;
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+app.use(['/program', '/sessions', '/progress'], createHttpAuth());
 app.use(programRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
 });
+
+io.use(createSocketAuth());
 
 // Render (and most PaaS) inject PORT. Must bind 0.0.0.0 — not localhost — or
 // the deploy port-scan times out with "no open ports detected".
@@ -251,7 +256,8 @@ const turnEngines = new Map();
 io.on('connection', (socket) => {
   console.log('📱 Dispositivo conectado:', socket.id);
 
-  let userIdAtual = socket.id; // Fallback to socket ID if no auth
+  const userIdAtual = socket.data.userId;
+  installSocketMetering(socket);
   let estadoGeracao = { ativo: false, elevenSocket: null, textoParcialIA: "" };
   /** Active system prompt for this socket — default or program-mode. */
   let activeSystemPrompt = { ...SYSTEM_PROMPT };
@@ -322,7 +328,7 @@ io.on('connection', (socket) => {
       sessionType = userIdOrPayload.sessionType ?? null;
     }
 
-    userIdAtual = userId || socket.id;
+    // Client-supplied userId never changes the authenticated owner; legacy payload is accepted.
     console.log(`👤 Usuário ${userIdAtual} iniciou sessão.`, week ? `(programa week=${week})` : '');
 
     if (week != null) {
@@ -385,7 +391,7 @@ io.on('connection', (socket) => {
     const userId = payload.userId || userIdAtual;
     const week = payload.week;
     const sessionType = payload.sessionType || 'themed';
-    userIdAtual = userId || socket.id;
+    // Client-supplied userId never changes the authenticated owner; legacy payload is accepted.
     const weekDoc = await getWeek(Number(week));
     if (!weekDoc) {
       socket.emit('erro_backend', `Week ${week} not found`);

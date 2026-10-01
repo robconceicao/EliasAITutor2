@@ -1,0 +1,42 @@
+name: Homologation APK
+on:
+  push:
+    branches: [main, 'codex/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TEST_LICENSE_BYPASS: 'true'
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      BACKEND_URL: ${{ secrets.BACKEND_URL || 'https://eliasaitutor2.onrender.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test backend_nodejs/test_license_environment.js
+        env:
+          TEST_LICENSE_BYPASS: 'false'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - name: Build QA APK and verify production flag remains off
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleHomologation testHomologationUnitTest testReleaseUnitTest --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elias-homologation-${{ github.sha }}
+          path: app/build/outputs/apk/homologation/*.apk
+          if-no-files-found: error
+          retention-days: 14

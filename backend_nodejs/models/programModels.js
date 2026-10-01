@@ -34,8 +34,8 @@ export const ProgramWeekSchema = new mongoose.Schema(
 
 export const UserProgramStateSchema = new mongoose.Schema(
   {
-    // Singleton key for single-user app (V2)
-    key: { type: String, default: 'default', unique: true },
+    // Authenticated owner. Legacy key=default remains quarantined.
+    key: { type: String, required: true, unique: true },
     start_date: { type: String, required: true }, // YYYY-MM-DD
     current_week: { type: Number, default: 1, min: 1, max: 26 },
     week_mode: { type: String, enum: ['auto', 'manual'], default: 'auto' },
@@ -81,6 +81,7 @@ export const ProgramQuizSchema = new mongoose.Schema(
 export const PracticeSessionSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
+    user_id: { type: String, required: true, index: true },
     week: { type: Number, required: true },
     type: { type: String, enum: ['themed', 'quick', 'chunks'], required: true },
     started_at: { type: Date, required: true },
