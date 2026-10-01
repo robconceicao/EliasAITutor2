@@ -33,6 +33,7 @@ operacional; o bypass comercial não remove autenticação. Snapshot de upload
 mutação e só depois enviam alterações posteriores. Conflitos preservam a cópia local.
 Cinco testes JVM/DataStore passaram e a compilação homologation passou.
 A migration `20260928190238_elias_authenticated_profile_storage.sql` do core-test
-precisa estar aplicada antes da entrega. Ver relatório consolidado para status remoto.
+foi aplicada em 2026-10-01. RLS validada no banco remoto com duas contas e rollback;
+leitura pelo dono, replay e bloqueio cruzado/anon passaram.
 Produção exige TEST_LICENSE_BYPASS=false, backend autenticado compatível,
 validação de voz em aparelho e decisão comercial explícita.
